@@ -55,15 +55,27 @@
 
 ## 装
 
-把整个 `music-mv` 文件夹放进你的 agent 读 skill 的地方。Claude Code：
+**任何 agent**（Claude Code、Codex、Cursor、Gemini CLI……）：把这句话发给它
+
+```
+帮我安装这个 skill：https://github.com/Win-Hao/music-mv
+```
+
+**或者用 [skills 命令行](https://github.com/vercel-labs/skills)**，一条命令装进 Claude Code、Codex、Cursor、Cline 等二十多种 agent：
+
+```bash
+npx skills add Win-Hao/music-mv -g
+```
+
+`-g` 装到你的用户目录，所有项目都能用；不加就只装进当前项目。
+
+**只用 Claude Code**，也可以直接 clone：
 
 ```bash
 git clone https://github.com/Win-Hao/music-mv ~/.claude/skills/music-mv
 ```
 
-- Windows 放在 `%USERPROFILE%\.claude\skills\music-mv`
-- 其他支持 Agent Skills 的工具：放进它读 skill 的目录（很多是 `~/.agents/skills/`）
-- 不支持 skill 的：直接让它读 `SKILL.md`，或者照 `教程.md` 发提示词
+不支持 skill 的工具：让它读 `SKILL.md`，或者照 `教程.md` 发提示词。
 
 要用到的东西（第一次用时 agent 会跑 `scripts/check_env.py` 检查，缺什么会告诉你）：
 
