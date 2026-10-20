@@ -105,3 +105,5 @@ python3 <skill>/scripts/contact_sheet.py --images sketches -o storyboard.png --c
 | 成片比原曲小 2 dB 左右 | 渲染器压了峰值。`finalize_audio.py` |
 | 页面加载大图超时 | 资源多时把等待放宽到 180 秒（`render_frames.mjs` 已经是） |
 | 在命令或回复里打出整段歌词被拦 | 内容过滤。脚本读文件，回复里只说第几句 |
+| p5.brush 笔触颜色串了 | 同一帧里用 `brush.load()` 换了画布（p5.brush 2.2.3）。分层画时每层自己一块不透明的纸底，画完再叠 |
+| p5.brush 某条线没画出来，也不报错 | `brush.spline` 只给两个点时什么都不画，用 `brush.line` |

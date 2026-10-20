@@ -32,17 +32,22 @@
 
 不限模型：Claude Code、Codex 等能读写文件、跑命令的 agent 都能用。模型越强画面越细。
 
-## 同一个画面，三种画风
+## 四种画风，各用各的画法
 
-第 2 步会让它把同一个开场画面用三种画风各画一张给你挑：
+同一段 5 秒：雪夜街角，小螃蟹横着走进来，路灯卡在拍子上亮起，它蹦一下、冒出一颗心。四种风格都是从头用这种风格自己的画法画的，不是同一张图换滤镜：
 
 <table>
 <tr>
-<td align="center" width="33%"><img src="docs/style-pixel.jpg" alt="像素游戏风" width="100%"><br><sub>像素游戏风：歌词进游戏对话框</sub></td>
-<td align="center" width="33%"><img src="docs/style-collage.jpg" alt="纸艺拼贴绘本" width="100%"><br><sub>纸艺拼贴：撕纸边、胶带，歌词贴在纸条上</sub></td>
-<td align="center" width="33%"><img src="docs/style-crayon.jpg" alt="蜡笔手绘绘本" width="100%"><br><sub>蜡笔手绘绘本：笔触和纸纹</sub></td>
+<td align="center" width="50%"><img src="docs/style-pixel.gif" alt="像素游戏风" width="100%"><br><sub><b>像素游戏风</b>：320×180 逐像素画、24 色调色板、抖动点阵、逐帧换画，歌词进游戏对话框</sub></td>
+<td align="center" width="50%"><img src="docs/style-collage.gif" alt="纸艺拼贴绘本" width="100%"><br><sub><b>纸艺拼贴</b>：每样东西是一张剪的、撕的纸片，报纸、牛皮纸、花纸各有纹理，薄棉纸当灯光，纸条贴歌词</sub></td>
+</tr>
+<tr>
+<td align="center" width="50%"><img src="docs/style-crayon.gif" alt="蜡笔手绘绘本" width="100%"><br><sub><b>蜡笔绘本</b>：p5.brush 的蜡笔笔触和排线，涂出线一点、露出纸纹，歌词按笔顺一笔笔写出来</sub></td>
+<td align="center" width="50%"><img src="docs/style-diorama.gif" alt="纸艺立体书" width="100%"><br><sub><b>纸艺立体书</b>：有厚度的纸片分层站开、互相投影，浅景深，暖光打在纸上，像拍定格动画</sub></td>
 </tr>
 </table>
+
+源码在 [`examples/`](examples/)，每种一个 `scene.html`。agent 做第 2 步时会读它们学画法，你也可以直接打开改。
 
 ## 能做什么
 
@@ -118,7 +123,8 @@ python3 scripts/finalize_audio.py render.mp4 song.mp3 -o mv.mp4         # 原曲
 | `references/` | 画风、角色、分镜、转场、渲染、看片清单、学风格的细则 |
 | `scripts/` | 环境检查、歌曲分析、接触表、节奏检查、逐帧渲染、音轨封装、字幕转换 |
 | `templates/` | 两条渲染路线的 HyperFrames 合成和逐帧页面、歌词层 |
-| `docs/` | README 里的预览图（不影响使用，装的时候可以不要） |
+| `examples/` | 四种画风的原生示范（同一段 5 秒），源码就是画法参考 |
+| `docs/` | README 里的预览图（不影响使用） |
 
 ## 版权
 

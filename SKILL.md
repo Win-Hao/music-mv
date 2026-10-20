@@ -51,7 +51,7 @@ description: 用代码给一首歌做一支音乐 MV（不用视频生成模型�
 
 ## 第 2 步　定画风
 
-照 `references/styles.md`：按情绪挑 3 种（拿不准就用像素游戏风、纸艺拼贴绘本、蜡笔手绘绘本），用代码把**同一个开场画面**各画一张 1920×1080 样图放 `styles/`（出图用 `render_frames.mjs --times`，见 `references/render.md`「出静态图」），每张一句适配理由。不用图像生成模型。停，等用户选。用户已经说了画风，就只画那一种确认。
+照 `references/styles.md`：按情绪挑 3 种（拿不准就用像素游戏风、纸艺拼贴绘本、蜡笔手绘绘本），用代码把**同一个开场画面**按每种风格自己的画法从头各画一张 1920×1080 样图放 `styles/`（不是画好一张再套滤镜，四种的原生示范在 `examples/`；出图用 `render_frames.mjs --times`，见 `references/render.md`「出静态图」），每张一句适配理由。不用图像生成模型。停，等用户选。用户已经说了画风，就只画那一种确认。
 
 选定后把画法（颜色 HEX、线条、纹理、动起来的手感、歌词放哪）写进 `song.md` 的「画风」一节。
 
@@ -116,3 +116,4 @@ description: 用代码给一首歌做一支音乐 MV（不用视频生成模型�
 | `templates/frames/scene.html` | 路线 B 的逐帧页面（p5.js + p5.brush） |
 | `templates/hf-overlay/` | 路线 B 叠歌词、配歌的合成 |
 | `templates/lyrics-layer.js` | 歌词层（逐字弹出，不跟镜头动） |
+| `examples/<风格>/scene.html` | 四种画风的原生示范（同一段 5 秒，`renderAt(t)` 接口），读代码学画法 |
