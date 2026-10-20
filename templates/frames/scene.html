@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- 路线 B：一帧要等的画法（p5.js v2 + p5.brush 水彩 / 蜡笔，WebGL，一帧零点几秒）先逐帧渲成视频：
+       node scripts/render_frames.mjs --page scene.html --fps 30 --duration 60 --out frames --encode scene.mp4
+     再用 templates/hf-overlay 叠歌词、配歌。p5 必须用实例模式（new p5(p => …)）。
+     换成你的：DURATION、BPM、OFF、W/H、drawWorld(p, t)。出样图、草图：render_frames.mjs --times 1.5,4.2 --out sketches -->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<script src="https://cdn.jsdelivr.net/npm/p5@2.3.3/lib/p5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/p5.brush.js"></script>
+<style>html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #F3EFE6; }</style>
+</head><body>
+<script>
+const DURATION = 60, BPM = 120, OFF = 0.0, BEAT = 60 / BPM;
+const W = 1920, H = 1080;
+const BOIL = 12;                 // 线条一秒抖 12 次，像手画；填色不跟着抖（不然一闪一闪）
+let T = 0, P;
+
+// 每个元素自己的种子：同一个元素每帧拿到同样的随机数，只有线条按 BOIL 换
+function seed(p, key, boil) {
+  let h = 2166136261; const s = key + (boil ? ":" + Math.floor(T * BOIL) : "");
+  for (let k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619); }
+  p.randomSeed(h >>> 0); p.noiseSeed(h >>> 0);
+}
+
+function drawWorld(p, t) {
+  // ↓ 换成分镜里的场景。背景、角色、道具都画在这一个画布上，跟同一个镜头动
+  p.background("#F3EFE6");
+  const hop = Math.sin(Math.PI * (((t - OFF) / BEAT) % 1)) * 60;
+  seed(p, "ball-fill", false); brush.noStroke(); brush.fill("#E07A4F", 190); brush.fillBleed(0.12);
+  brush.circle(W / 2, 700 - hop, 120);
+  seed(p, "ground", true); brush.noFill(); brush.set("2B", "#22263F", 2); brush.line(80, 820, W - 80, 820);
+  // ↑
+}
+
+window.sceneReady = new Promise((resolve) => {
+  new p5((p) => {
+    P = p;
+    p.setup = async () => {
+      p.createCanvas(W, H, p.WEBGL); p.pixelDensity(1); p.noLoop();
+      brush.instance(p); brush.load();
+      resolve();
+    };
+    p.draw = () => { p.push(); p.translate(-W / 2, -H / 2); drawWorld(p, T); p.pop(); };
+  });
+});
+// render_frames.mjs 每帧调这个：画好 t 秒，返回图片
+window.renderAt = async (t) => { T = t; await P.redraw(); return P.drawingContext.canvas.toDataURL("image/jpeg", 0.92); };
+</script></body></html>

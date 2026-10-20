@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- 路线 A：画面同步画得完（Canvas 2D / SVG / DOM：像素风、纸艺拼贴、扁平绘本）就整片写在这一个 HyperFrames 合成里。
+     换成你的：DURATION 和两处 data-duration（#root、audio）、BPM、OFF（第一拍）、drawFrame(t) 里 ↓ ↑ 之间的场景。
+     自己写了镜头系统（每个镜头自己的机位）就把 camera() 和 drawFrame 开头的镜头变换一起换掉。character.js、shots.js 这类用 <script src> 加在 head 里。
+     画幅改竖屏：width/height、data-width/height、canvas 大小、W/H 一起改。歌词：python3 scripts/srt2js.py lyrics.srt -o lyrics.js
+     预览 npx hyperframes preview；出片 npx hyperframes render --quality delivery --output render.mp4，
+     再 python3 scripts/finalize_audio.py render.mp4 song.mp3 -o mv.mp4 把原曲按原音量封回去。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="lyrics.js"></script>
+    <script src="lyrics-layer.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #F3EFE6; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+      #scene { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="60" data-width="1920" data-height="1080" data-fps="30">
+      <canvas id="scene" width="1920" height="1080"></canvas>
+      <audio id="song" src="song.mp3" data-start="0" data-duration="60" data-media-start="0" data-track-index="10" data-volume="1"></audio>
+    </div>
+    <script>
+      const DURATION = 60;                    // 和上面两处 data-duration 一样
+      const BPM = 120, OFF = 0.0;             // analyze_song.py 测的 BPM 和第一拍
+      const BEAT = 60 / BPM;
+      const W = 1920, H = 1080;
+      const ctx = document.getElementById("scene").getContext("2d");
+
+      // 规矩：画面只由 t 决定。随机数用 rnd(元素名, 序号) 这种固定种子，别用 Math.random()
+      function rnd(key, i) { let h = 2166136261; const s = key + ":" + i; for (let k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619); } return ((h >>> 0) % 100000) / 100000; }
+      const beatPhase = (t) => ((t - OFF) / BEAT) % 1;   // 0→1，每拍一圈
+      const ease = (u) => u * u * (3 - 2 * u);
+      const lerp = (a, b, u) => a + (b - a) * u;
+
+      // 镜头：一个镜头只做一种慢动作（慢推、慢移、跟着角色）；转场时上一镜头的终点 = 下一镜头的起点
+      function camera(t) { return { x: W / 2, y: H / 2, zoom: lerp(1, 1.05, ease(Math.min(1, t / DURATION))) }; }
+
+      function drawFrame(t) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = "#F3EFE6"; ctx.fillRect(0, 0, W, H);
+        const cam = camera(t);
+        ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y);
+        // ↓ 换成分镜里的场景：背景、角色（character.js）、道具都画在这一个画布上，跟同一个镜头动
+        ctx.fillStyle = "#9CC6B8"; ctx.fillRect(-200, 780, W + 400, 500);
+        const hop = Math.sin(Math.PI * beatPhase(t)) * 60;
+        ctx.fillStyle = "#E07A4F"; ctx.beginPath(); ctx.arc(W / 2, 700 - hop, 70, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 16; i++) {          // 世界里一直有东西在动
+          const x = (rnd("dust", i) * W + t * 30 * (0.5 + rnd("dust-v", i))) % W, y = 120 + rnd("dust-y", i) * 520 + Math.sin(t * 1.5 + i) * 14;
+          ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+        }
+        // ↑
+        LYRIC_LAYER.render(t);                   // 歌词在最上层，不跟镜头动
+      }
+
+      LYRIC_LAYER.mount(document.getElementById("root"));
+      const proxy = { t: 0 };
+      const tl = gsap.timeline({ paused: true });
+      tl.to(proxy, { t: DURATION, duration: DURATION, ease: "none", onUpdate: () => drawFrame(proxy.t) }, 0);
+      window.addEventListener("hf-seek", (e) => drawFrame(e.detail.time));
+      drawFrame(0);
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
