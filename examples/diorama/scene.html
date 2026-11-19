@@ -48,7 +48,7 @@
   速度：开页面到准备好约 5 秒（下字体 + 烤纸纹、纸片、背板和地面纸，烤约 2 秒）。1920×1080 画一帧连 toDataURL 约 0.08–0.13 秒
   （第一帧预热 0.3–1.6 秒）；render_frames 实测 1920×1080 约 0.4 秒/帧、960×540 约 0.1–0.18 秒/帧（含传图写盘，机器忙时慢一倍）。
   慢在每层几次整幅的合成和糊（每个光源一遍投影、一遍打光），出图缩小省不了多少。
-  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧，ffmpeg scale=640:360:flags=lanczos，
+  出预览动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧，ffmpeg scale=640:360:flags=lanczos，
   palettegen=max_colors=128:stats_mode=diff + paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle，-loop 0，约 4.3 MB。
   镜头一直在慢移，每帧整屏都在变，颜色再多就超 4.5 MB。
   外部资源：霞鹜文楷 LXGW WenKai（jsDelivr 的 lxgw-wenkai-webfont@1.7.0，字体 OFL-1.1，网页字体包 MIT）；没下载到 MV.font 会报出来（出片时停下）。

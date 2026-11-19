@@ -34,24 +34,24 @@
 
 ## 十种画风，各用各的画法
 
-每种一个不同的题材，5–6 秒，大多是两个镜头加一次这个画风自己的转场，卡在拍子上。每种都是从头用这种风格自己的画法画的，不是同一张图换滤镜：
+像素、拼贴、蜡笔、立体书、水墨、皮影、孔版这七种，放的是用这个 skill 做出来的整支 MV 里截的 6 秒（每支约 1 分钟，这里没有声音）；浮世绘、橡皮管卡通、一笔画放的是示范页面的画面。每种都是从头用这种风格自己的画法画的，不是同一张图换滤镜：
 
 <table>
 <tr>
-<td align="center" width="50%"><img src="docs/style-pixel.gif" alt="像素游戏风" width="100%"><br><sub><b>像素游戏风</b>：320×180 逐格画、32 色加抖动点阵、精灵逐帧换画，海边坡道骑车溅水花，菱形格子转近景，歌词进对话框</sub></td>
-<td align="center" width="50%"><img src="docs/style-collage.gif" alt="纸艺拼贴绘本" width="100%"><br><sub><b>纸艺拼贴</b>：牛皮纸、格子布、旧报纸剪的撕的纸片一层层贴，纸偶女孩赶早班，四张卡滑进、撕开、翻页卡拍快切，纸条贴歌词</sub></td>
+<td align="center" width="50%"><img src="docs/style-pixel.gif" alt="像素游戏风" width="100%"><br><sub><b>像素游戏风</b>：320×180 逐格画、32 色加抖动点阵、精灵逐帧换画，整支做成一局 RPG：勇者对上城堡里的心形 BOSS，必杀技切到大头近景，伤害数字跳出来，歌词进对话框</sub></td>
+<td align="center" width="50%"><img src="docs/style-collage.gif" alt="纸艺拼贴绘本" width="100%"><br><sub><b>纸艺拼贴</b>：剪的撕的纸片一层层贴，纸偶女孩的脸推到眼睛，眼睛里映出一片海，海面像纸一样揭开，露出一张拼图拼成的合照，纸条贴歌词</sub></td>
 </tr>
 <tr>
-<td align="center" width="50%"><img src="docs/style-crayon.gif" alt="蜡笔 / 水彩绘本" width="100%"><br><sub><b>蜡笔 / 水彩绘本</b>：蜡笔排线叠水彩晕染，雨后小巷踩水坑，推进水坑晕开成近景，彩虹一笔笔涂、歌词按笔顺写</sub></td>
-<td align="center" width="50%"><img src="docs/style-diorama.gif" alt="纸艺立体书" width="100%"><br><sub><b>纸艺立体书</b>：有厚度的纸片分层站开，灯笼和月亮的光把影子投到后排，书页合上再翻开换景，歌词纸条从书缝里拉出来</sub></td>
+<td align="center" width="50%"><img src="docs/style-crayon.gif" alt="蜡笔 / 水彩绘本" width="100%"><br><sub><b>蜡笔 / 水彩绘本</b>：蜡笔排线叠水彩晕染，雨里两个孩子撑着红伞，伞一抬，彩虹一笔笔涂满整条街</sub></td>
+<td align="center" width="50%"><img src="docs/style-diorama.gif" alt="纸艺立体书" width="100%"><br><sub><b>纸艺立体书</b>：有厚度的纸片分层站开、互相投影，月下两个人转过身来，镜头拉远成一本立体书，书页一层层翻开，落到台上牵着红线的两个人</sub></td>
 </tr>
 <tr>
-<td align="center" width="50%"><img src="docs/style-ink-wash.gif" alt="中国水墨" width="100%"><br><sub><b>中国水墨</b>：宣纸上墨分五色、飞白、留白，渔舟穿过芦苇，篙点水处墨晕开成远山，白鹭飞成一笔，题跋按笔顺写，只有朝阳是朱红</sub></td>
-<td align="center" width="50%"><img src="docs/style-shadow-puppet.gif" alt="皮影戏" width="100%"><br><sub><b>皮影戏</b>：油灯透过镂空的染色兽皮、叠处变暗，关节皮影带杆微抖，狮子随锣鼓甩头扑绣球，灯一暗一亮跃上高台，歌词刻在皮牌上</sub></td>
+<td align="center" width="50%"><img src="docs/style-ink-wash.gif" alt="中国水墨" width="100%"><br><sub><b>中国水墨</b>：宣纸上墨分五色、飞白、留白，水袖一甩扫出一圈浓墨，花瓣跟着飞，再落到一枝红梅下，墨色之外只用一个朱红</sub></td>
+<td align="center" width="50%"><img src="docs/style-shadow-puppet.gif" alt="皮影戏" width="100%"><br><sub><b>皮影戏</b>：油灯透过镂空的染色兽皮、叠处变暗，酒家外两骑对阵，灯色烧成一片红，再切到月下的侧脸，歌词刻在皮牌上</sub></td>
 </tr>
 <tr>
 <td align="center" width="50%"><img src="docs/style-ukiyoe.gif" alt="浮世绘" width="100%"><br><sub><b>浮世绘</b>：分色木版套印，木纹、马连擦痕、逐像素晕染；骤雨木桥，雨是斜落的刻线，雨停那拍印上新色版，白鹭飞起，歌词进竖题签</sub></td>
-<td align="center" width="50%"><img src="docs/style-risograph.gif" alt="Risograph 孔版印刷" width="100%"><br><sub><b>Risograph 孔版印刷</b>：三色半透明油墨叠印、网点颗粒、错版彩边，天台上猫跳上水箱，重拍错版一跳，辊子刷出夕阳近景</sub></td>
+<td align="center" width="50%"><img src="docs/style-risograph.gif" alt="Risograph 孔版印刷" width="100%"><br><sub><b>Risograph 孔版印刷</b>：两三色半透明油墨叠印、网点颗粒、错版彩边，女孩骑着烟花火箭冲上夜空，烟火在身后一朵朵炸开</sub></td>
 </tr>
 <tr>
 <td align="center" width="50%"><img src="docs/style-rubber-hose.gif" alt="1930s 橡皮管卡通" width="100%"><br><sub><b>1930s 橡皮管卡通</b>：4:3 黑白老胶片、派形眼、橡皮管手脚，老厨房随摇摆伸缩，光圈收到咖啡壶眨眼，小球按拍跳字</sub></td>
@@ -59,7 +59,7 @@
 </tr>
 </table>
 
-源码在 [`examples/`](examples/)，每种一个 `scene.html`，用浏览器直接打开就能拖着看。agent 做第 2 步时会读它们学画法；场景只是示范，做你的 MV 时场景从你的歌来。
+十种画风都有示范源码，在 [`examples/`](examples/)，每种一个 `scene.html`（5–6 秒的小场景），用浏览器直接打开就能拖着看。agent 做第 2 步时会读它们学画法；场景只是示范，做你的 MV 时场景从你的歌来。
 
 ## 能做什么
 

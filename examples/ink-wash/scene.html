@@ -40,7 +40,7 @@
   画面只由 t 决定：随机数都是 MV.rng / MV.hash 加固定种子（「元素名 + 序号」）；笔毛、山脊的一维噪声种子取 MV.hash、格点用整数混合（每帧要算几万次，
   比 MV.noise 快，结果同样只由种子决定）。不用 Math.random() / Date，不存上一帧（芦苇、船、白鹭、写完的字有缓存，内容只取决于第几张 / 第几档 / 第几个字）。
   速度（4 核、没独显的电脑）：开页面准备约 3.1–3.3 秒（取笔画数据、造纸、烤各层）；1920×1080 一帧 0.11–0.29 秒（含出 PNG；转场那几拍两个镜头都画，最慢）。
-  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 出 72 张，再
+  出预览动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 出 72 张，再
     ffmpeg -framerate 12 -i %06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0
     4.4 MB（640×360、72 帧；128 色 4.8 MB，超了）。
   坑：

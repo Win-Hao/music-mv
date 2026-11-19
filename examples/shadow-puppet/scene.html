@@ -37,7 +37,7 @@
     第 9 拍绣球落回台沿再弹两下（第 9.5、9.75 拍）；第 9、10、11 拍甩头；第 10.5 拍眨眼。
   画面只由 t 决定：随机数全用 MV.rng / MV.noise 加「元素名 + 序号」种子，不用 Math.random()、Date，不存上一帧。
   速度：Canvas 2D 同步画完。开页面约 5 秒（大半在等 jsDelivr 的字体），刻皮片、烤布纹约 0.2 秒；1920×1080 一帧画约 0.03 秒，连 PNG 编码约 0.11 秒。
-  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png；ffmpeg scale=640:360:flags=lanczos，
+  出预览动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png；ffmpeg scale=640:360:flags=lanczos，
     palettegen=max_colors=56:stats_mode=diff:reserve_transparent=0，paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle，-loop 0，72 帧约 4.2 MB。
     灯一直在闪，每帧整屏都变，GIF 压不下去：96 色约 5.6 MB、64 色约 4.5 MB；bayer_scale 调到 4、5 更小，但灯光的渐变出一圈圈色环，不如少几个颜色。
   坑：操纵杆会横穿脸和歌词牌：狮子、绣球的杆子都朝右下出画，歌词牌放在左下、它的杆朝左下；挂线要细、清楚、淡，直接画在透光图上

@@ -47,7 +47,7 @@
     拍 8–10           近景侧脸骑车，头发和衣角被风吹着，护栏立柱从右往左飞快掠过
     拍 10（4.69）     回头笑（侧脸 → 转过来 → 笑，最后一张落在拍上）；字打完，▼ 跟拍子跳到片尾（6 秒）
   速度：开页面（下 600 KB 字体 + 准备）约 3.5 秒；1920×1080 画一帧约 5.5 ms（最慢约 22 ms），连出 PNG 约 16 ms。
-  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧 →
+  出预览动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧 →
     ffmpeg -framerate 12 -i %06d.png -vf "split[a][b];[a]scale=640:360:flags=neighbor,palettegen=max_colors=32:reserve_transparent=0:stats_mode=full[p];
     [b]scale=640:360:flags=lanczos[s];[s][p]paletteuse=dither=none" -loop 0，约 1.14 MB，GIF 里正好是这 32 色。
     坑：lanczos 缩小会在格子边上混出过渡色，palettegen 直接吃 lanczos 的那份，平均出来的 32 色有 27 色偏了几级；

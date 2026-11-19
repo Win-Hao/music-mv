@@ -38,7 +38,7 @@
   画面只由 t 决定：随机数都用 MV.rng / MV.noise 加「元素名 + 序号」做种子，不用 Math.random()、Date，不存上一帧。
   速度：开页面时烤纸、网点和 3 份出墨，1920×1080 约 1.2 秒、1280×720 约 0.6 秒（第一次还要从 jsDelivr 取字体，冷启动多几秒）。
     一帧同步画完：页面里 1920×1080 约 0.1 秒、1280×720 约 0.06 秒；render_frames 连存 PNG 1920×1080 约 0.43 秒一张、1280×720 约 0.16 秒、960×540 约 0.1 秒。
-  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧，ffmpeg scale=640:360:flags=lanczos，
+  出预览动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧，ffmpeg scale=640:360:flags=lanczos，
     palettegen=max_colors=128:stats_mode=diff + paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle，-loop 0，约 3.4 MB。
   坑：帧一定存 PNG，JPEG 会把网点抹糊；出墨颗粒每张都换，640×360 的 GIF 会大一倍多，每拍换一份就够；黄叠在蓝上会变绿，亮的地方先把蓝挖掉；
     三种墨叠在一起发黑发脏，印在黄上的蓝（猫的瞳孔）要先把黄挖掉；

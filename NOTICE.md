@@ -25,4 +25,8 @@
 
 ## README 里的示例画面
 
-`docs/mv-*.gif` 来自作者用这套流程做的两支 MV（《每一秒初吻》《把回忆拼好给你》），没有声音。画面里的方块角色是 Clawd，Anthropic 为 Claude Code 设计的形象；这里是非官方的同人画法，与 Anthropic 没有隶属或背书关系。Claude、Claude Code、Clawd 相关商标和形象归 Anthropic 所有。skill 本身不含 Clawd 的素材，做 MV 时用你自己的角色。画面里的歌词归歌曲的原作者。`docs/style-*.gif` 和 `examples/` 里的场景、角色和歌词是本项目原创的，歌词依次是：「冲过水洼，海风都追不上我」「一路小跑，追上早晨」「一起把雨踩成彩虹」「提着灯，走回你的门口」「一篙点破晨雾，白鹭飞成一笔」「锣鼓一响，狮子醒了」「雨停在桥的那一头」「晚风在晾衣绳上打拍子」「趁咖啡还热，转个圈吧」「窗台那朵花，飞到你指尖」。
+`docs/mv-*.gif` 来自作者用这套流程做的两支 MV（《每一秒初吻》《把回忆拼好给你》），没有声音。画面里的方块角色是 Clawd，Anthropic 为 Claude Code 设计的形象；这里是非官方的同人画法，与 Anthropic 没有隶属或背书关系。Claude、Claude Code、Clawd 相关商标和形象归 Anthropic 所有。skill 本身不含 Clawd 的素材，做 MV 时用你自己的角色。画面里的歌词归歌曲的原作者。
+
+`docs/style-pixel.gif`、`style-collage.gif`、`style-crayon.gif`、`style-diorama.gif`、`style-ink-wash.gif`、`style-shadow-puppet.gif`、`style-risograph.gif` 来自作者用这个 skill 做的七支 MV（依次是《心墙》《把回忆拼好给你》《雨爱》《如果可以》《咏春》《西厢寻他》《寂寞烟火》），各截 6 秒，没有声音。角色是为这几支 MV 画的；画面里的歌词归歌曲的原作者。
+
+`docs/style-ukiyoe.gif`、`style-rubber-hose.gif`、`style-one-line.gif` 和 `examples/` 里的场景、角色和歌词是本项目原创的，十个示范的歌词依次是：「冲过水洼，海风都追不上我」「一路小跑，追上早晨」「一起把雨踩成彩虹」「提着灯，走回你的门口」「一篙点破晨雾，白鹭飞成一笔」「锣鼓一响，狮子醒了」「雨停在桥的那一头」「晚风在晾衣绳上打拍子」「趁咖啡还热，转个圈吧」「窗台那朵花，飞到你指尖」。

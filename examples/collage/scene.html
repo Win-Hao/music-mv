@@ -46,9 +46,9 @@
      第 13 拍 落在车门台阶上、车身一沉，举起手、小臂往后摆一下到片尾
   速度（4 核、无独显的 Windows，render_frames 报的数）：开页面先下字体、烤纸和纸片，1920×1080 约 6 秒（1280×720 约 3 秒）；
      之后 1920×1080 一帧约 0.07 秒，转场那几张两张卡都画、约 0.1 秒。
-  出 README 动图（6 秒，12 fps 共 72 张）：
+  出预览动图（6 秒，12 fps 共 72 张）：
      node scripts/render_frames.mjs --page examples/collage/scene.html --fps 12 --width 1280 --height 720 --format png --out <临时目录> --workers 1
-     ffmpeg -framerate 12 -i <临时目录>/%06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=176:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" -loop 0 docs/style-collage.gif
+     ffmpeg -framerate 12 -i <临时目录>/%06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=176:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" -loop 0 <输出>.gif
      4.1 MB（640×360、72 帧）。纹理多、每张都在抖：同样 176 色换 sierra2_4a 抖动是 6.1 MB；bayer 抖动看着差不多
   外部资源：霞鹜文楷 LXGW WenKai（字体 OFL-1.1，网页字体包 lxgw-wenkai-webfont 是 MIT，jsDelivr 加载）
   坑：
