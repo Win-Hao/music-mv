@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""把原曲按原音量封回成片。渲染器为了不爆音常把歌压小 2 dB 左右（HyperFrames 会压到 -1 dBTP 以下），
-所以渲完不直接交，用这个把画面原样留着、音轨换成原曲，再量一下两边响度对不对得上。
+"""给成片配上原曲，按原音量。render_frames.mjs 接出来的视频没有声音，用这个把原曲配上去；
+已经带音轨的视频（别的工具渲的，音量常被压过）也一样：画面原样留着，音轨换成原曲，再量一下两边响度对不对得上。
     python3 scripts/finalize_audio.py render.mp4 song.mp3 -o mv.mp4
-    python3 scripts/finalize_audio.py render.mp4 song.mp3 -o mv.mp4 --start 30.5      # MV 从歌的 30.5 秒开始
+    python3 scripts/finalize_audio.py render.mp4 song.mp3 -o mv.mp4 --start 30.5      # MV 从歌的 30.5 秒开始；确实从歌头开始写 --start 0（成片比歌短也不再提醒）
     python3 scripts/finalize_audio.py render.mp4 song.mp3 -o mv.mp4 --fade-out 2      # 最后 2 秒淡出
     python3 scripts/finalize_audio.py render.mp4 song.mp3 -o mv.mp4 --target-lufs -14  # 要整体调到某个响度（只调音量，不压缩）
 """
@@ -12,7 +12,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import lufs, need, probe  # noqa: E402
+from _common import lufs, need, probe, py_cmd, script_path  # noqa: E402
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
     ap.add_argument("video")
     ap.add_argument("song")
     ap.add_argument("-o", "--out", required=True)
-    ap.add_argument("--start", type=float, default=0.0, help="成片第 0 秒对应歌的第几秒")
+    ap.add_argument("--start", type=float, help="成片第 0 秒对应歌的第几秒（不给就是 0）")
     ap.add_argument("--fade-out", type=float, default=0.0, help="最后几秒淡出")
     ap.add_argument("--target-lufs", type=float, help="把整首调到这个响度（只加减音量）")
     a = ap.parse_args()
@@ -28,6 +28,12 @@ def main():
     if os.path.abspath(a.video) == os.path.abspath(a.out):
         sys.exit("输出不能覆盖输入，换个文件名")
     dur = probe(a.video)["duration"]
+    song_dur = probe(a.song)["duration"]
+    given = a.start is not None   # 明写了 --start（包括 --start 0）就是知道起点，不再提醒
+    if not given:
+        a.start = 0.0
+        if song_dur and song_dur - dur >= 1:
+            print(f"成片 {dur:.2f} 秒，歌 {song_dur:.2f} 秒，从歌的第 0 秒配。只做中间一段的话要加 --start <片头在歌里的秒数>；确实从歌头开始就写 --start 0，不再提醒")
     song_i, song_pk = lufs(a.song, a.start, dur)
     af = []
     if a.target_lufs is not None and song_i is not None:
@@ -48,7 +54,8 @@ def main():
     if rend_i is not None:
         print(f"渲染出来的：{rend_i} LUFS（差 {rend_i - song_i:+.1f} dB）" if song_i is not None else f"渲染出来的：{rend_i} LUFS")
     print(f"封好的成片：{out_i} LUFS，峰值 {out_pk} dBFS → {a.out}")
-    print(f"下一步自检：python3 scripts/video_rhythm.py {a.out} --analysis song-analysis.json")
+    off = f" --offset {0.0 - a.start:g}" if given else ""   # 起点 0 也带上 --offset 0，video_rhythm 就不再提醒
+    print(f"下一步自检：{py_cmd()} {script_path('video_rhythm.py')} {a.out} --analysis song-analysis.json{off}")
     want = a.target_lufs if a.target_lufs is not None else song_i
     if out_i is not None and want is not None and abs(out_i - want) > 1.0 and not a.fade_out:
         print("⚠ 成片和目标差了 1 dB 以上，查一下 --start 对不对")

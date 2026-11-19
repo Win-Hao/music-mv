@@ -1,713 +1,1099 @@
 <!doctype html>
 <!--
-  蜡笔手绘绘本（crayon picture book）· music-mv 画风样例（5 秒，BPM 120）
-  雪夜街角：橘色小螃蟹横着走进来，路灯在第 6 拍（2.5 秒）「啪」地亮起，螃蟹吃一惊、蹦一下，头顶冒爱心，歌词一笔一笔写出来。
+  蜡笔 / 水彩绘本（p5.js v2 + p5.brush）· 雨后的小巷：穿黄雨靴的小女孩和小狗踩水坑，镜头推进水坑里的纸船，水彩晕开落到近景，
+  小狗凑过来闻纸船，天放晴，彩虹一笔一笔涂出来（6 秒，BPM 84）
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。
 
   关键画法（给以后读代码学画法的 agent）：
-  - 工具：p5.js v2（实例模式）+ p5.brush，所有东西都是笔刷画的，没有平涂、没有滤镜。
-    轮廓：ink()，"crayon" 笔（纸纹颗粒 + 压感）。填色：crayon()，brush.hatch() 来回排线（continuous:true 就是蜡笔来回涂），
-    两三层不同角度、不同颜色叠出深浅；填色的多边形比轮廓大一点、偏一点（sloppy），所以有的地方涂出线、有的地方留白缝。
-  - 大面积（夜空、雪地）不一次涂完：tiles() 切成手掌大小、互相压一点的块，每块方向略不同，压在一起的地方更深（蜡笔叠出来的渐变）。
-  - 线条抖动（boil）：轮廓一秒换 12 次种子（种子 = 元素名 + floor(t*12)），顶点也抖 1 px 左右；
-    填色、排线的种子固定（只用元素名），所以填色不闪。螃蟹用 p.translate/scale 画在自己的坐标里，排线跟着它走、不会在身上「游动」。
-  - 分层：p5.brush 的颜色像颜料会混色（浅色叠在深蓝上变绿），所以一帧在同一张 WebGL 画布上画 5 遍，每遍拷到一张 2D 画布：
-      bg     纸底 + 夜空 + 房子 + 雪地（不透明）
-      mid    透明底：星星、窗户灯、雪地上的黄排线、灯的光圈、长椅、路灯
-      crab   透明底：螃蟹
-      front  透明底：雪花、感叹号、爱心
-      lyric  透明底：歌词
-    物件先用纸色 wash 垫一层不透明的底（base()），再上蜡笔，所以螃蟹跳到夜空前面也不透。
-    2D 上按顺序 source-over 叠起来＝蜡笔一层盖一层（黄蜡盖在蓝蜡上还是黄的，不会混成绿）。
-    别在一帧里来回 brush.load(另一块画布)：p5.brush 2.2.3 会把颜色串到别的笔画上，所以这里是「同一块画布画多遍」。
-  - 灯光：亮的那一下主要靠蜡笔画（黄色光圈和放射线、雪地上的黄排线、螃蟹和长椅朝灯一侧的黄高光、影子往左拉长），
-    再在 2D 上用 'lighter' 加一点暖光（加色，不用浅色笔刷去「涂亮」）。
-  - 纸：暖白画纸，开场生成一次（固定种子的值噪声 + 竖向细纸纹 + 纤维），最后整张 multiply。
-  - 歌词：字的笔画中线取自 hanzi-writer-data（Make Me a Hanzi 的数据，Arphic Public License，jsDelivr 按字取 JSON），
-    用自定义的 "wax" 蜡笔（比自带的 crayon 散得少，字才认得清）沿中线按笔顺画，一个词一个词写出来；逗号自己画一笔。
-  - 镜头：1.0 → 1.05 很慢地推近，一秒走 4 格（画面边上每格约 1 像素，看不出台阶；中间几帧背景不动，GIF 小一些）。
-  - 画面只由 t 决定：没有 Math.random()，不存上一帧。1280×720 一帧约 0.7–1.2 秒。
+  - 工具：p5.js v2（实例模式，页面里不写全局的 draw / setup / preload）+ p5.brush 2.2.3，一切都是笔刷画的。
+    轮廓 ink()：蜡笔线（"crayon" 笔）。蜡笔填色 crayon()：brush.hatch + hatchStyle，continuous 来回涂。
+    水彩填色 water()：brush.fill + fillBleed + fillTexture，同一块颜色叠 2–3 遍（每遍换种子）才实，一遍很淡。不透明的底 base()：brush.wash(颜色, 255)。
+  - 两种填色分工：湿的东西用水彩（天、水坑、近景的水面、云的阴影、纸船），干的东西用蜡笔排线（墙、雨衣、雨靴、小狗、彩虹）。
+    蜡笔两三层不同角度：墙是 5.5 和 11 两层再加一条墙脚的深色；雨衣、靴子是一层主色 + 一层深色换个角度；
+    填色范围比轮廓大一点、整体偏一点（sloppy），所以有的地方涂出线、有的地方露白缝。
+    大片的天切成手掌大小、互相压一点的块，每块角度略不同（skyTiles），而且很淡很稀：整片长直线、排得密，看着像在下雨。
+    地面先垫一层灰蓝的底再晕水彩：水彩一遍很淡，直接涂在纸上地面会发白，石头缝反倒成了深色。
+    彩虹每一道是沿着弧来回涂的锯齿线，切成一小笔一小笔（每笔种子固定，涂上去就不再变），再错开半格、浅一点涂第二层。
+  - 线条抖、填色不抖：轮廓一秒换 12 次种子、顶点抖 1 px 左右（4 版轮流：floor(t*12) % 4，静背景才能缓存）；填色、排线的种子只用元素名。
+  - 混色：p5.brush 的颜色像颜料会混色（浅色叠在深色上变脏、黄叠在蓝上变绿）。东西先垫一层不透明的底（base）再上蜡笔；
+    白云不能用水彩「涂白」（水彩是透明的），先垫不透明的白，下半边再晕一层灰蓝。
+  - 光和高光：最后在 2D 上用 'lighter' 加色叠（小巷尽头亮着、水面一闪一闪、踩下去那一下水面一亮、云散开后太阳越来越亮），不用浅色笔刷去「涂亮」。
+  - 纸：开页面生成一次（固定种子的值噪声 + 竖向细纸纹 + 纤维），在 overlay 里整张 multiply。
+  - 一帧怎么画、怎么缓存：p5 画布按出图的像素开（1280×720 出图就开 1280×720），p.scale(KX) 后按 1920×1080 的坐标画。
+    每个镜头分「静的」和「动的」：静的（天、墙、地、水坑、近景的天和水）每版抖动只画一次，存成 p5.Image；
+    之后每帧先 p.image 贴上它，再在 p5 里画动的东西——动的笔画会和底下真实的颜色混色，和一次画完一模一样。
+  - 镜头推拉在 p5 里矢量重画（每个镜头 cam = {x, y, z}，p.translate / p.scale），不在 2D 里放大位图。
+    轮廓线宽、抖动按屏幕算（除以 z），推近时线不跟着变粗；填色跟着世界走。
+    纸船在两个镜头里是同一个画法：几何按船长缩放、线宽按屏幕算、填色只用水彩（水彩的纹理按形状大小算，放大缩小一个样），
+    推进时两个镜头里的船位置、大小、线宽都对得上（两个镜头叠在一起看只有一条船），所以船一直在、不跳。
+  - 转场（落点：第 4 拍 2.857 秒）：拍前 0.62 秒起步，镜头 1 推向水坑里的纸船（倍数对数插值放大 2.1 倍，船在画面上平移到近景的位置）；
+    拍前 0.5 秒从纸船那里晕开一圈水彩，越晕越快，拍上正好盖满。圈里是近景：近景的镜头锁着纸船（船的位置、大小和镜头 1 里一样），
+    所以圈刚出现时圈里圈外都是同一条船、同样颜色的水。圈的形状是一圈圆鼓包、之间尖凹口（水彩渗开的菜花边），
+    边上三道蜡笔线（外深里浅；晕得小时线也细，不然会把船糊住）。被圈盖住的镜头 1 东西不画、圈外的镜头 2 东西不画，省一半时间。
+    近景要比画面画大一截：转场时它是缩小着从水里晕开的（算过整段转场里看得见的范围，四周再留一点）。
+  - 歌词：window.LYRICS + MV.lyricAt（每半拍一个字），字的笔画中线取自 hanzi-writer-data（Make Me a Hanzi 的数据），
+    用自定义的 "wax" 蜡笔（比自带的 crayon 散得少，字才认得清）沿中线按笔顺画。歌词单独画在一张白底的 p5 画面上，
+    在 overlay 里 multiply 叠到最上层：白的地方乘上去不变，字边上淡的笔触也不会冒白边；不跟镜头动。写完以后每版抖动缓存一张。
+  - 坑：
+    · p5.brush 2.2.3 判断笔尖出没出画布，用的是缩放前的坐标（当一个单位就是一个像素）。用 p.scale 画（缩小出图、推拉）时，
+      超出画布 1.5 倍范围的那段笔画原地不动、笔触全堆成一团，从外面起笔的排线整条不画。这里把判断关掉：brush.Position.prototype.isInCanvas = () => true
+    · 透明画布上的笔画，淡的边会变成不透明的白点（p5.brush 混色时把透明当成白纸）：要叠到别的画面上的层，要么像歌词那样白底 multiply，
+      要么像这里每帧先贴静背景再画。
+    · 别在一帧里来回 brush.load(另一块画布)：p5.brush 2.2.3 会把颜色串到别的笔画上。这里始终是同一块画布画多遍。
+    · brush.spline 只给两个点时什么都不画：ink() 遇到两个点会先切成小段。
+
+  时间线（BPM 84，第 0 拍在 0 秒，一拍 0.714 秒）：
+    第 0 拍：小巷远景，女孩站在大水坑那头，小狗在旁边摇尾巴；屋檐、落水管、晾的衣服一直在滴水，落进墙脚的小水坑漾开
+    第 1 拍（0.714）：女孩蹲下、起跳，落在拍上：溅起水冠和水珠、水面一亮、水波一圈圈散开；歌词从这一拍起每半拍写一个字（3.53 秒写完）
+    第 2 拍（1.429）：小狗跳进去，落在拍上，又溅一下，女孩眯眼笑
+    第 3 拍（2.143）：两个一起跳，溅起最大的一下。三次的水波按 1.6 米/秒走到纸船那里，船各晃一下（1.39、1.98、2.69、2.82 秒）
+    2.237 镜头起步推向纸船，2.357 从纸船晕开水彩；第 4 拍（2.857）晕满、落到近景
+    近景：小狗从右边探进来（2.90–3.66），云往两边散开、太阳越来越亮（到 4.5）；第 5 拍起每半拍嗅一下纸船（鼻子一探，冒几道短线）
+    第 5、5.5、6、6.5、7 拍（3.571、3.929、4.286、4.643、5.0）：彩虹从外到里一道一道涂出来，每道 0.34 秒，水里的倒影跟着出来
+  速度：开页面约 5 秒（下 p5、p5.brush 和 8 个字的笔画数据，生成纸纹）。
+    1920×1080：镜头 1 一帧约 0.35 秒、镜头 2 约 0.8–0.9 秒、转场那几拍约 5.8 秒（两个镜头都现画）；每版抖动的静背景第一次用到时多画一次（镜头 1 约 3.8 秒、镜头 2 约 3 秒）。
+    1280×720：镜头 1 约 0.3 秒、镜头 2 约 0.5–0.8 秒、转场约 3.6 秒；72 帧的 GIF 平均 1.19 秒一帧。960×540、30 fps 的草稿 180 帧平均 0.83 秒一帧。
+  出 GIF：node scripts/render_frames.mjs --page examples/crayon/scene.html --fps 12 --width 1280 --height 720 --format png --out <目录>
+    ffmpeg -framerate 12 -i <目录>/%06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=144:stats_mode=full[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0
+    约 4.4 MB。轮廓一直在抖，整帧都在变；stats_mode=diff 时最后才出来的彩虹颜色发灰，用 full。
+  外部资源（jsDelivr）：p5@2.3.3（LGPL-2.1）、p5.brush@2.2.3（MIT）、hanzi-writer-data@2.0.1（汉字笔顺数据，Arphic Public License）。
 -->
 <html lang="zh-CN"><head><meta charset="UTF-8" />
 <script src="https://cdn.jsdelivr.net/npm/p5@2.3.3/lib/p5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/p5.brush.js"></script>
-<style>
-  html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: #F4EBDA; }
-  canvas { position: absolute; left: 0; top: 0; }
-  #out { z-index: 2; }
-</style>
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; overflow: hidden; background: #000; }</style>
 </head><body><script>
-const W = 1280, H = 720, DURATION = 5, BPM = 120, BEAT = 60 / BPM, BOIL = 12;
-const LIGHT_ON = 5 * BEAT;                   // 第 6 拍（第一拍在 0 秒）= 2.5 秒
-const LYRIC = "把今天的星星，都留给你";
-const WORDS = [["把", 3.0], ["今天的", 3.2], ["星星，", 3.45], ["都", 3.72], ["留给你", 3.88]];
+// ═════════ 基本参数、时间线（所有时刻都从拍子算）═════════
+const W = 1920, H = 1080, FPS = 30, BPM = 84, DURATION = 6;
+const BOIL = 12, BOILK = 4;                        // 线条一秒抖 12 次；4 版抖动轮流用，静的背景每版只画一次
+MV.tempo(BPM, 0);
+const { clamp, lerp, seg, ease } = MV;
+const TAU = Math.PI * 2, BEAT = 60 / BPM, bt = (n) => MV.beatTime(n);
+const T_GIRL = bt(1), T_PUP = bt(2), T_BOTH = bt(3);    // 三次踩水：女孩、小狗、一起
+const T_LAND = bt(4);                                    // 转场落点：近景
+const T_PUSH = T_LAND - 0.62, T_BLOOM = T_LAND - 0.5;    // 推进起步、水彩晕开起步
+const T_BANDS = [5, 5.5, 6, 6.5, 7].map(bt), BAND_DUR = 0.34;   // 彩虹五笔：每笔从这半拍起涂
+window.PLAN = [+T_LAND.toFixed(3)];
+window.LYRICS = [[bt(1), DURATION, '一起把雨踩成彩虹']];
 
 const PAL = {
-  paper: "#FFFDF6",
-  navy: "#22346E", navyDeep: "#151F48", skyLow: "#2F4A8C",
-  ink: "#251E36",
-  snowShade: "#B4BEDC", snowShade2: "#8F9CCB",
-  lamp: "#FFCF3F", lampDeep: "#F6A626", lampPale: "#FFE98E",
-  win: "#F5B947", winDeep: "#E98F2E",
-  iron: "#323856", ironLite: "#59618A",
-  wood: "#A8693A", woodDark: "#6E3F22",
-  crab: "#EE6B3B", crabDeep: "#C84528", belly: "#FCD3A2", blush: "#F38B7B", crabInk: "#5B2316",
-  heart: "#E2434A", heartDeep: "#B32638", lyric: "#20306B",
-  pine: "#2F5E4E", pineDark: "#1D4034", trunk: "#6A4128",
+  paper: '#FBF6EA', ink: '#33283A', inkSoft: '#5B6680',
+  sky1: '#CCDCE8', skyWarm: '#F4EAD2', cloud: '#F6F6F2', cloudSh: '#B4C3D3', cloudLine: '#8DA1B8',
+  ochre: '#E2AE5E', ochreDeep: '#C2893F', pink: '#E8A48C', pinkDeep: '#C77C68',
+  terra: '#D9785A', terraDeep: '#B45A42', stone: '#DDD0B6', stoneDeep: '#B7A688', slate: '#94AFC2', slateDeep: '#6F8EA6',
+  roof: '#545D72', teal: '#3E8A87', glass: '#3B5577', door: '#4F8C7C', wood: '#9A5536',
+  leaf: '#62A05A', leafDeep: '#3F7A45', pot: '#C8643F', flower: '#E8506A',
+  ground: '#AEB9C6', groundDeep: '#8796AB', cobble: '#7D8AA0',
+  water: '#BFDDF1', waterDeep: '#92C0E2', waterLine: '#50708F', ripple: '#7EA6CA',
+  coat: '#E04B3A', coatDeep: '#B13427', boot: '#F6C22D', bootDeep: '#DE951C', tights: '#3C4B80',
+  skin: '#F8D5BA', blush: '#F0958A', hair: '#4B2F25', tie: '#E8506A',
+  pup: '#F4E6CC', pupDeep: '#D6BB93', pupEar: '#B9794A', nose: '#2A1F22', collar: '#D8433A',
+  boat: '#FFFDF6', boatSh: '#C3D3E3', stripe: '#E0503E', boatLine: '#38425A',
+  sky2: '#A3CDEB', sun: '#F7C744', sunDeep: '#F0A23A',
+  rainbow: ['#E5483A', '#F28C38', '#F5C73A', '#6DB46A', '#4C8BD2'],
+  lyric: '#22306B',
 };
 
-let T = 0, P;
-const layers = {};       // 每一遍画完拷到这里的 2D 画布
-let out, paperTex, glowSprite;
-
-// ---------- 随机数：只由「元素名 (+ 抖动序号)」决定 ----------
-function hash(s) { let h = 2166136261; for (let k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619); } return h >>> 0; }
-function rng(key) { let a = hash(key); return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-const boilIdx = () => Math.floor(T * BOIL + 1e-6);
-function seed(key, boil) { const h = hash(boil ? key + ":" + boilIdx() : key); P.randomSeed(h); P.noiseSeed(h); }
-
-// ---------- 小工具 ----------
-const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
-const lerp = (a, b, u) => a + (b - a) * u;
-const smooth = (u) => { u = clamp(u); return u * u * (3 - 2 * u); };
-const easeOutBack = (u) => { u = clamp(u); const c = 1.9; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
-function ell(cx, cy, rx, ry, n = 30, rot = 0) {
-  const pts = [];
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const x = Math.cos(a) * rx, y = Math.sin(a) * ry;
-    pts.push([cx + x * Math.cos(rot) - y * Math.sin(rot), cy + x * Math.sin(rot) + y * Math.cos(rot)]); }
+// ═════════ 小工具 ═════════
+function ell(cx, cy, rx, ry, n = 28, rot = 0) {
+  const c = Math.cos(rot), s = Math.sin(rot), pts = [];
+  for (let i = 0; i < n; i++) { const a = (i / n) * TAU, x = Math.cos(a) * rx, y = Math.sin(a) * ry; pts.push([cx + x * c - y * s, cy + x * s + y * c]); }
   return pts;
 }
-function subdiv(pts, step = 24, closed = true) {          // 长边切成小段，抖动时才像手画的线
-  const outP = [], n = pts.length;
+function subdiv(pts, step = 24, closed = true) {                 // 长边切成小段，抖动时才像手画的线
+  const out = [], n = pts.length;
   for (let i = 0; i < (closed ? n : n - 1); i++) {
-    const a = pts[i], b = pts[(i + 1) % n]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const k = Math.max(1, Math.round(L / step));
-    for (let j = 0; j < k; j++) outP.push([lerp(a[0], b[0], j / k), lerp(a[1], b[1], j / k)]);
+    const a = pts[i], b = pts[(i + 1) % n], k = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let j = 0; j < k; j++) out.push([lerp(a[0], b[0], j / k), lerp(a[1], b[1], j / k)]);
   }
-  if (!closed) outP.push(pts[n - 1]);
-  return outP;
+  if (!closed) out.push(pts[n - 1]);
+  return out;
 }
-const rectPts = (x, y, w, h) => subdiv([[x, y], [x + w, y], [x + w, y + h], [x, y + h]]);
-// 大面积不一次涂完：切成一块块手掌大小、互相压一点的不规则四边形，每块方向略不同（真的蜡笔涂天就是这样一片一片的）
-function tiles(key, x0, y0, x1, y1, tw, th) {
-  const r = rng(key), res = []; let row = 0;
-  for (let y = y0; y < y1; y += th, row++) for (let x = x0 - (row % 2) * tw * 0.5; x < x1; x += tw) {
-    const ex = tw * (0.12 + r() * 0.18), ey = th * (0.12 + r() * 0.2), j = () => (r() - 0.5) * Math.min(tw, th) * 0.35;
-    res.push(subdiv([[x - ex + j(), y - ey + j()], [x + tw + ex + j(), y - ey + j()], [x + tw + ex + j(), y + th + ey + j()], [x - ex + j(), y + th + ey + j()]], 50));
+const centroid = (pts) => { let x = 0, y = 0; for (const p of pts) { x += p[0]; y += p[1]; } return [x / pts.length, y / pts.length]; };
+function sloppy(key, pts, amp) {                                 // 涂色的范围比轮廓大一点、整体偏一点：有的地方涂出线，有的地方留白缝
+  const r = MV.rng(key + '#slop'), [cx, cy] = centroid(pts), dx = (r() - 0.5) * amp * 1.4, dy = (r() - 0.5) * amp * 1.4;
+  return pts.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy) || 1, e = amp * (0.2 + r() * 0.6); return [x + dx + ((x - cx) / d) * e, y + dy + ((y - cy) / d) * e]; });
+}
+function bbox(pts, pad = 0) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+  return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+}
+function inPoly(x, y, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; }
+  return c;
+}
+function clipPoly(pts, clip) {                                   // 多边形裁到一个凸多边形里（Sutherland–Hodgman）
+  const area = clip.reduce((s, p, i) => { const q = clip[(i + 1) % clip.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0), sg = area > 0 ? 1 : -1;
+  let out = pts;
+  for (let i = 0; i < clip.length && out.length; i++) {
+    const A = clip[i], B = clip[(i + 1) % clip.length];
+    const inside = (p) => sg * ((B[0] - A[0]) * (p[1] - A[1]) - (B[1] - A[1]) * (p[0] - A[0])) >= 0;
+    const cut = (p, q) => { const a1 = B[1] - A[1], b1 = A[0] - B[0], c1 = a1 * A[0] + b1 * A[1], a2 = q[1] - p[1], b2 = p[0] - q[0], c2 = a2 * p[0] + b2 * p[1], d = a1 * b2 - a2 * b1; return [(b2 * c1 - b1 * c2) / d, (a1 * c2 - a2 * c1) / d]; };
+    const inp = out; out = [];
+    for (let j = 0; j < inp.length; j++) { const p0 = inp[j], p1 = inp[(j + 1) % inp.length], i0 = inside(p0), i1 = inside(p1); if (i0) out.push(p0); if (i0 !== i1) out.push(cut(p0, p1)); }
   }
+  return out;
+}
+const rectPoly = ([x0, y0, x1, y1]) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+function offsetPoly(pts, d) {                                    // 多边形沿法线往外扩 d（坑边那一圈湿）
+  const n = pts.length, area = pts.reduce((s, p, i) => { const q = pts[(i + 1) % n]; return s + p[0] * q[1] - q[0] * p[1]; }, 0), sg = area > 0 ? 1 : -1;
+  return pts.map((p, i) => {
+    const a = pts[(i + n - 1) % n], b = pts[(i + 1) % n], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1;
+    return [p[0] + (sg * ty / L) * d, p[1] - (sg * tx / L) * d];
+  });
+}
+function capsule(a, b, r0, r1, n = 5) {
+  const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), nx = -Math.sin(ang), ny = Math.cos(ang), pts = [];
+  pts.push([a[0] + nx * r0, a[1] + ny * r0], [b[0] + nx * r1, b[1] + ny * r1]);
+  for (let i = 1; i < n; i++) { const q = ang + Math.PI / 2 - (i / n) * Math.PI; pts.push([b[0] + Math.cos(q) * r1, b[1] + Math.sin(q) * r1]); }
+  pts.push([b[0] - nx * r1, b[1] - ny * r1], [a[0] - nx * r0, a[1] - ny * r0]);
+  for (let i = 1; i < n; i++) { const q = ang - Math.PI / 2 - (i / n) * Math.PI; pts.push([a[0] + Math.cos(q) * r0, a[1] + Math.sin(q) * r0]); }
+  return pts;
+}
+function partial(pts, f) {                                       // 一笔只画出前 f 那么长（写字、涂彩虹的过程）
+  if (f >= 1) return pts;
+  let L = 0; const seg = [];
+  for (let k = 1; k < pts.length; k++) { const d = Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); seg.push(d); L += d; }
+  const want = L * f, res = [pts[0]]; let acc = 0;
+  for (let k = 1; k < pts.length; k++) { const d = seg[k - 1]; if (acc + d >= want) { const u = (want - acc) / (d || 1); res.push([lerp(pts[k - 1][0], pts[k][0], u), lerp(pts[k - 1][1], pts[k][1], u)]); break; } res.push(pts[k]); acc += d; }
   return res;
 }
-function wobble(key, pts, amp) { const r = rng(key); return pts.map(([x, y]) => [x + (r() - 0.5) * 2 * amp, y + (r() - 0.5) * 2 * amp]); }
-function centroid(pts) { let x = 0, y = 0; pts.forEach((p) => { x += p[0]; y += p[1]; }); return [x / pts.length, y / pts.length]; }
-// 涂色的范围：比轮廓大一点、整体偏一点 → 有的地方涂出线、有的地方留白缝
-function sloppy(key, pts, amp) {
-  const r = rng(key + "#slop"); const [cx, cy] = centroid(pts); const dx = (r() - 0.5) * amp * 1.4, dy = (r() - 0.5) * amp * 1.4;
-  return pts.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy) || 1; const e = amp * (0.2 + r() * 0.6);
-    return [x + dx + ((x - cx) / d) * e, y + dy + ((y - cy) / d) * e]; });
+const hexRGB = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mixHex = (a, b, u) => { const A = hexRGB(a), B = hexRGB(b); return '#' + A.map((v, i) => Math.round(lerp(v, B[i], u)).toString(16).padStart(2, '0')).join(''); };
+const decay = (t, t0, tau) => (t < t0 ? 0 : Math.exp(-(t - t0) / tau));
+
+// ═════════ p5 和镜头：一张 WebGL 画布，按镜头矢量重画 ═════════
+let P, cw = W, ch = H, KX = 1;                                  // p5 画布按出图的像素开（1280×720 出图就开 1280×720，按 KX 缩放画）
+let T = 0, BI = 0, CAM = { x: W / 2, y: H / 2, z: 1 }, PAINT = null, BGIMG = null;
+let VIEW = [0, 0, W, H], CULL = null;                           // 这一遍看得见的世界范围；转场时被另一个镜头盖住的部分不画
+const REST = { x: W / 2, y: H / 2, z: 1 };
+const toScr = (cam, x, y) => [(x - cam.x) * cam.z + W / 2, (y - cam.y) * cam.z + H / 2];
+function seen(b) {
+  if (b[2] < VIEW[0] || b[0] > VIEW[2] || b[3] < VIEW[1] || b[1] > VIEW[3]) return false;
+  return CULL ? CULL(b) : true;
+}
+async function render(paint, cam, t, bg = null) {                // 让 p5 按这个镜头重画一遍；拿到画布马上拷走，下一遍会盖掉
+  T = t; CAM = cam; PAINT = paint; BGIMG = bg;
+  const m = 40 / cam.z;
+  VIEW = [cam.x - W / 2 / cam.z - m, cam.y - H / 2 / cam.z - m, cam.x + W / 2 / cam.z + m, cam.y + H / 2 / cam.z + m];
+  await P.redraw();
+  return P.drawingContext.canvas;
 }
 
-// ---------- 画法 ----------
-// 轮廓：蜡笔线，每 1/12 秒换种子、顶点抖一点
-function ink(key, pts, o = {}) {
+// ═════════ 画法：轮廓抖、填色不抖 ═════════
+function seed(key, boil) { const h = MV.hash(boil ? key + ':' + BI : key); P.randomSeed(h); P.noiseSeed(h); }
+const LZ = () => 1 / CAM.z;                                      // 线宽、抖动按屏幕算：推近时线不跟着变粗
+function ink(key, pts, o = {}) {                                 // 轮廓：蜡笔线，每 1/12 秒换一版种子、顶点抖一点
+  if (pts.length < 2) return;
+  if (pts.length < 3) pts = subdiv(pts, 6, false);
   seed(key, true);
-  if (pts.length < 3) pts = subdiv(pts, 5, false);          // brush.spline 至少要 3 个点，两点的短线切开再画
-  const r = rng(key + ":" + boilIdx()); const a = o.boil ?? 0.9;
+  const r = MV.rng(key + ':' + BI), a = (o.boil ?? 0.9) * LZ();
   const q = pts.map(([x, y]) => [x + (r() - 0.5) * 2 * a, y + (r() - 0.5) * 2 * a]);
-  brush.noFill(); brush.noHatch(); brush.noWash();
-  brush.set(o.brush || "crayon", o.color || PAL.ink, o.w ?? 1.2);
   if (o.closed) q.push(q[0]);
+  brush.noFill(); brush.noHatch(); brush.noWash();
+  brush.set(o.brush || 'crayon', o.color || PAL.ink, (o.w ?? 1.2) * LZ());
   brush.spline(q, o.curv ?? 0.4);
 }
-// 填色：蜡笔排线，种子固定
-function crayon(key, pts, color, o = {}) {
+function inkLine(key, pts, o = {}) {                             // 长直线：切小段、画面外的部分不画
+  const s = subdiv(pts, 26, false), runs = []; let cur = [];
+  for (const p of s) { if (p[0] > VIEW[0] - 30 && p[0] < VIEW[2] + 30 && p[1] > VIEW[1] - 30 && p[1] < VIEW[3] + 30) cur.push(p); else { if (cur.length > 1) runs.push(cur); cur = []; } }
+  if (cur.length > 1) runs.push(cur);
+  runs.forEach((run, i) => ink(key + '_' + i, run, { curv: 0.1, ...o }));
+}
+function crayon(key, pts, color, o = {}) {                       // 蜡笔排线：种子固定（不抖），来回涂（continuous）
+  if (pts.length < 3) return;
   seed(key, false);
   brush.noStroke(); brush.noFill(); brush.noWash();
-  brush.hatch(o.dist ?? 5, o.angle ?? 0.7, { rand: o.rand ?? 0.25, continuous: o.cont ?? true, gradient: o.grad ?? false });
-  brush.hatchStyle(o.brush || "crayon", color, o.w ?? 2);
+  brush.hatch(o.dist ?? 5, o.angle ?? 0.7, { rand: o.rand ?? 0.25, continuous: true });
+  brush.hatchStyle(o.brush || 'crayon', color, o.w ?? 1.6);
   brush.polygon(o.slop === 0 ? pts : sloppy(key, pts, o.slop ?? 3));
   brush.noHatch();
 }
-// 不透明的纸色底（盖住后面的蜡笔，物件才不透明）
-function base(pts, color = PAL.paper) { brush.noStroke(); brush.noHatch(); brush.noFill(); brush.wash(color, 255); brush.polygon(pts); brush.noWash(); }
-function blob(key, pts, color) { seed(key, false); brush.noStroke(); brush.noHatch(); brush.noFill(); brush.wash(color, 255); brush.polygon(pts); brush.noWash(); }
-
-// ---------- 时间轴 ----------
-const lit = () => T >= LIGHT_ON - 1e-6;
-function lightK() {                         // 灯的亮度：2.5 秒啪一下最亮，再落到 1
-  if (!lit()) return 0;
-  const u = T - LIGHT_ON; return u > 0.6 ? 1 : 1 + 0.35 * Math.exp(-u * 9);
+function skyTiles(key, clip, color, o = {}) {                   // 大片天不一次涂完：切成手掌大小、互相压一点的块，每块方向略不同（拿蜡笔涂天就是一片一片的，不是一整片长直线）
+  const [x0, y0, x1, y1] = bbox(clip), tw = o.tw ?? 270, th = o.th ?? 150, r = MV.rng(key);
+  let row = 0;
+  for (let y = y0; y < y1; y += th, row++) for (let x = x0 - (row % 2) * tw * 0.5; x < x1; x += tw) {
+    const ex = tw * (0.1 + r() * 0.15), ey = th * (0.1 + r() * 0.15), j = () => (r() - 0.5) * Math.min(tw, th) * 0.3;
+    const q = clipPoly([[x - ex + j(), y - ey + j()], [x + tw + ex + j(), y - ey + j()], [x + tw + ex + j(), y + th + ey + j()], [x - ex + j(), y + th + ey + j()]], clip);
+    const ang = (o.angle ?? -0.4) + (r() - 0.5) * 0.5;
+    if (q.length > 2 && seen(bbox(q))) crayon(key + '_' + row + '_' + Math.round(x), q, color, { dist: o.dist ?? 12, angle: ang, w: o.w ?? 1.3, rand: 0.45, slop: 0 });
+  }
 }
-// 镜头很慢地推近 1.0 → 1.05，一秒走 4 格（画面边上每格约 1 像素，看不出台阶），格子中间的帧背景不动，GIF 压得小
-const CAM_STEP = 1 / 4;
-function camScale() { const t = Math.floor(T / CAM_STEP + 1e-6) * CAM_STEP; return 1 + 0.05 * clamp(t / (DURATION - CAM_STEP)); }
-const CAM_C = [800, 455];
-function camera() { const s = camScale(); P.translate(CAM_C[0], CAM_C[1]); P.scale(s); P.translate(-CAM_C[0], -CAM_C[1]); }
-function toScreen(x, y) { const s = camScale(); return [(x - CAM_C[0]) * s + CAM_C[0], (y - CAM_C[1]) * s + CAM_C[1]]; }
+function water(key, pts, color, o = {}) {                        // 水彩：同一块颜色叠几遍（每遍换种子）才实，一遍很淡
+  if (pts.length < 3) return;
+  for (let i = 0; i < (o.layers ?? 2); i++) {
+    seed(key + '#' + i, false);
+    brush.noStroke(); brush.noHatch(); brush.noWash();
+    brush.fill(color, o.alpha ?? 110); brush.fillBleed(o.bleed ?? 0.1, o.dir ?? 'out'); brush.fillTexture(o.tex ?? 0.45, o.border ?? 0.45);
+    brush.polygon(pts);
+  }
+  brush.noFill();
+}
+function base(pts, color = PAL.paper) {                          // 不透明的底：盖住后面的颜色，上面的蜡笔才不和后面混色
+  if (pts.length < 3) return;
+  brush.noStroke(); brush.noHatch(); brush.noFill(); brush.wash(color, 255); brush.polygon(pts); brush.noWash();
+}
+function dash(key, x0, y0, x1, y1, color, w = 1.4, br = 'crayon') {   // 一小笔横划（水里的倒影、反光）
+  seed(key, false);
+  brush.noFill(); brush.noHatch(); brush.noWash(); brush.set(br, color, w); brush.line(x0, y0, x1, y1);
+}
 
-// ---------- 场景布置 ----------
-const GROUND = 458;                          // 远处地平线（房子落脚）
-const LAMP = { x: 945, base: 618, top: 178 };
-const BENCH = { x: 1008, w: 232, seat: 548, back: 478, foot: 612 };
-const CRAB_Y = 618;                          // 螃蟹脚踩的雪地
-const CRAB_X0 = -170, CRAB_X1 = 745;
+// ═════════ 镜头 1：雨后的小巷（一点透视）═════════
+// 世界：X 横、Y 竖（地面 Y = FLOOR）、Z 是离镜头几米。画面坐标 = 灭点 + (X, Y) / Z
+const VP = [1010, 400], FLOOR = 760, XL = -1150, XR = 1050, ZF = 9;
+const S1 = (X, Y, Z) => [VP[0] + X / Z, VP[1] + Y / Z];
+const FR = rectPoly([-90, -90, W + 90, H + 90]);
+const fixed = (pts) => clipPoly(pts, FR);                        // 大块按固定的框裁掉画面外的部分（框不跟镜头变，排线才不跳）
+const planeQuad = (X, z0, z1, y0, y1) => [S1(X, y1, z0), S1(X, y1, z1), S1(X, y0, z1), S1(X, y0, z0)];   // 墙面上的一块（y0 上沿、y1 下沿）
 
-const HOUSES = [
-  { k: "h1", x: 18, w: 170, h: 128, roofH: 74, wall: "#C9654A", roof: "#5A3E5E", door: 0.62, wins: [[0.12, 0.22, 0.3, 0.3]], chim: 0.72 },
-  { k: "h2", x: 205, w: 128, h: 168, roofH: 62, wall: "#E2B04F", roof: "#7C3A2D", door: 0.18, wins: [[0.5, 0.14, 0.34, 0.22], [0.5, 0.52, 0.34, 0.22]], chim: 0.25 },
-  { k: "h3", x: 1030, w: 130, h: 118, roofH: 66, wall: "#6E9A94", roof: "#3F4A6E", door: 0.55, wins: [[0.12, 0.24, 0.3, 0.3]], chim: 0.7 },
-  { k: "h4", x: 1166, w: 150, h: 156, roofH: 64, wall: "#D98E7C", roof: "#5A3E5E", door: 0.12, wins: [[0.52, 0.14, 0.34, 0.22], [0.52, 0.52, 0.34, 0.22]], chim: 0.3 },
+const LEFT = [
+  { k: 'L1', z0: 1, z1: 4.7, top: -1520, wall: PAL.ochre, deep: PAL.ochreDeep },
+  { k: 'L2', z0: 4.7, z1: ZF, top: -1180, wall: PAL.pink, deep: PAL.pinkDeep },
 ];
-const FAR = [ // 远处的小房子，矮一点、颜色淡一点
-  { k: "f1", x: 372, w: 92, h: 62, roofH: 40, wall: "#B58BA0", roof: "#3F4A6E", wins: [[0.2, 0.25, 0.26, 0.32], [0.56, 0.25, 0.26, 0.32]] },
-  { k: "f2", x: 474, w: 76, h: 84, roofH: 36, wall: "#8FA9C9", roof: "#5A3E5E", wins: [[0.3, 0.2, 0.4, 0.26]] },
-  { k: "f3", x: 560, w: 96, h: 56, roofH: 38, wall: "#C99A6B", roof: "#4B3A55", wins: [[0.36, 0.3, 0.3, 0.34]] },
+const RIGHT = [
+  { k: 'R1', z0: 1, z1: 3.3, top: -980, wall: PAL.terra, deep: PAL.terraDeep },
+  { k: 'R2', z0: 3.3, z1: 6.3, top: -520, wall: PAL.stone, deep: PAL.stoneDeep },   // 矮院墙，后面露出一棵树
+  { k: 'R3', z0: 6.3, z1: ZF, top: -1080, wall: PAL.slate, deep: PAL.slateDeep },
 ];
-const PINES = [{ k: "p1", x: 352, s: 0.88 }, { k: "p3", x: 1012, s: 0.6 }];
-
-function houseGeom(hs, scale = 1) {
-  const g = {}; const y0 = GROUND + 2; const top = y0 - hs.h;
-  g.wall = wobble(hs.k + "w", rectPts(hs.x, top, hs.w, hs.h), 1.6);
-  const ov = 12 * scale;
-  g.roof = wobble(hs.k + "r", subdiv([[hs.x - ov, top + 2], [hs.x + hs.w / 2, top - hs.roofH], [hs.x + hs.w + ov, top + 2]]), 1.6);
-  // 屋顶上的雪：贴着两条斜边，下沿是波浪
-  const peak = [hs.x + hs.w / 2, top - hs.roofH - 5]; const L = [hs.x - ov - 5, top - 2], R = [hs.x + hs.w + ov + 5, top - 2];
-  const snow = [L, peak, R]; const n = 9;
-  for (let i = n; i >= 0; i--) { const u = i / n; const x = lerp(L[0], R[0], u); const ridge = top - hs.roofH * (1 - Math.abs(u - 0.5) * 2);
-    snow.push([x, ridge + 10 * scale + (i % 2 ? 7 : 0) * scale]); }
-  g.snow = wobble(hs.k + "s", snow, 1.2);
-  g.wins = (hs.wins || []).map(([u, v, ww, hh], i) => wobble(hs.k + "win" + i, rectPts(hs.x + u * hs.w, top + v * hs.h, ww * hs.w, hh * hs.h), 1.0));
-  g.winRects = (hs.wins || []).map(([u, v, ww, hh]) => [hs.x + u * hs.w, top + v * hs.h, ww * hs.w, hh * hs.h]);
-  if (hs.door !== undefined) { const dw = 0.24 * hs.w, dh = 0.46 * hs.h; g.door = wobble(hs.k + "d", rectPts(hs.x + hs.door * hs.w, y0 - dh, dw, dh), 1.0); g.knob = [hs.x + hs.door * hs.w + dw * 0.78, y0 - dh * 0.48]; }
-  if (hs.chim !== undefined) { const cx = hs.x + hs.chim * hs.w; const cy = top - hs.roofH * (1 - Math.abs(hs.chim - 0.5) * 2) ; g.chim = wobble(hs.k + "c", rectPts(cx - 12, cy - 34, 24, 40), 1); g.chimSnow = ell(cx, cy - 36, 16, 6, 14); }
-  return g;
-}
-
-// ===================== bg：纸 + 夜空 + 房子 + 雪地 =====================
-function drawSky() {
-  // 一片一片涂，方向各有点不同，压在一起的地方更深 —— 像真的拿蜡笔涂天
-  const r = rng("skyAng");
-  tiles("skyT", -40, -40, 1330, 480, 250, 175).forEach((pp, i) => crayon("sky" + i, pp, PAL.navy, { dist: 5, angle: -0.62 + r() * 0.34, rand: 0.35, w: 2.4, slop: 0 }));
-  // 上面再压一层更深的，越往下越稀（蜡笔叠出来的渐变，不用平滑渐变）
-  tiles("skyD", -40, -40, 1330, 400, 380, 120).forEach((pp, i) => { const cy = centroid(pp)[1];
-    crayon("skyD" + i, pp, PAL.navyDeep, { dist: 7 + Math.max(0, cy) * 0.032, angle: 0.3 + r() * 0.3, rand: 0.45, w: 2.0, slop: 0 }); });
-  tiles("skyL", -40, 330, 1330, 480, 300, 70).forEach((pp, i) => crayon("skyL" + i, pp, PAL.skyLow, { dist: 9, angle: -0.25 + r() * 0.2, rand: 0.5, w: 1.8, slop: 0 }));
-}
-function drawHouse(hs, far) {
-  const g = houseGeom(hs);
-  base(g.wall); base(g.roof);
-  crayon(hs.k + "wallF", g.wall, hs.wall, { dist: far ? 4.5 : 5, angle: 0.95, rand: 0.3, w: 2.1, slop: 2.5 });
-  crayon(hs.k + "wallF2", g.wall, hs.wall, { dist: 11, angle: -0.6, rand: 0.4, w: 1.6, slop: 1 });
-  crayon(hs.k + "roofF", g.roof, hs.roof, { dist: 4.2, angle: -0.35, rand: 0.3, w: 2.2, slop: 2.5 });
-  if (g.door) { crayon(hs.k + "doorF", g.door, "#5E3A2A", { dist: 3.8, angle: 1.2, w: 2, slop: 1.5 }); }
-  if (g.chim) { base(g.chim); crayon(hs.k + "chimF", g.chim, "#9B4B3A", { dist: 4, angle: 0.9, w: 2, slop: 1.5 }); }
-  // 窗户先挖成纸色，灯光在 mid 里涂
-  g.wins.forEach((wp) => base(wp));
-  base(g.snow); crayon(hs.k + "snowSh", g.snow.slice(3), PAL.snowShade, { dist: 6, angle: 0.2, w: 1.4, rand: 0.4, slop: 0 });
-  if (g.chim) { base(g.chimSnow); }
-  const lw = far ? 1.05 : 1.4;
-  ink(hs.k + "wallL", g.wall, { closed: true, w: lw, curv: 0.1 });
-  ink(hs.k + "roofL", g.roof, { closed: false, w: lw, curv: 0.1 });
-  ink(hs.k + "snowL", g.snow, { closed: true, w: lw * 0.85, curv: 0.5, color: "#3B3F68" });
-  if (g.door) { ink(hs.k + "doorL", g.door, { closed: true, w: lw, curv: 0.1 }); ink(hs.k + "knob", ell(g.knob[0], g.knob[1], 2.5, 2.5, 6), { closed: true, w: 0.8, color: "#F2C14E" }); }
-  if (g.chim) { ink(hs.k + "chimL", g.chim, { closed: true, w: lw * 0.9, curv: 0.1 }); ink(hs.k + "chimSL", g.chimSnow, { closed: true, w: 0.8, color: "#3B3F68" }); }
-}
-function pineGeom(pn) {
-  const s = pn.s, x = pn.x, y = GROUND + 4;
-  const tiers = [[0, 92, 70], [46, 74, 58], [86, 54, 46]].map(([dy, hw, hh], i) => {
-    const by = y - 14 * s - dy * s; return wobble(pn.k + "t" + i, subdiv([[x - hw / 2 * s, by], [x, by - hh * s - 22 * s], [x + hw / 2 * s, by]], 18), 1.4); });
-  const trunk = wobble(pn.k + "tr", rectPts(x - 7 * s, y - 18 * s, 14 * s, 20 * s), 0.8);
-  const snows = [[0, 92], [46, 74], [86, 54]].map(([dy, hw], i) => { const by = y - 14 * s - dy * s; return ell(x + (i % 2 ? 6 : -6) * s, by - 4 * s, hw * 0.28 * s, 5 * s, 14); });
-  return { tiers, trunk, snows };
-}
-function drawPine(pn) {
-  const g = pineGeom(pn);
-  base(g.trunk); crayon(pn.k + "trF", g.trunk, PAL.trunk, { dist: 3.5, angle: 1.4, w: 1.8, slop: 1 }); ink(pn.k + "trL", g.trunk, { closed: true, w: 0.9, curv: 0.1 });
-  g.tiers.slice().reverse().forEach((tp, j) => { const i = 2 - j; base(tp);
-    crayon(pn.k + "tF" + i, tp, PAL.pine, { dist: 4, angle: 0.8 + i * 0.3, w: 2, slop: 2 });
-    crayon(pn.k + "tD" + i, tp.slice(Math.floor(tp.length / 2)), PAL.pineDark, { dist: 6, angle: -0.5, w: 1.6, slop: 0 });
-    ink(pn.k + "tL" + i, tp, { closed: true, w: 0.95, curv: 0.15 }); });
-  g.snows.forEach((sp, i) => { base(sp); ink(pn.k + "sL" + i, sp, { closed: true, w: 0.7, color: "#3B3F68" }); });
-}
-function drawGround() {
-  // 雪地：一整片纸色盖住天空下沿，再用淡蓝紫蜡笔涂出起伏和阴影
-  const top = []; for (let i = 0; i <= 26; i++) { const x = -40 + i * 52; top.push([x, GROUND - 4 + Math.sin(i * 1.7) * 3]); }
-  const groundPts = top.concat([[1340, 760], [-60, 760]]);
-  base(groundPts);
-  tiles("gH", -40, GROUND - 2, 1330, GROUND + 30, 300, 34).forEach((pp, i) => crayon("gHaze" + i, pp, PAL.snowShade, { dist: 7, angle: 0.06 + (i % 3) * 0.05, rand: 0.5, w: 1.5, slop: 0 }));
-  // 雪堆的阴影（下沿）
-  const drifts = [[150, 548, 230, 26], [520, 560, 170, 18], [1200, 650, 200, 30]];
-  drifts.forEach(([x, y, rx, ry], i) => crayon("drift" + i, ell(x, y, rx, ry, 26).filter((p) => p[1] >= y - ry * 0.2), PAL.snowShade, { dist: 6, angle: 0.12, rand: 0.45, w: 1.5, slop: 2 }));
-  drifts.forEach(([x, y, rx, ry], i) => { const arc = []; for (let k = 0; k <= 12; k++) { const a = Math.PI + (k / 12) * Math.PI; arc.push([x + Math.cos(a) * rx * 0.9, y + Math.sin(a) * ry * 0.7]); } ink("driftL" + i, arc, { w: 0.8, color: "#7D88B8", curv: 0.6 }); });
-  // 夜里的雪：大片很淡的蓝紫排线
-  const rg = rng("gAng");
-  tiles("gT", -40, GROUND + 40, 1330, 740, 280, 72).forEach((pp, i) => crayon("gNight" + i, pp, "#C9D0E8", { dist: 17, angle: 0.04 + rg() * 0.2, rand: 0.6, w: 1.3, slop: 0 }));
-  // 长椅、路灯落在雪上的影子
-  crayon("benchSh", ell(BENCH.x + BENCH.w / 2 - (lit() ? 0 : 0), BENCH.foot + 2, BENCH.w * 0.58, 13, 22), PAL.snowShade2, { dist: 4, angle: 0.1, w: 1.6, slop: 2 });
-  crayon("lampSh", ell(LAMP.x, LAMP.base + 2, 34, 8, 16), PAL.snowShade2, { dist: 4, angle: 0.1, w: 1.6, slop: 1.5 });
-  ink("horizon", top, { w: 0.8, color: "#55608F", curv: 0.6 });
-  // 左下角一道雪坡（干净的纸色），歌词写在上面
-  const bankTop = [[-40, 646], [90, 638], [230, 645], [380, 638], [530, 646], [640, 656], [720, 676], [780, 706], [820, 740]];
-  const bank = bankTop.concat([[820, 780], [-40, 780]]);
-  base(bank);
-  const band = bankTop.concat(bankTop.slice().reverse().map(([x, y]) => [x - 6, y + 16]));
-  crayon("bankSh", band, PAL.snowShade, { dist: 4.5, angle: 0.1, rand: 0.4, w: 1.5, slop: 1.5 });
-  ink("bankL", bankTop, { w: 0.9, color: "#7D88B8", curv: 0.6 });
-}
-function drawFootprints() {
-  // 螃蟹走过的地方留下两串小脚印（由当前位置算，不存状态）
-  const cx = crabX(T); const step = 34;
-  for (let x = CRAB_X0 + 40; x < cx - 60; x += step) {
-    const k = Math.round(x);
-    [-1, 1].forEach((s) => {
-      const r = rng("fp" + k + s);
-      const px = x + s * 70 + (r() - 0.5) * 8, py = CRAB_Y + 4 + (r() - 0.5) * 6;
-      crayon("fp" + k + s, ell(px, py, 5, 2.6, 8), PAL.snowShade2, { dist: 2.2, angle: 0.3, w: 1.3, slop: 0.5 });
-    });
+const SKY1 = [[-90, -90], [W + 90, -90], [W + 90, 470], [-90, 470]];
+const CLOUDS1 = [{ k: 'k1', x: 905, y: 58, w: 330, h: 92 }, { k: 'k2', x: 1235, y: 92, w: 280, h: 82 }, { k: 'k3', x: 1050, y: 196, w: 170, h: 48 }];
+// 大水坑（地面坐标 X, Z）：小女孩和小狗在远的那头踩，纸船漂在近的这头
+const PUD = [[-560, 2.55], [-300, 2.68], [60, 2.7], [380, 2.6], [520, 2.38], [470, 2.12], [560, 1.86], [760, 1.62], [880, 1.42], [820, 1.26], [600, 1.17], [300, 1.16], [60, 1.22], [-80, 1.36], [-60, 1.55], [-180, 1.78], [-420, 1.95], [-620, 2.12], [-700, 2.35]]
+  .map(([X, Z]) => S1(X, FLOOR, Z));
+const PUDS = subdiv(PUD, 40);
+const PUD_RIM = offsetPoly(PUDS, 12);
+const SPUDS = [                                                  // 墙脚的小水坑：屋檐、落水管的水滴落在这里
+  { k: 'sp1', X: -985, Z: 1.64, rx: 175, rz: 0.075 },
+  { k: 'sp2', X: 905, Z: 1.92, rx: 150, rz: 0.07 },
+].map((s) => ({ ...s, pts: Array.from({ length: 22 }, (_, i) => { const a = (i / 22) * TAU, r = MV.rng(s.k + i)(); return S1(s.X + Math.cos(a) * s.rx * (0.85 + 0.3 * r), FLOOR, s.Z + Math.sin(a) * s.rz * (0.85 + 0.3 * r)); }) }));
+const GIRL = S1(-240, FLOOR, 2.2), PUPPY = S1(170, FLOOR, 2.25);
+const BOAT_X = 330, BOAT_Z = 1.34, BOAT1 = S1(BOAT_X, FLOOR, BOAT_Z), L1 = 200;   // 纸船的水线中点、船长
+const L2 = 420, ZB = L2 / L1;                                    // 近景里纸船长 420：推进 2.1 倍
+const BOAT2 = [840, 662];
+// 水波：从落脚的地方一圈圈散开（地面上的圆，按透视画），走到纸船那里船就晃一下
+const SPLASHES = [
+  { k: 'sg', t: T_GIRL, X: -240, Z: 2.2, size: 1 },
+  { k: 'sp', t: T_PUP, X: 170, Z: 2.25, size: 0.75 },
+  { k: 'sb', t: T_BOTH, X: -240, Z: 2.2, size: 1.15 }, { k: 'sc', t: T_BOTH, X: 170, Z: 2.25, size: 0.9 },
+];
+const RING_V = 1.6, RING_R0 = 0.06;                              // 水波一秒走 1.6 米
+const BOAT_HITS = SPLASHES.map((s) => s.t + (Math.hypot((BOAT_X - s.X) / 760, BOAT_Z - s.Z) - RING_R0) / RING_V);
+// 窗、门、落水管
+const LWIN = [{ k: 'lw1', z0: 2.05, z1: 2.6, y0: -790, y1: -470, shutter: PAL.teal, pot: true }, { k: 'lw2', z0: 5.3, z1: 5.95, y0: -800, y1: -520, shutter: '#C9605A' }];
+const RWIN = [{ k: 'rw1', z0: 1.8, z1: 2.35, y0: -720, y1: -430, shutter: '#4D79B0', box: true }, { k: 'rw2', z0: 6.9, z1: 7.6, y0: -760, y1: -520 }];
+const PIPE = { z: 1.62, mouthY: FLOOR - 96 };
+const CLOTH = { a: S1(XL, -720, 3.5), b: S1(XR, -700, 3.2), sag: 52 };
+const clothAt = (u) => [lerp(CLOTH.a[0], CLOTH.b[0], u), lerp(CLOTH.a[1], CLOTH.b[1], u) + CLOTH.sag * 4 * u * (1 - u)];
+const CLOTHES = [{ k: 'shirt', u: 0.24, color: '#5D8FCB' }, { k: 'sock', u: 0.52, color: '#D8433A' }, { k: 'towel', u: 0.77, color: '#8CC9A8' }];
+// 屋檐、落水管、晾的衣服往下滴水
+const DRIPS = [
+  { k: 'd1', X: -1060, Y: -1580, Z: 2.6, per: 1.35, ph: 0.15 },
+  { k: 'd2', X: -1060, Y: -1580, Z: 3.9, per: 1.75, ph: 0.62 },
+  { k: 'd3', X: XL + 92, Y: PIPE.mouthY + 8, Z: PIPE.z, per: 0.95, ph: 0.35, small: 0 },
+  { k: 'd4', X: 962, Y: -1040, Z: 1.92, per: 1.25, ph: 0.8, small: 1 },
+  { k: 'd5', X: 962, Y: -1040, Z: 2.9, per: 1.55, ph: 0.45 },
+  { k: 'd6', cloth: 0, per: 1.45, ph: 0.3 }, { k: 'd7', cloth: 1, per: 1.15, ph: 0.75 }, { k: 'd8', cloth: 2, per: 1.65, ph: 0.05 },
+];
+// 石板：一排排大小不一的圆角石头（开页面算一次），被水坑盖住的不画
+const COBBLES = (() => {
+  const res = [], r = MV.rng('cobble'); let Z = 1.04, row = 0;
+  while (Z < 5.2) {
+    const Z2 = Z * (1.075 + r() * 0.02);
+    for (let X = XL + 20 - r() * 120; X < XR - 40;) {
+      const wd = 150 + r() * 90, x0 = X + 10 + r() * 8, x1 = X + wd - 10 - r() * 8, za = Z + (Z2 - Z) * (0.08 + r() * 0.1), zb = Z2 - (Z2 - Z) * (0.08 + r() * 0.1);
+      X += wd;
+      const q = [S1(x0, FLOOR, za), S1(x1, FLOOR, za + (r() - 0.5) * 0.01), S1(x1, FLOOR, zb), S1(x0, FLOOR, zb + (r() - 0.5) * 0.01)];
+      const [cx, cy] = centroid(q);
+      if (inPoly(cx, cy, PUD_RIM) || SPUDS.some((s) => inPoly(cx, cy, s.pts)) || cx < -40 || cx > W + 40 || cy > H + 30) continue;
+      res.push({ k: 'cb' + res.length, q, shade: r() < 0.12 && Z < 2.4 });
+    }
+    Z = Z2; row++;
   }
-}
-function drawBG() {
-  P.background(PAL.paper);
-  P.push(); P.translate(-W / 2, -H / 2); camera();
-  drawSky();
-  FAR.forEach((h) => drawHouse(h, true));
-  PINES.forEach(drawPine);
-  HOUSES.forEach((h) => drawHouse(h, false));
-  drawGround();
-  drawFootprints();
-  P.pop();
-}
+  return res;
+})();
 
-// ===================== mid：星星、窗灯、灯光、路灯、长椅 =====================
-const STARS = (() => { const r = rng("stars"); const s = [];
-  const spots = [[70, 60], [180, 150], [300, 48], [420, 120], [560, 70], [650, 175], [730, 40], [1040, 70], [1130, 165], [1225, 52], [520, 235], [125, 285], [1060, 260], [335, 250], [780, 120], [860, 50], [610, 300], [1200, 300]];
-  spots.forEach(([x, y], i) => s.push({ x: x + (r() - 0.5) * 20, y: y + (r() - 0.5) * 16, big: i % 2 === 0, R: 11 + r() * 6, ph: r() * 6.28, sp: 2 + r() * 3 }));
-  for (let i = 0; i < 40; i++) { const x = r() * W, y = 14 + r() * 330; if (x > 790 && x < 1020 && y > 130) continue; s.push({ x, y, dot: true, ph: r() * 6.28, sp: 3 + r() * 4 }); }
-  return s; })();
-function starPts(x, y, R, rot) { const pts = []; for (let i = 0; i < 10; i++) { const a = rot - Math.PI / 2 + (i * Math.PI) / 5; const rr = i % 2 ? R * 0.45 : R; pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr]); } return pts; }
-function drawStars() {
-  STARS.forEach((s, i) => {
-    const tw = 0.82 + 0.18 * Math.sin(T * s.sp + s.ph);
-    if (s.dot) { ink("sd" + i, ell(s.x, s.y, 1.6 * tw + 0.6, 1.6 * tw + 0.6, 6), { closed: true, w: 1.1, color: "#FFF4C8", boil: 0.3 }); return; }
-    const R = (s.big ? s.R : 8) * tw;
-    if (s.big) { const sp = starPts(s.x, s.y, R, 0.1 * Math.sin(s.ph)); base(sp, "#FFF1B0"); crayon("sf" + i, sp, "#FFE27A", { dist: 2.2, angle: 0.6, w: 1.4, slop: 0.8 }); ink("sl" + i, sp, { closed: true, w: 0.8, color: "#F7C948", boil: 0.5, curv: 0.05 }); }
-    else { ink("sx" + i + "a", [[s.x - R, s.y], [s.x + R, s.y]], { w: 1.2, color: "#FFF1BE", boil: 0.6 }); ink("sx" + i + "b", [[s.x, s.y - R], [s.x, s.y + R]], { w: 1.2, color: "#FFF1BE", boil: 0.6 }); }
-    // 闪的时候冒一个小十字
-    const sp = Math.max(0, Math.sin(T * s.sp * 0.9 + s.ph * 2) - 0.55) * 2.2;
-    if (s.big && sp > 0.05) { const L = R * (0.9 + sp); ink("sp" + i + "a", [[s.x + R * 0.9, s.y - R * 0.9], [s.x + R * 0.9 + L * 0.5, s.y - R * 0.9 - L * 0.5]], { w: 0.9, color: "#FFF4C8", boil: 0.4 }); }
-  });
-}
-function drawWindows() {
-  [...FAR, ...HOUSES].forEach((hs) => {
-    const g = houseGeom(hs);
-    g.winRects.forEach(([x, y, w, h], i) => {
-      const wp = g.wins[i];
-      base(wp, "#FFF6D6");
-      crayon(hs.k + "wl" + i, wp, PAL.win, { dist: 3.2, angle: 0.9, w: 1.7, slop: 0.6 });
-      crayon(hs.k + "wd" + i, subdiv([[x, y + h * 0.55], [x + w, y + h * 0.4], [x + w, y + h], [x, y + h]], 12), PAL.winDeep, { dist: 4, angle: -0.4, w: 1.4, slop: 0 });
-      const lw = hs.k.startsWith("f") ? 0.75 : 1.0;
-      ink(hs.k + "wf" + i + "v", [[x + w / 2, y], [x + w / 2, y + h]], { w: lw * 0.85, color: "#4A2A20", boil: 0.5 });
-      ink(hs.k + "wf" + i + "h", [[x, y + h / 2], [x + w, y + h / 2]], { w: lw * 0.85, color: "#4A2A20", boil: 0.5 });
-      ink(hs.k + "wL" + i, wp, { closed: true, w: lw, curv: 0.1 });
-    });
-  });
-}
-function lampGeom() {
-  const x = LAMP.x;
-  const g = {};
-  g.baseP = wobble("lb", subdiv([[x - 24, LAMP.base], [x - 14, LAMP.base - 30], [x + 14, LAMP.base - 30], [x + 24, LAMP.base]], 12), 0.6);
-  g.pole = wobble("lp", subdiv([[x - 6.5, LAMP.base - 30], [x - 5.5, 296], [x + 5.5, 296], [x + 6.5, LAMP.base - 30]], 30), 0.5);
-  g.ring1 = ell(x, 470, 11, 5, 14); g.ring2 = ell(x, 300, 12, 5, 14);
-  g.neck = wobble("ln", subdiv([[x - 16, 296], [x - 10, 282], [x + 10, 282], [x + 16, 296]], 10), 0.5);
-  g.glass = wobble("lg", subdiv([[x - 23, 282], [x - 36, 214], [x + 36, 214], [x + 23, 282]], 14), 0.6);
-  g.cap = wobble("lc", subdiv([[x - 50, 216], [x - 8, 184], [x + 8, 184], [x + 50, 216]], 14), 0.6);
-  g.finial = ell(x, 176, 7, 8, 12);
-  g.capSnow = wobble("lcs", [[x - 40, 207], [x - 22, 194], [x - 6, 186], [x + 8, 186], [x + 24, 195], [x + 44, 207], [x + 30, 212], [x + 12, 207], [x - 4, 213], [x - 20, 208]], 0.6);
-  g.bars = [[[x, 214], [x, 282]], [[x - 18, 214], [x - 12, 282]], [[x + 18, 214], [x + 12, 282]]];
-  return g;
-}
-function drawLamp() {
-  const g = lampGeom(); const on = lit();
-  [g.baseP, g.pole, g.neck, g.cap].forEach((pp) => base(pp));
-  crayon("lpF", g.pole, PAL.iron, { dist: 3, angle: 1.35, w: 1.6, slop: 1 });
-  crayon("lbF", g.baseP, PAL.iron, { dist: 3, angle: 1.0, w: 1.8, slop: 1 });
-  crayon("lnF", g.neck, PAL.iron, { dist: 3, angle: 1.0, w: 1.8, slop: 1 });
-  crayon("lcF", g.cap, PAL.iron, { dist: 3, angle: 0.4, w: 1.9, slop: 1.2 });
-  base(g.ring1); crayon("lr1", g.ring1, PAL.ironLite, { dist: 2.5, angle: 0.2, w: 1.4, slop: 0.5 });
-  base(g.ring2); crayon("lr2", g.ring2, PAL.ironLite, { dist: 2.5, angle: 0.2, w: 1.4, slop: 0.5 });
-  base(g.finial); crayon("lfi", g.finial, PAL.iron, { dist: 2.5, angle: 0.8, w: 1.5, slop: 0.5 });
-  // 灯罩玻璃：灭的时候灰蓝，亮的时候涂满黄
-  base(g.glass, on ? "#FFF8D8" : PAL.paper);
-  if (on) {
-    crayon("lgOn", g.glass, PAL.lamp, { dist: 2.6, angle: 0.5, w: 1.8, slop: 0.6 });
-    crayon("lgOn2", g.glass.slice(Math.floor(g.glass.length * 0.55)), PAL.lampDeep, { dist: 4, angle: -0.6, w: 1.4, slop: 0 });
-    crayon("lgCore", ell(LAMP.x, 244, 9, 12, 12), "#FFF7D6", { dist: 2, angle: 1.2, w: 1.5, slop: 0.5 });
-  } else {
-    crayon("lgOff", g.glass, "#9DA8C8", { dist: 4.2, angle: 0.5, w: 1.6, slop: 0.6 });
-    crayon("lgOff2", g.glass.slice(0, Math.floor(g.glass.length * 0.5)), "#6F7AA3", { dist: 6, angle: -0.6, w: 1.3, slop: 0 });
+function cloudPts(c) {                                           // 云：上面一个个鼓包，下面平一点
+  const r = MV.rng(c.k), bumps = 3 + Math.floor(r() * 2), ph = r() * 6, pts = [];
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * TAU, top = Math.sin(a) < 0;
+    let rx = c.w / 2, ry = c.h / 2;
+    if (top) { const k = 1 + 0.2 * Math.abs(Math.sin(a * bumps + ph)); rx *= k; ry *= k * 1.1; }
+    pts.push([c.x + Math.cos(a) * rx, c.y + Math.max(Math.sin(a) * ry, -c.h) * (top ? 1 : 0.45)]);
   }
-  g.bars.forEach((b, i) => ink("lbar" + i, b, { w: 0.8, color: on ? "#A0661E" : "#3B3F68", boil: 0.4 }));
-  base(g.capSnow); ink("lcsL", g.capSnow, { closed: true, w: 0.75, color: "#3B3F68", curv: 0.6 });
-  ink("lgL", g.glass, { closed: true, w: 1.05, curv: 0.1 });
-  ink("lcL", g.cap, { closed: true, w: 1.05, curv: 0.1 });
-  ink("lnL", g.neck, { closed: true, w: 1, curv: 0.1 });
-  ink("lpL", g.pole, { closed: true, w: 1.05, curv: 0.05 });
-  ink("lbL", g.baseP, { closed: true, w: 1.05, curv: 0.1 });
-  ink("lr1L", g.ring1, { closed: true, w: 0.9 }); ink("lr2L", g.ring2, { closed: true, w: 0.9 }); ink("lfiL", g.finial, { closed: true, w: 0.9 });
-  if (on) { // 杆子朝灯那一侧的暖光
-    crayon("lpHi", subdiv([[LAMP.x + 2, 302], [LAMP.x + 5, 302], [LAMP.x + 5.5, 420], [LAMP.x + 2.5, 420]], 30), "#F4C75A", { dist: 4, angle: 1.45, w: 1.0, slop: 0 });
-  }
-}
-function benchGeom() {
-  const { x, w, seat, back, foot } = BENCH; const g = {};
-  g.slats = [wobble("bs1", rectPts(x, back, w, 18), 0.8), wobble("bs2", rectPts(x + 4, back + 26, w - 8, 16), 0.8)];
-  g.seat = wobble("bseat", subdiv([[x - 10, seat], [x + w + 10, seat], [x + w + 4, seat + 16], [x - 4, seat + 16]], 20), 0.8);
-  g.posts = [wobble("bp1", rectPts(x + 18, back - 6, 10, seat - back + 8), 0.5), wobble("bp2", rectPts(x + w - 28, back - 6, 10, seat - back + 8), 0.5)];
-  g.legs = [[x + 14, seat + 16], [x + w - 14, seat + 16]].map(([lx, ly], i) => wobble("bl" + i, subdiv([[lx - 5, ly], [lx + 5, ly], [lx + 7 + (i ? 4 : -4), foot], [lx - 3 + (i ? 4 : -4), foot]], 12), 0.5));
-  g.snowSeat = wobble("bss", [[x - 6, seat + 2], [x + 20, seat - 9], [x + 70, seat - 12], [x + 130, seat - 8], [x + 190, seat - 13], [x + w + 6, seat + 1], [x + 160, seat + 5], [x + 90, seat + 3], [x + 30, seat + 6]], 0.6);
-  g.snowBack = wobble("bsb", [[x - 2, back + 2], [x + 30, back - 9], [x + 110, back - 11], [x + 170, back - 8], [x + w + 2, back + 1], [x + 140, back + 5], [x + 60, back + 4]], 0.6);
-  return g;
-}
-function drawBench() {
-  const g = benchGeom(); const on = lit();
-  [...g.legs, ...g.posts, ...g.slats, g.seat].forEach((pp) => base(pp));
-  g.legs.forEach((lp, i) => { crayon("blF" + i, lp, PAL.iron, { dist: 2.6, angle: 1.3, w: 1.5, slop: 0.8 }); ink("blL" + i, lp, { closed: true, w: 0.95, curv: 0.1 }); });
-  g.posts.forEach((pp, i) => { crayon("bpF" + i, pp, PAL.woodDark, { dist: 2.8, angle: 1.4, w: 1.5, slop: 0.8 }); ink("bpL" + i, pp, { closed: true, w: 0.95, curv: 0.1 }); });
-  [...g.slats, g.seat].forEach((sp, i) => {
-    crayon("bwF" + i, sp, PAL.wood, { dist: 3.4, angle: 0.12, w: 1.8, slop: 1.2 });
-    crayon("bwD" + i, sp.slice(Math.floor(sp.length / 2)), PAL.woodDark, { dist: 5, angle: -0.15, w: 1.3, slop: 0 });
-    if (on) crayon("bwH" + i, sp.slice(0, Math.floor(sp.length / 2)), "#F7C64E", { dist: 3.2, angle: 0.05, w: 1.5, slop: 0 });
-    ink("bwL" + i, sp, { closed: true, w: 1.0, curv: 0.1 });
-  });
-  base(g.snowSeat); ink("bssL", g.snowSeat, { closed: true, w: 0.75, color: "#3B3F68", curv: 0.6 });
-  base(g.snowBack); ink("bsbL", g.snowBack, { closed: true, w: 0.75, color: "#3B3F68", curv: 0.6 });
-}
-function drawLightPool() {
-  if (!lit()) return;
-  const k = lightK(); const cx = LAMP.x, cy = LAMP.base + 2;
-  crayon("pool1", ell(cx - 10, cy, 320 * Math.min(k, 1.15), 70 * Math.min(k, 1.15), 34), PAL.lampPale, { dist: 7.5, angle: 0.1, rand: 0.5, w: 1.8, slop: 6 });
-  crayon("pool2", ell(cx - 6, cy, 220, 48, 30), "#FFDD6A", { dist: 5, angle: -0.12, rand: 0.4, w: 1.9, slop: 5 });
-  crayon("pool3", ell(cx, cy, 120, 26, 24), PAL.lampDeep, { dist: 4.5, angle: 0.25, rand: 0.4, w: 1.8, slop: 4 });
-}
-function drawHalo() {
-  if (!lit()) return;
-  const k = lightK(); const cx = LAMP.x, cy = 246;
-  crayon("haloF", ell(cx, cy, 74 * k, 70 * k, 28), "#FFE38A", { dist: 7, angle: 0.5, rand: 0.6, w: 1.4, slop: 6 });
-  // 光圈：三圈手画的圆，一笔画完、首尾不太接上
-  [[64, PAL.lampPale, 1.5], [80, "#FFE9A6", 1.15], [95, "#FFF0C0", 0.85]].forEach(([R0, col, w], j) => {
-    const r = rng("haloS" + j); const pts = []; const a0 = r() * 6.28, sweep = Math.PI * 2 * (1.03 + r() * 0.08);
-    for (let i = 0; i <= 40; i++) { const a = a0 + (i / 40) * sweep; const R = R0 * (0.92 + 0.1 * k) * (1 + (r() - 0.5) * 0.05 + 0.03 * Math.sin(a * 2 + j));
-      pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R * 0.93]); }
-    ink("haloS" + j, pts, { w, color: col, boil: 1.4, curv: 0.8 });
-  });
-  // 光线：长短不一的放射线，啪的那一下更长
-  const flash = Math.exp(-(T - LIGHT_ON) * 6); const r = rng("rays");
-  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2 + 0.2 + (r() - 0.5) * 0.2; const r0 = 104 + r() * 8 + 6 * flash, r1 = r0 + 12 + r() * 12 + 50 * flash;
-    ink("ray" + i, [[cx + Math.cos(a) * r0, cy + Math.sin(a) * r0 * 0.93], [cx + Math.cos(a) * r1, cy + Math.sin(a) * r1 * 0.93]], { w: 1.5, color: PAL.lamp, boil: 1.2 }); }
-}
-function drawMid() {
-  P.clear();
-  P.push(); P.translate(-W / 2, -H / 2); camera();
-  drawStars();
-  drawWindows();
-  drawLightPool();
-  drawHalo();
-  drawBench();
-  drawLamp();
-  P.pop();
-}
-
-// ===================== crab =====================
-function crabX(t) {                          // 匀速横着走，最后 0.4 秒减速停下
-  const u = clamp(t / 2.0), a = 0.8, v = 1 / (a + (1 - a) / 2);
-  const s = u < a ? v * u : v * a + v * (u - a) - (v * (u - a) * (u - a)) / (2 * (1 - a));
-  return lerp(CRAB_X0, CRAB_X1, s);
-}
-function crabPose(t) {
-  const p = { air: 0, x: crabX(t), lift: 0, sx: 1, sy: 1, look: [0, 0], stalk: 0, pupil: 6, clawUp: 0, clawOpen: 0.15, legPh: 0, walk: 0, mouth: "smile", lean: 0, surprise: 0 };
-  if (t < 2.0) { // 走
-    // 腿按时间倒腾：一秒 3 个循环＝每 4 帧一轮（12 fps 下按距离算会和帧率打架，腿看着不动）
-    p.legPh = t * Math.PI * 2 * 3; p.walk = clamp((2.0 - t) / 0.3);
-    p.lift = Math.abs(Math.sin(p.legPh)) * 4 * p.walk; p.lean = Math.sin(p.legPh) * 0.035 * p.walk; p.look = [1, 0];
-    p.clawOpen = 0.15 + 0.15 * Math.sin(p.legPh * 0.5);
-  } else if (t < LIGHT_ON) { // 左看看、右看看、抬头看灯
-    const u = t - 2.0;
-    if (u < 0.15) { p.look = [-1, 0.1]; p.lean = -0.04; } else if (u < 0.3) { p.look = [1, 0.1]; p.lean = 0.04; } else { p.look = [0.55, -1]; p.stalk = 5; p.lean = 0.02; }
-  } else if (t < 2.7) { // 吃一惊
-    const u = (t - LIGHT_ON) / 0.2; p.surprise = 1; p.look = [0.4, -1]; p.pupil = 3.6; p.stalk = 14 * easeOutBack(u); p.mouth = "o";
-    p.lift = 12 * Math.sin(Math.PI * clamp(u * 1.4)); p.air = 1; p.sy = 1 + 0.06 * Math.sin(Math.PI * clamp(u * 1.4)); p.sx = 2 - p.sy; p.clawOpen = 0.6; p.clawUp = 0.25;
-  } else if (t < 2.86) { // 预备：蹲
-    const u = (t - 2.7) / 0.16; p.look = [0.3, -0.6]; p.stalk = lerp(14, 4, u); p.sy = 1 - 0.16 * smooth(u); p.sx = 1 + 0.1 * smooth(u); p.mouth = "smile"; p.clawUp = 0.3; p.surprise = 0.5;
-  } else if (t < 3.22) { // 腾空
-    const u = (t - 2.86) / 0.36; p.lift = 78 * 4 * u * (1 - u); p.air = 1; p.sy = 1 + 0.08 * (1 - Math.abs(u - 0.5) * 2) * (u < 0.5 ? 1.2 : 0.6); p.sx = 2 - p.sy;
-    p.clawUp = smooth(u * 2.5); p.clawOpen = 0.55; p.look = [0.2, -0.8]; p.stalk = 6 - 10 * (u < 0.5 ? 0 : (u - 0.5)); p.mouth = "open"; p.legPh = u * 3; p.walk = 0.6;
-  } else if (t < 3.5) { // 落地回弹
-    const u = (t - 3.22) / 0.28; const sq = Math.sin(Math.PI * clamp(u * 1.6)) * Math.exp(-u * 2.2);
-    p.sy = 1 - 0.15 * sq + 0.04 * Math.sin(u * 9) * (1 - u); p.sx = 1 + 0.1 * sq; p.clawUp = 1; p.clawOpen = 0.5; p.look = [0.2, -0.8]; p.mouth = "open"; p.stalk = -4 * sq;
-  } else { // 开心：钳子举着、一开一合，身体轻轻晃
-    const u = t - 3.5; p.clawUp = 1; p.clawOpen = 0.35 + 0.3 * Math.abs(Math.sin(u * 7)); p.lean = 0.03 * Math.sin(u * 5.5); p.lift = 2 * Math.abs(Math.sin(u * 5.5));
-    p.look = [0.25, -0.75]; p.mouth = "open"; p.stalk = 2 * Math.sin(u * 5.5);
-  }
-  return p;
-}
-// 螃蟹自己的坐标：原点在两脚中间的雪地上，y 往上是负
-const CLAW = [[-17, 8], [-22, -6], [-21, -22], [-15, -35], [-8, -41], [-3, -35], [-5, -23], [0, -15], [4, -25], [9, -39], [16, -44], [22, -35], [24, -19], [20, -4], [12, 8], [0, 13]];
-function clawPts(cx, cy, ang, open, mirror) {
-  return CLAW.map(([x, y], i) => {
-    let X = x, Y = y;
-    if (i >= 1 && i <= 6) { const px = -6, py = -10, a = -open * 0.7; const dx = X - px, dy = Y - py; X = px + dx * Math.cos(a) - dy * Math.sin(a); Y = py + dx * Math.sin(a) + dy * Math.cos(a); }
-    X *= mirror ? -1.15 : 1.15; Y *= 1.15;
-    return [cx + X * Math.cos(ang) - Y * Math.sin(ang), cy + X * Math.sin(ang) + Y * Math.cos(ang)];
-  });
-}
-function capsule(a, b, r0, r1, n = 6) {
-  const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), nx = -Math.sin(ang), ny = Math.cos(ang); const pts = [];
-  pts.push([a[0] + nx * r0, a[1] + ny * r0], [b[0] + nx * r1, b[1] + ny * r1]);
-  for (let i = 1; i < n; i++) { const t = ang + Math.PI / 2 - (i / n) * Math.PI; pts.push([b[0] + Math.cos(t) * r1, b[1] + Math.sin(t) * r1]); }
-  pts.push([b[0] - nx * r1, b[1] - ny * r1], [a[0] - nx * r0, a[1] - ny * r0]);
-  for (let i = 1; i < n; i++) { const t = ang - Math.PI / 2 - (i / n) * Math.PI; pts.push([a[0] + Math.cos(t) * r0, a[1] + Math.sin(t) * r0]); }
   return pts;
 }
-function bodyPts(cy) { const pts = []; const n = 36;
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const c = Math.cos(a), s = Math.sin(a);
-    const x = 72 * Math.sign(c) * Math.pow(Math.abs(c), 0.72); const y = (s < 0 ? 52 : 34) * Math.sign(s) * Math.pow(Math.abs(s), 0.85);
-    pts.push([x, cy + y]); }
-  return pts; }
-function drawCrab() {
-  const p = crabPose(T); const on = lit();
-  P.push();
-  // 地上的影子（不跟着身体缩放）
-  const sh = 1 - clamp(p.lift / 120) * 0.5;
-  // 灯亮以后光从右边来，影子拉长、往左偏
-  if (on) crayon("crabShL", ell(p.x - 46, CRAB_Y + 5, 138 * sh, 12 * sh, 24), "#7D86BB", { dist: 3.4, angle: 0.06, w: 1.6, slop: 2 });
-  else crayon("crabSh", ell(p.x, CRAB_Y + 4, 112 * sh, 11 * sh, 22), PAL.snowShade2, { dist: 3.6, angle: 0.08, w: 1.6, slop: 2 });
-  P.translate(p.x, CRAB_Y); P.rotate(p.lean); P.scale(p.sx, p.sy);
-  const by = -58 - p.lift;                 // 身体中心
-  // 腿：每边三条，三角步态
-  const legs = [];
-  for (let s of [-1, 1]) for (let i = 0; i < 3; i++) {
-    const off = ((i % 2 === 0) === (s < 0) ? 0 : Math.PI);
-    const ph = p.legPh + off; const up = Math.max(0, Math.sin(ph)) * 14 * p.walk; const sw = Math.cos(ph) * 9 * p.walk;
-    const hip = [s * (34 + i * 15), by + 18 - i * 6];
-    const footY = -p.lift * p.air - 4 * p.air * clamp(p.lift / 30) - up;   // 腾空时脚跟着身体离地、往外张开
-    const foot = [s * (84 + i * 22 + 12 * p.air * clamp(p.lift / 30)) + sw, footY - i * 1.5];
-    const knee = [s * (76 + i * 16) + sw * 0.5, by + 8 - i * 5 - up * 0.5];   // 膝盖伸到身子外面、比身子下沿高，螃蟹腿那种「∧」
-    legs.push({ s, i, hip, knee, foot });
-  }
-  legs.forEach((L) => {
-    const a = capsule(L.hip, L.knee, 7.5, 6.5, 4), b = capsule(L.knee, L.foot, 6.5, 3, 4);
-    base(a); base(b);
-    crayon("legF" + L.s + L.i, a, PAL.crab, { dist: 2.6, angle: 0.9, w: 1.4, slop: 0.8 }); crayon("legG" + L.s + L.i, b, PAL.crab, { dist: 2.6, angle: 0.9, w: 1.4, slop: 0.8 });
-    ink("legL" + L.s + L.i + "a", [L.hip, L.knee, L.foot], { w: 0.9, color: PAL.crabInk, curv: 0.2, boil: 0.6 });
-    ink("legL" + L.s + L.i + "b", a, { closed: true, w: 0.8, color: PAL.crabInk, curv: 0.3, boil: 0.5 });
-    ink("legL" + L.s + L.i + "c", b, { closed: true, w: 0.8, color: PAL.crabInk, curv: 0.3, boil: 0.5 });
-  });
-  // 手臂 + 大钳子
-  [-1, 1].forEach((s) => {
-    const sh0 = [s * 60, by - 6];
-    const rest = [s * 102, by - 28], up = [s * 90, by - 104];
-    const c = [lerp(rest[0], up[0], p.clawUp), lerp(rest[1], up[1], p.clawUp)];
-    const elbow = [lerp(s * 92, s * 98, p.clawUp), lerp(by - 2, by - 46, p.clawUp)];
-    const armA = capsule(sh0, elbow, 10.5, 9.5, 4), armB = capsule(elbow, c, 9.5, 9, 4);
-    const ang = lerp(s * -0.35, s * 0.25, p.clawUp) + (p.surprise ? s * 0.25 : 0);
-    const cl = clawPts(c[0], c[1] - 18, ang, p.clawOpen, s < 0);
-    [armA, armB, cl].forEach((pp) => base(pp));
-    crayon("armF" + s, armA, PAL.crab, { dist: 2.8, angle: 0.8, w: 1.5, slop: 1 }); crayon("armG" + s, armB, PAL.crab, { dist: 2.8, angle: 0.8, w: 1.5, slop: 1 });
-    crayon("clawF" + s, cl, PAL.crab, { dist: 3, angle: 0.7, w: 1.8, slop: 1.5 });
-    crayon("clawD" + s, cl.slice(10), PAL.crabDeep, { dist: 4.2, angle: -0.6, w: 1.4, slop: 0 });
-    if (on) crayon("clawH" + s, cl.slice(2, 12), "#FFC84A", { dist: 5, angle: 0.3, w: 1.2, slop: 0 });
-    ink("armL" + s + "a", armA, { closed: true, w: 0.9, color: PAL.crabInk, curv: 0.3 }); ink("armL" + s + "b", armB, { closed: true, w: 0.9, color: PAL.crabInk, curv: 0.3 });
-    ink("clawL" + s, cl, { closed: true, w: 1.15, color: PAL.crabInk, curv: 0.35 });
-  });
-  // 身体
-  const body = bodyPts(by);
-  base(body);
-  crayon("bodyF", body, PAL.crab, { dist: 3.4, angle: 0.75, rand: 0.3, w: 2.1, slop: 3 });
-  crayon("bodyD", body.filter((q) => q[1] > by + 4), PAL.crabDeep, { dist: 5, angle: -0.55, rand: 0.35, w: 1.6, slop: 0 });
-  if (on) { // 朝灯那一侧被照亮：一片黄排线 + 一道亮边
-    crayon("bodyH", body.filter((q) => q[1] < by + 6 && q[0] > -6), "#FFCF55", { dist: 3.4, angle: 0.25, w: 1.7, slop: 0 });
-    ink("bodyRim", body.filter((q) => q[0] > 26 && q[1] < by + 14).sort((a, b) => a[1] - b[1]), { w: 1.7, color: "#FFD966", curv: 0.6, boil: 0.5 });
-  }
-  // 背上的小斑点
-  [[-30, -30], [-12, -40], [18, -36], [38, -24]].forEach(([dx, dy], i) => crayon("spot" + i, ell(dx, by + dy, 4.5, 3.2, 8), PAL.crabDeep, { dist: 1.8, angle: 0.4, w: 1.2, slop: 0.4 }));
-  // 肚子：浅色
-  const belly = ell(0, by + 16, 44, 15, 24);
-  base(belly, "#FFF3E2"); crayon("bellyF", belly, PAL.belly, { dist: 2.8, angle: 0.15, w: 1.6, slop: 1.5 });
-  ink("bellyL", belly.filter((q) => q[1] < by + 18).sort((a, b) => a[0] - b[0]), { w: 0.7, color: "#D9804F", curv: 0.6, boil: 0.5 });
-  // 腮红
-  [-1, 1].forEach((s) => crayon("blush" + s, ell(s * 42, by - 4, 10, 6, 12), PAL.blush, { dist: 2.4, angle: 0.5, w: 1.3, slop: 0.8 }));
-  ink("bodyL", body, { closed: true, w: 1.3, color: PAL.crabInk, curv: 0.3 });
-  // 嘴
-  if (p.mouth === "o") { const m = ell(0, by - 4, 5, 6.5, 10); blob("mouthO", m, "#7A2A20"); ink("mouthL", m, { closed: true, w: 0.9, color: PAL.crabInk }); }
-  else if (p.mouth === "open") { const m = [[-10, by - 9], [-5, by - 2], [0, by], [5, by - 2], [10, by - 9], [0, by - 7]]; blob("mouthOp", m, "#8E2E22"); ink("mouthL2", m, { closed: true, w: 0.9, color: PAL.crabInk, curv: 0.4 }); }
-  else ink("mouthS", [[-10, by - 9], [-4, by - 3], [4, by - 3], [10, by - 9]], { w: 1.0, color: PAL.crabInk, curv: 0.6 });
-  // 眼柄 + 眼睛
-  [-1, 1].forEach((s) => {
-    const b0 = [s * 20, by - 44]; const e = [s * 25 + p.look[0] * 7, by - 80 - p.stalk + Math.abs(p.look[0]) * 2];
-    const st = capsule(b0, e, 5, 4.2, 4); base(st); crayon("stalkF" + s, st, PAL.crab, { dist: 2.4, angle: 1.3, w: 1.3, slop: 0.6 }); ink("stalkL" + s, st, { closed: true, w: 0.85, color: PAL.crabInk, curv: 0.3 });
-    const er = p.surprise ? 15 : 13.5; const eye = ell(e[0], e[1], er, er * 1.05, 18);
-    base(eye, "#FFFFFF"); ink("eyeL" + s, eye, { closed: true, w: 1.0, color: PAL.crabInk, curv: 0.5, boil: 0.5 });
-    const pr = p.pupil; const pc = [e[0] + p.look[0] * (er - pr - 3), e[1] + p.look[1] * (er - pr - 3)];
-    blob("pupil" + s, ell(pc[0], pc[1], pr, pr * 1.08, 12), "#231614");
-    blob("glint" + s, ell(pc[0] - pr * 0.35, pc[1] - pr * 0.4, pr * 0.32, pr * 0.32, 8), "#FFFFFF");
-  });
-  P.pop();
-}
-function drawCrabPass() { P.clear(); P.push(); P.translate(-W / 2, -H / 2); camera(); drawCrab(); P.pop(); }
-
-// ===================== front：雪花、吃惊、爱心 =====================
-const FLAKES = (() => { const r = rng("flakes"); const f = []; for (let i = 0; i < 120; i++) f.push({ x: r() * (W + 100) - 50, y: r() * (H + 40), sp: 24 + r() * 50, sw: 6 + r() * 14, ph: r() * 6.28, sz: 1.8 + r() * r() * 4.2 }); return f; })();
-function drawFlakes() {
-  FLAKES.forEach((f, i) => {
-    const y = ((f.y + T * f.sp) % (H + 60)) - 30; const x = f.x + Math.sin(T * 1.3 + f.ph) * f.sw;
-    const s = f.sz;
-    if (s > 4.2) { [0, 1, 2].forEach((j) => { const a = j * 1.047 + f.ph; ink("fl" + i + "_" + j, [[x - Math.cos(a) * s, y - Math.sin(a) * s], [x + Math.cos(a) * s, y + Math.sin(a) * s]], { w: 1.05, color: "#FFFFFF", boil: 0.4 }); }); }
-    else ink("fl" + i, ell(x, y, s * 0.55, s * 0.5, 6), { closed: true, w: 0.7 + s * 0.3, color: "#FFFFFF", boil: 0.3 });
-  });
-}
-function heartPts(cx, cy, s) { const pts = []; for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2; const x = 16 * Math.pow(Math.sin(a), 3); const y = -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)); pts.push([cx + x * s, cy + y * s]); } return pts; }
-function drawFront() {
-  P.clear(); P.push(); P.translate(-W / 2, -H / 2); camera();
-  drawFlakes();
-  const p = crabPose(T);
-  if (T >= LIGHT_ON + 1 / 24 && T < 2.92) { // 吃一惊：头顶一个感叹号 + 两边几根惊吓线
-    const k = easeOutBack(clamp((T - LIGHT_ON) / 0.12)); const hx = p.x - 2, hy = CRAB_Y - 236 - p.lift;
-    const bar = [[hx - 7 * k, hy - 34 * k], [hx + 7 * k, hy - 35 * k], [hx + 2.6 * k, hy + 3 * k], [hx - 2.6 * k, hy + 3 * k]];
-    const dot = ell(hx, hy + 14 * k, 4.6 * k, 4.4 * k, 10);
-    [bar, dot].forEach((pp, i) => { base(pp, "#FFF6DA"); crayon("exF" + i, pp, "#FFD54F", { dist: 2, angle: 1.3, w: 1.4, slop: 0.5 }); ink("exL" + i, pp, { closed: true, w: 1.0, color: PAL.crabInk, curv: 0.3 }); });
-    const cx = p.x, cy = CRAB_Y - 150 - p.lift;
-    [-2.75, -2.4, -0.74, -0.39].forEach((a, i) => { const r0 = 104, r1 = 104 + 22 * k;
-      ink("shk" + i, [[cx + Math.cos(a) * r0, cy + Math.sin(a) * r0], [cx + Math.cos(a) * r1, cy + Math.sin(a) * r1]], { w: 1.6, color: "#FFF1C4", boil: 0.8 }); });
-  }
-  if (T >= 3.5 + 1 / 24) { // 爱心
-    const u = T - 3.5; const k = easeOutBack(clamp(u / 0.28)); const hy = CRAB_Y - 222 - u * 10 - p.lift; const hx = p.x + Math.sin(u * 3) * 4;
-    const hp = heartPts(hx, hy, 1.9 * k);
-    base(hp, "#FFF4EC"); crayon("heartF", hp, PAL.heart, { dist: 2.6, angle: 0.7, w: 1.7, slop: 1.2 });
-    crayon("heartD", hp.slice(8, 22), PAL.heartDeep, { dist: 4, angle: -0.5, w: 1.3, slop: 0 });
-    ink("heartL", hp, { closed: true, w: 1.1, color: "#6E1620", curv: 0.5 });
-    ink("heartG", [[hx - 16 * k, hy - 8 * k], [hx - 10 * k, hy - 16 * k]], { w: 1.5, color: "#FFE2DA", boil: 0.4 });
-  }
-  P.pop();
+function drawCloud(key, pts, o = {}) {
+  base(pts, PAL.cloud);                                          // 云是不透明的白（水彩是透明的，白色涂不上去），下半边再晕一层灰蓝
+  const [, y0, , y1] = bbox(pts), hh = y1 - y0;
+  water(key + 'sh', pts.filter((p) => p[1] > y0 + hh * 0.45), o.shade || PAL.cloudSh, { layers: 2, alpha: 80, bleed: 0.12 });
+  ink(key + 'L', pts, { closed: true, w: o.w ?? 0.9, color: PAL.cloudLine, curv: 0.6 });
 }
 
+function house(hs, X, side) {
+  const face = fixed(planeQuad(X, hs.z0, hs.z1, hs.top, FLOOR));
+  if (face.length < 3 || !seen(bbox(face))) return;
+  base(face, mixHex(hs.wall, '#FFFFFF', 0.55));                  // 先垫一层淡的墙色，后面的天不会透出来
+  crayon(hs.k + 'a', face, hs.wall, { dist: 5.5, angle: side < 0 ? 1.0 : 2.15, w: 2.0, slop: 0 });
+  crayon(hs.k + 'b', face, hs.wall, { dist: 11, angle: side < 0 ? -0.55 : 0.55, w: 1.5, rand: 0.35, slop: 0 });
+  const damp = fixed(planeQuad(X, hs.z0, hs.z1, FLOOR - 210, FLOOR));   // 墙脚被雨打湿的一条，颜色深
+  crayon(hs.k + 'd', damp, hs.deep, { dist: 6, angle: side < 0 ? 0.35 : 2.8, w: 1.5, rand: 0.4, slop: 0 });
+  const ov = -side * 85, e0 = S1(X, hs.top + 30, hs.z0), e1 = S1(X, hs.top + 30, hs.z1), e2 = S1(X + ov, hs.top - 60, hs.z1), e3 = S1(X + ov, hs.top - 60, hs.z0);
+  const eave = fixed([e0, e1, e2, e3]);                          // 墙顶的瓦檐
+  if (eave.length > 2) { base(eave, '#9097A6'); crayon(hs.k + 'e', eave, PAL.roof, { dist: 4, angle: side < 0 ? 0.62 : 2.5, w: 1.8, slop: 0 }); }
+  inkLine(hs.k + 'Lt', [e0, e1], { w: 1.0 });
+  inkLine(hs.k + 'Le', [e3, e2], { w: 1.2 });
+  inkLine(hs.k + 'Lv', [e1, S1(X, FLOOR, hs.z1)], { w: 1.0 });
+  inkLine(hs.k + 'Lb', [S1(X, FLOOR, hs.z0), S1(X, FLOOR, hs.z1)], { w: 0.9, color: PAL.inkSoft });
+}
+function wallWindow(w, X, side) {
+  const q = planeQuad(X, w.z0, w.z1, w.y0, w.y1);
+  if (!seen(bbox(q, 60))) return;
+  if (w.shutter) for (const [a, b] of [[w.z0 - 0.24, w.z0 - 0.03], [w.z1 + 0.03, w.z1 + 0.27]]) {   // 两边的百叶窗
+    const s = planeQuad(X, a, b, w.y0 - 12, w.y1 + 12);
+    base(s, mixHex(w.shutter, '#FFFFFF', 0.6));
+    crayon(w.k + 'sh' + a, s, w.shutter, { dist: 3.4, angle: 1.45, w: 1.5, slop: 0.8 });
+    for (let i = 1; i < 6; i++) { const yy = lerp(w.y0, w.y1, i / 6); inkLine(w.k + 'sl' + a + i, [S1(X, yy, a), S1(X, yy, b)], { w: 0.55, color: mixHex(w.shutter, '#000000', 0.35), boil: 0.4 }); }
+    ink(w.k + 'shL' + a, s, { closed: true, w: 0.9, curv: 0.1 });
+  }
+  base(q, '#F1E5CB');                                            // 奶油色的窗框，玻璃一格一格嵌进去
+  const zm = (w.z0 + w.z1) / 2, ym = (w.y0 + w.y1) / 2, g = 0.035, gy = 22;
+  [[w.z0 + g, zm - g / 2, w.y0 + gy, ym - gy / 2], [zm + g / 2, w.z1 - g, w.y0 + gy, ym - gy / 2], [w.z0 + g, zm - g / 2, ym + gy / 2, w.y1 - gy], [zm + g / 2, w.z1 - g, ym + gy / 2, w.y1 - gy]].forEach(([a, b, c, d], i) => {
+    const pane = planeQuad(X, a, b, c, d);
+    base(pane, '#7E94B0');
+    crayon(w.k + 'p' + i, pane, PAL.glass, { dist: 3.2, angle: 0.75, w: 1.6, slop: 0.4 });
+    const sh = planeQuad(X, lerp(a, b, 0.3), lerp(a, b, 0.48), c, d);   // 玻璃上一道斜的反光
+    base(sh.map(([x, y], j) => [x + (j < 2 ? 0 : 6), y]), '#B9CBE0');
+  });
+  ink(w.k + 'L', q, { closed: true, w: 1.05, curv: 0.1 });
+  const sill = planeQuad(X - side * 40, w.z0 - 0.06, w.z1 + 0.06, w.y1, w.y1 + 34);
+  base(sill, '#EDE2CB'); ink(w.k + 'sill', sill, { closed: true, w: 0.9, curv: 0.1 });
+  if (w.pot) {                                                   // 窗台上一盆红花
+    const [px, py] = S1(X - side * 80, w.y1, w.z1 - 0.12), s = 3.6 / (w.z1 - 0.12);
+    const pot = [[px - 22 * s, py - 30 * s], [px + 22 * s, py - 30 * s], [px + 16 * s, py], [px - 16 * s, py]];
+    base(pot, '#E9B7A0'); crayon(w.k + 'pot', pot, PAL.pot, { dist: 3, angle: 1.2, w: 1.5, slop: 0.6 }); ink(w.k + 'potL', pot, { closed: true, w: 0.9, curv: 0.1 });
+    const lv = ell(px, py - 46 * s, 34 * s, 22 * s, 16); base(lv, '#B7D9A8'); crayon(w.k + 'lv', lv, PAL.leaf, { dist: 3, angle: 0.4, w: 1.5, slop: 2 });
+    [[-16, -58], [4, -66], [20, -50], [-2, -44]].forEach(([dx, dy], i) => { const f = ell(px + dx * s, py + dy * s, 7 * s, 7 * s, 8); base(f, '#F7B8C2'); crayon(w.k + 'fl' + i, f, PAL.flower, { dist: 2, angle: 0.6, w: 1.3, slop: 0.4 }); });
+    ink(w.k + 'lvL', lv, { closed: true, w: 0.8, color: PAL.leafDeep, curv: 0.6 });
+  }
+  if (w.box) {                                                   // 窗下的花箱
+    const bx = planeQuad(X - side * 70, w.z0, w.z1, w.y1 + 34, w.y1 + 110);
+    base(bx, '#D9B48F'); crayon(w.k + 'bx', bx, PAL.wood, { dist: 3.4, angle: 0.15, w: 1.5, slop: 0.6 }); ink(w.k + 'bxL', bx, { closed: true, w: 0.9, curv: 0.1 });
+    const r = MV.rng(w.k + 'fl');
+    for (let i = 0; i < 7; i++) {
+      const z = lerp(w.z0 + 0.04, w.z1 - 0.04, i / 6), [fx, fy] = S1(X - side * 70, w.y1 + 30, z), s = 3.2 / z;
+      const lv = ell(fx, fy - 12 * s, 20 * s, 14 * s, 10); base(lv, '#B7D9A8'); crayon(w.k + 'l' + i, lv, PAL.leaf, { dist: 2.6, angle: 0.4 + r(), w: 1.3, slop: 1 });
+      if (i % 2 === 0) { const f = ell(fx + (r() - 0.5) * 10, fy - 30 * s, 8 * s, 8 * s, 8); base(f, '#FBD1DA'); crayon(w.k + 'f' + i, f, PAL.flower, { dist: 2, angle: 0.5, w: 1.2, slop: 0.3 }); }
+    }
+  }
+}
+function leftDetails() {
+  LWIN.forEach((w) => wallWindow(w, XL, -1));
+  const d = { z0: 3.0, z1: 3.62, y0: -580, y1: FLOOR };          // 左墙上的门
+  const q = planeQuad(XL, d.z0, d.z1, d.y0, d.y1);
+  if (seen(bbox(q))) {
+    base(q, '#A9CFC6'); crayon('door', q, PAL.door, { dist: 3.8, angle: 1.52, w: 1.8, slop: 1 });
+    for (let i = 1; i < 4; i++) { const z = lerp(d.z0, d.z1, i / 4); inkLine('doorP' + i, [S1(XL, d.y0 + 20, z), S1(XL, d.y1 - 6, z)], { w: 0.6, color: '#2E5A50', boil: 0.4 }); }
+    const [kx, ky] = S1(XL, -150, d.z1 - 0.08); const kn = ell(kx, ky, 6, 6, 8); base(kn, PAL.boot); ink('knob', kn, { closed: true, w: 0.7 });
+    ink('doorL', q, { closed: true, w: 1.1, curv: 0.1 });
+    const step = [S1(XL, FLOOR, d.z0 - 0.06), S1(XL, FLOOR, d.z1 + 0.06), S1(XL + 90, FLOOR, d.z1 + 0.06), S1(XL + 90, FLOOR, d.z0 - 0.06)];
+    base(step, '#D5D0C6'); crayon('step', step, '#A39C90', { dist: 4, angle: 0.1, w: 1.4, slop: 0.6 }); ink('stepL', step, { closed: true, w: 0.9, curv: 0.1 });
+  }
+  // 落水管：贴着墙往下，下面拐个弯朝外，管口在滴水
+  const z = PIPE.z, xo = XL + 28;
+  const tube = [S1(xo - 14, -1600, z - 0.02), S1(xo + 14, -1600, z + 0.02), S1(xo + 14, PIPE.mouthY - 60, z + 0.02), S1(xo - 14, PIPE.mouthY - 60, z - 0.02)];
+  const elbow = [S1(xo - 14, PIPE.mouthY - 60, z - 0.02), S1(xo + 14, PIPE.mouthY - 90, z + 0.02), S1(XL + 104, PIPE.mouthY - 14, z + 0.02), S1(XL + 80, PIPE.mouthY + 14, z - 0.02)];
+  [fixed(tube), elbow].forEach((p, i) => { base(p, '#C4CEDC'); crayon('pipe' + i, p, '#7D8FA8', { dist: 3, angle: 1.5 - i * 0.8, w: 1.5, slop: 0.5 }); ink('pipeL' + i, p, { closed: true, w: 1.0, curv: 0.1 }); });
+  for (const yy of [-1200, -700, -200]) { const br = [S1(xo - 18, yy, z - 0.03), S1(xo + 18, yy, z + 0.03), S1(xo + 18, yy + 26, z + 0.03), S1(xo - 18, yy + 26, z - 0.03)]; if (seen(bbox(br))) { base(br, '#9AA7B9'); ink('pbr' + yy, br, { closed: true, w: 0.8, curv: 0.1 }); } }
+}
+function rightDetails() {
+  RWIN.forEach((w) => wallWindow(w, XR, 1));
+}
+function tree() {                                                // 院墙后面的一棵树：水彩打底、蜡笔排线
+  const cv = ell(1300, 205, 132, 104, 26).map(([x, y], i) => [x + 8 * Math.sin(i * 2.3), y + 8 * Math.cos(i * 1.7)]);
+  if (!seen(bbox(cv))) return;
+  water('treeW', cv, PAL.leaf, { layers: 2, alpha: 120, bleed: 0.14 });
+  crayon('treeC', cv, PAL.leafDeep, { dist: 6, angle: 0.5, w: 1.6, slop: 3, rand: 0.4 });
+  crayon('treeC2', cv.filter((p) => p[1] > 190), '#2F6238', { dist: 7, angle: -0.6, w: 1.4, slop: 0, rand: 0.4 });
+  ink('treeL', cv, { closed: true, w: 1.0, color: '#2F5A34', curv: 0.6 });
+}
+function farEnd() {                                              // 小巷尽头：对面一栋被太阳照着的房子
+  const fl = [S1(XL, FLOOR, ZF), S1(XR, FLOOR, ZF), S1(XR, FLOOR, 13), S1(XL, FLOOR, 13)];
+  const hs = [S1(-1500, -1380, 13), S1(1500, -1380, 13), S1(1500, FLOOR, 13), S1(-1500, FLOOR, 13)];
+  if (!seen(bbox(hs.concat(fl)))) return;
+  water('farSun', ell(1010, 360, 150, 110, 20), '#F7E7B8', { layers: 2, alpha: 120, bleed: 0.15 });
+  base(hs, '#F6EBCB'); crayon('farH', hs, '#EFD9A2', { dist: 4, angle: 1.3, w: 1.6, slop: 0 });
+  const dr = [S1(-150, -420, 13), S1(130, -420, 13), S1(130, FLOOR, 13), S1(-150, FLOOR, 13)];
+  base(dr, '#8EB1D6'); crayon('farD', dr, '#4C7CB5', { dist: 2.4, angle: 1.5, w: 1.3, slop: 0.3 }); ink('farDL', dr, { closed: true, w: 0.8, curv: 0.1 });
+  const wn = [S1(450, -980, 13), S1(850, -980, 13), S1(850, -620, 13), S1(450, -620, 13)];
+  base(wn, '#AFC4DC'); ink('farWL', wn, { closed: true, w: 0.8, curv: 0.1 });
+  base(fl, '#E6E3D8'); crayon('farF', fl, '#C9C6BA', { dist: 3, angle: 0.05, w: 1.2, slop: 0 });
+  inkLine('farRoof', [S1(-1500, -1380, 13), S1(1500, -1380, 13)], { w: 0.9 });
+}
+function clothesline() {                                         // 横过小巷的晾衣绳，挂着衣服、袜子、毛巾
+  const rope = Array.from({ length: 13 }, (_, i) => clothAt(i / 12));
+  if (!seen(bbox(rope, 120))) return;
+  ink('rope', rope, { w: 0.85, color: '#5A4E52', curv: 0.6, boil: 0.5 });
+  CLOTHES.forEach((c) => {
+    const [x, y] = clothAt(c.u), s = 0.92;
+    let pts;
+    if (c.k === 'shirt') pts = [[-22, 0], [22, 0], [44, 14], [36, 34], [26, 28], [26, 84], [-26, 84], [-26, 28], [-36, 34], [-44, 14]];
+    else if (c.k === 'sock') pts = [[-16, 0], [2, 0], [2, 44], [18, 56], [16, 68], [-4, 66], [-16, 50]];
+    else pts = [[-38, 0], [38, 0], [40, 96], [-36, 98]];
+    pts = pts.map(([px, py]) => [x + px * s, y + 2 + py * s]);
+    base(pts, mixHex(c.color, '#FFFFFF', 0.6));
+    crayon(c.k + 'C', pts, c.color, { dist: 3.2, angle: c.k === 'towel' ? 1.5 : 0.8, w: 1.5, slop: 1 });
+    if (c.k === 'towel') for (let i = 0; i < 3; i++) dash(c.k + 's' + i, x - 34 * s, y + (30 + i * 22) * s, x + 36 * s, y + (31 + i * 22) * s, '#F2F4EE', 1.6);
+    ink(c.k + 'L', pts, { closed: true, w: 0.9, curv: 0.15 });
+    const pg = [[x - 5, y - 6], [x + 5, y - 6], [x + 5, y + 12], [x - 5, y + 12]];   // 夹子
+    base(pg, '#C98D5E'); ink(c.k + 'pg', pg, { closed: true, w: 0.7, curv: 0.1 });
+  });
+}
+function groundStatic() {                                       // 湿石板地：垫一层灰蓝，水彩晕出深浅，再淡淡排一层线，石头只描边
+  const floor = fixed([S1(XL, FLOOR, 1), S1(XL, FLOOR, ZF), S1(XR, FLOOR, ZF), S1(XR, FLOOR, 1)]);
+  base(floor, '#C9D1DB');
+  water('gnd', floor, '#8C9AAE', { layers: 2, alpha: 110, bleed: 0.03, tex: 0.6 });
+  crayon('gndH', floor, '#A0ABBD', { dist: 9, angle: 0.12, w: 1.4, rand: 0.45, slop: 0 });
+  water('gndWet', fixed([S1(-620, FLOOR, 1.03), S1(-170, FLOOR, ZF), S1(170, FLOOR, ZF), S1(700, FLOOR, 1.03)]), '#EEF3F7', { layers: 1, alpha: 130, bleed: 0.08 });   // 中间反着天光
+  crayon('gndL', fixed([S1(XL, FLOOR, 1), S1(XL, FLOOR, ZF), S1(XL + 210, FLOOR, ZF), S1(XL + 210, FLOOR, 1)]), '#8593A8', { dist: 8, angle: 0.25, w: 1.4, rand: 0.45, slop: 0 });
+  crayon('gndR', fixed([S1(XR - 210, FLOOR, 1), S1(XR - 210, FLOOR, ZF), S1(XR, FLOOR, ZF), S1(XR, FLOOR, 1)]), '#8593A8', { dist: 8, angle: -0.25, w: 1.4, rand: 0.45, slop: 0 });
+  COBBLES.forEach((c) => {
+    if (!seen(bbox(c.q))) return;
+    if (c.shade) crayon(c.k + 'h', c.q, '#96A2B5', { dist: 5, angle: 0.3, w: 1.2, slop: 1.5, rand: 0.4 });
+    ink(c.k, subdiv(c.q, 18), { closed: true, w: 0.55, color: '#76839A', curv: 0.6, boil: 0.6 });
+  });
+}
+// 水坑里的倒影：远处亮的尽头、两边墙的颜色、天光，横着的一小笔一小笔，顺着倒影的位置排
+const PUD_REFL = (() => {
+  const r = MV.rng('pudRefl'), res = [];
+  const add = (x, y, len, color, w) => { if (inPoly(x - len / 2, y, PUD) && inPoly(x + len / 2, y, PUD)) res.push([x - len / 2, y, x + len / 2, y + (r() - 0.5) * 2, color, w]); };
+  for (let i = 0; i < 16; i++) add(1010 + (r() - 0.5) * 120, 694 + i * 6 + r() * 4, 30 + r() * 50, i % 3 ? '#F4E6C4' : '#FFFFFF', 1.7);   // 尽头的亮光倒在远处的水里
+  for (let i = 0; i < 9; i++) add(770 + r() * 90, 704 + i * 7, 20 + r() * 30, '#E5C68C', 1.5);   // 左墙
+  for (let i = 0; i < 18; i++) add(950 + r() * 600, 770 + r() * 270, 60 + r() * 110, i % 2 ? '#F4F9FC' : '#A6CBE6', 1.6);   // 天光
+  return res;
+})();
+function puddleStatic() {
+  if (!seen(bbox(PUD_RIM))) return;
+  crayon('pudRim', PUD_RIM, PAL.groundDeep, { dist: 4.5, angle: 0.15, w: 1.6, slop: 3 });
+  base(PUDS, '#E3F0F8');
+  water('pud', PUDS, PAL.water, { layers: 3, alpha: 125, bleed: 0.035, dir: 'in', tex: 0.35 });
+  water('pudN', PUDS.filter((p) => p[1] > 860), PAL.waterDeep, { layers: 1, alpha: 100, bleed: 0.06, dir: 'in' });
+  PUD_REFL.forEach(([x0, y0, x1, y1, c, w], i) => dash('pr' + i, x0, y0, x1, y1, c, w));
+  ink('pudL', PUDS, { closed: true, w: 1.15, color: PAL.waterLine, curv: 0.5 });
+  SPUDS.forEach((s) => {
+    crayon(s.k + 'rim', offsetPoly(s.pts, 8), PAL.groundDeep, { dist: 4, angle: 0.1, w: 1.4, slop: 2 });
+    base(s.pts, '#E3F0F8'); water(s.k, s.pts, PAL.water, { layers: 2, alpha: 120, bleed: 0.04, dir: 'in' });
+    const [cx, cy] = centroid(s.pts); dash(s.k + 'r', cx - 50, cy - 3, cx + 30, cy - 2, '#FFFFFF', 1.6);
+    ink(s.k + 'L', s.pts, { closed: true, w: 1.0, color: PAL.waterLine, curv: 0.5 });
+  });
+}
+function shot1Static() {
+  if (seen([-90, -90, W + 90, 470])) {
+    water('s1sky', SKY1, PAL.sky1, { layers: 2, alpha: 120, bleed: 0.04, tex: 0.5 });
+    water('s1glow', ell(1010, 300, 300, 160, 24), PAL.skyWarm, { layers: 2, alpha: 120, bleed: 0.12 });
+    skyTiles('s1skyH', [[620, -90], [1480, -90], [1320, 330], [840, 330]], '#C6D8E6', { dist: 22, angle: -0.35, w: 1.0 });   // 天上很淡很稀的一层，密了像在下雨
+    CLOUDS1.forEach((c) => drawCloud(c.k, cloudPts(c), { w: 0.8 }));
+  }
+  farEnd();
+  tree();
+  LEFT.forEach((hs) => house(hs, XL, -1));
+  RIGHT.forEach((hs) => house(hs, XR, 1));
+  leftDetails(); rightDetails();
+  clothesline();
+  groundStatic();
+  puddleStatic();
+}
 
-// ===================== 歌词：一笔一笔用蜡笔写 =====================
-// 字的笔画中线来自 hanzi-writer-data（Make Me a Hanzi 的数据，jsDelivr 上按字取 JSON），每一笔用蜡笔沿中线画，
-// 像真的拿蜡笔写字：笔画按笔顺出现，线条每 1/12 秒抖一下。逗号自己画一小笔。
+// ── 镜头 1 里动的东西 ──
+function hopAt(t, land, air, hgt) {                              // 一次跳：蹲（预备）→ 腾空 → 落地压扁回弹，落地正好在拍上
+  const up = land - air, sq0 = up - 0.17;
+  if (t < sq0 || t > land + 0.42) return null;
+  if (t < up) { const u = ease.smooth(seg(t, sq0, up)); return { lift: 0, sy: 1 - 0.12 * u, sx: 1 + 0.08 * u, arm: -0.6 * u, air: 0, tuck: 0, joy: 0 }; }
+  if (t < land) { const u = (t - up) / air, st = 1 + 0.09 * Math.cos(Math.PI * u) * (u < 0.5 ? 1 : 0.4); return { lift: hgt * 4 * u * (1 - u), sy: st, sx: 2 - st, arm: 1, air: 1, tuck: Math.sin(Math.PI * u), joy: 0.4 }; }
+  const u = t - land, sq = Math.exp(-u / 0.09) * Math.cos(u * 24);
+  return { lift: 0, sy: 1 - 0.13 * sq, sx: 1 + 0.09 * sq, arm: Math.max(0, 0.8 - u * 2.4), air: 0, tuck: 0, joy: u < 0.38 ? 1 : 0 };
+}
+function girlPose(t) {
+  const h = hopAt(t, T_GIRL, 0.4, 62) || hopAt(t, T_BOTH, 0.42, 86);
+  const idle = { lift: 0, sy: 1 + 0.012 * Math.sin(t * 5.2), sx: 1, arm: 0, air: 0, tuck: 0, joy: 0 };
+  const p = h || idle;
+  p.joy = Math.max(p.joy, t > T_PUP && t < T_PUP + 0.45 ? 1 : 0);                 // 小狗落水那一下，她笑
+  p.look = t > T_PUP - 0.5 && t < T_PUP + 0.3 ? 1 : 0;
+  p.tail = 0.3 * Math.sin(t * 7) * (1 + p.air);                                    // 小辫子跟着甩
+  p.tail += -0.5 * p.air + 0.6 * (h && !p.air && p.lift === 0 && p.sy < 1 ? (1 - p.sy) * 4 : 0);
+  return p;
+}
+function pupPose(t) {
+  const h = hopAt(t, T_PUP, 0.36, 44) || hopAt(t, T_BOTH, 0.42, 60);
+  const p = h || { lift: 3 * Math.abs(Math.sin(t * Math.PI / BEAT)), sy: 1, sx: 1, arm: 0, air: 0, tuck: 0, joy: 0 };
+  p.wag = Math.sin(t * TAU * 3.2) * (0.35 + 0.3 * p.air);
+  p.ear = -0.5 * p.air + 0.25 * Math.sin(t * 9);
+  return p;
+}
+function drawGirl(t) {
+  const [gx, gy] = GIRL; if (!seen([gx - 130, gy - 430, gx + 150, gy + 20])) return;
+  const p = girlPose(t), lift = p.lift;
+  const tf = (pts) => pts.map(([x, y]) => [gx + x * p.sx, gy - lift + y * p.sy]);
+  const legUp = 16 * p.tuck;
+  const sh = { b: [-30, -238], f: [34, -238] };
+  const armAng = (side) => side < 0 ? lerp(-0.25, -2.45, clamp(p.arm)) + (p.arm < 0 ? p.arm * 0.8 : 0) : lerp(0.35, 2.55, clamp(p.arm)) + (p.arm < 0 ? p.arm * 0.6 : 0);
+  const arm = (key, side) => {
+    const s = side < 0 ? sh.b : sh.f, a = armAng(side), e = [s[0] + Math.sin(a) * 92, s[1] + Math.cos(a) * 92];
+    const sleeve = tf(capsule(s, e, 15, 13, 4)), hand = tf(ell(e[0] + Math.sin(a) * 12, e[1] + Math.cos(a) * 12, 13, 13, 12));
+    base(hand, PAL.skin); ink(key + 'hL', hand, { closed: true, w: 0.9, color: '#8A5A48' });
+    base(sleeve, '#F4B8AE'); crayon(key + 'sv', sleeve, PAL.coat, { dist: 3.2, angle: 0.9, w: 1.6, slop: 1.2 });
+    if (side < 0) crayon(key + 'svd', sleeve, PAL.coatDeep, { dist: 5, angle: -0.5, w: 1.3, slop: 0 });
+    ink(key + 'svL', sleeve, { closed: true, w: 1.0, curv: 0.3 });
+  };
+  const boot = (key, x) => {
+    const pts = tf([[x - 2, -96 + legUp], [x + 33, -96 + legUp], [x + 34, -38 + legUp], [x + 44, -27 + legUp], [x + 55, -18 + legUp], [x + 57, -6 + legUp], [x + 52, legUp], [x - 4, legUp], [x - 6, -10 + legUp]]);
+    const leg = tf([[x + 4, -140], [x + 28, -140], [x + 28, -90 + legUp], [x + 4, -90 + legUp]]);
+    base(leg, '#8E9AC8'); crayon(key + 'leg', leg, PAL.tights, { dist: 3, angle: 1.4, w: 1.5, slop: 0.5 }); ink(key + 'legL', leg, { closed: true, w: 0.9, curv: 0.1 });
+    base(pts, '#FCE7A6');
+    crayon(key + 'b1', pts, PAL.boot, { dist: 3.4, angle: 0.95, w: 1.8, slop: 1.6 });
+    crayon(key + 'b2', pts.slice(4).concat([pts[0]]), PAL.bootDeep, { dist: 5, angle: -0.45, w: 1.4, slop: 0 });
+    const sole = tf([[x - 5, -9 + legUp], [x + 55, -9 + legUp], [x + 52, legUp], [x - 4, legUp]]);
+    crayon(key + 'sole', sole, '#B9771C', { dist: 2.4, angle: 0.1, w: 1.3, slop: 0.3 });
+    dash(key + 'hi', ...tf([[x + 6, -86 + legUp]])[0], ...tf([[x + 7, -44 + legUp]])[0], '#FFF6D2', 2.2);
+    ink(key + 'L', pts, { closed: true, w: 1.15, curv: 0.35 });
+  };
+  arm('ga', -1);
+  boot('gbb', -42);
+  // 雨衣：A 字形，后半边涂深一层；帽子翻在脖子后面
+  const hood = tf(ell(-26, -262, 34, 24, 16, -0.3));
+  base(hood, '#F4B8AE'); crayon('ghood', hood, PAL.coatDeep, { dist: 3, angle: 0.6, w: 1.5, slop: 1 }); ink('ghoodL', hood, { closed: true, w: 0.9 });
+  const coat = tf([[-28, -260], [30, -260], [46, -242], [58, -192], [80, -138], [64, -128], [10, -124], [-46, -127], [-74, -136], [-56, -192], [-44, -244]]);
+  base(coat, '#F6C3BA');
+  crayon('gcoat1', coat, PAL.coat, { dist: 3.6, angle: 1.05, w: 1.9, slop: 2.2 });
+  crayon('gcoat2', coat, PAL.coat, { dist: 7, angle: -0.5, w: 1.5, slop: 1 });
+  crayon('gcoatD', tf([[-44, -244], [-12, -250], [-20, -126], [-74, -136], [-56, -192]]), PAL.coatDeep, { dist: 4.5, angle: 0.3, w: 1.5, slop: 0 });
+  const pk = tf([[24, -178], [54, -178], [57, -150], [27, -148]]); ink('gpk', pk, { closed: true, w: 0.8, color: '#7E2219', curv: 0.2 });
+  [[14, -228], [16, -200], [18, -172]].forEach(([bx, by], i) => { const b = tf(ell(bx, by, 6, 6, 8)); base(b, '#FFF3D6'); ink('gbt' + i, b, { closed: true, w: 0.7, color: '#7E2219' }); });
+  ink('gcoatL', coat, { closed: true, w: 1.2, curv: 0.3 });
+  boot('gbf', -6);
+  // 头：圆脸、短发、两根小辫子（跟着跳甩），开心时眯眼
+  const hx = 12, hy = -308 + (p.look ? 2 : 0), r = 56;
+  const tie = (key, ax, ay, ang) => {
+    const tp = tf([[ax, ay], [ax + Math.cos(ang) * 26 - Math.sin(ang) * 13, ay + Math.sin(ang) * 26 + Math.cos(ang) * 13], [ax + Math.cos(ang) * 44, ay + Math.sin(ang) * 44], [ax + Math.cos(ang) * 26 + Math.sin(ang) * 13, ay + Math.sin(ang) * 26 - Math.cos(ang) * 13]]);
+    base(tp, '#8A6A5E'); crayon(key, tp, PAL.hair, { dist: 2.6, angle: ang + 0.4, w: 1.4, slop: 0.8 }); ink(key + 'L', subdiv(tp, 10), { closed: true, w: 0.9, curv: 0.6 });
+    const b = tf(ell(ax, ay, 7, 7, 8)); base(b, PAL.tie); ink(key + 'b', b, { closed: true, w: 0.7 });
+  };
+  tie('gtR', hx + 44, hy - 30, -0.5 + p.tail * 0.6);
+  const head = tf(ell(hx, hy, r, r * 0.96, 26));
+  base(head, '#FCE6D6'); crayon('ghead', head, PAL.skin, { dist: 3.2, angle: 0.7, w: 1.4, slop: 1 });
+  const hair = tf([...Array.from({ length: 15 }, (_, i) => { const a = lerp(2.1, 5.75, i / 14); return [hx + Math.cos(a) * r * 1.06, hy + Math.sin(a) * r * 1.04]; }),
+    ...Array.from({ length: 9 }, (_, i) => { const a = lerp(5.75, 3.55, i / 8), rr = r * (0.7 + 0.07 * Math.sin(i * 2.1)); return [hx + 8 + Math.cos(a) * rr, hy - 14 + Math.sin(a) * rr]; })]);
+  base(hair, '#8A6A5E'); crayon('ghair', hair, PAL.hair, { dist: 2.8, angle: 0.5, w: 1.6, slop: 1.2 });
+  ink('ghairL', hair, { closed: true, w: 1.0, curv: 0.4 });
+  tie('gtL', hx - 50, hy - 4, 2.7 - p.tail);
+  [[hx + 2, hy + 22], [hx + 46, hy + 20]].forEach(([bx, by], i) => crayon('gbl' + i, tf(ell(bx, by, 10, 6.5, 10)), PAL.blush, { dist: 2, angle: 0.4, w: 1.2, slop: 0.4 }));
+  [[hx + 12, hy + 2], [hx + 38, hy]].forEach(([ex, ey], i) => {
+    if (p.joy) ink('gej' + i, tf([[ex - 7, ey + 2], [ex, ey - 5], [ex + 7, ey + 2]]), { w: 1.1, curv: 0.6, boil: 0.4 });
+    else { const e = tf(ell(ex, ey, 4.8, 6.5, 10)); base(e, '#2A1F28'); const gl = tf(ell(ex - 1.5, ey - 2.5, 1.6, 1.6, 6)); base(gl, '#FFFFFF'); }
+  });
+  if (p.joy || p.air) { const m = tf([[hx + 16, hy + 26], [hx + 36, hy + 25], [hx + 33, hy + 36], [hx + 21, hy + 37]]); base(m, '#A8443B'); ink('gm', m, { closed: true, w: 0.9, curv: 0.5, boil: 0.4 }); }
+  else ink('gm', tf([[hx + 18, hy + 28], [hx + 26, hy + 33], [hx + 34, hy + 28]]), { w: 1.0, curv: 0.6, boil: 0.4 });
+  ink('gheadL', head, { closed: true, w: 1.15, curv: 0.4, color: '#5A3A30' });
+  arm('gf', 1);
+}
+function pupHead(key, cx, cy, r, o = {}) {                      // 小狗的头（镜头 1 的小狗、镜头 2 的大特写共用）：脸朝左
+  const P_ = (x, y) => [cx + x * r, cy + y * r];
+  const earAng = o.ear || 0;
+  const ear = (k, ax, ay, len, ang) => { const pts = [[0, 0], [0.22, 0.12], [0.3, 0.55], [0.18, 0.95], [0, 1.0], [-0.14, 0.75], [-0.12, 0.25]].map(([x, y]) => { const X = x * r * 1.1, Y = y * r * len, c = Math.cos(ang), s = Math.sin(ang); return [cx + ax * r + X * c - Y * s, cy + ay * r + X * s + Y * c]; }); return pts; };
+  const eb = ear(key + 'eb', -0.2, -0.78, 0.9, 0.35 + earAng * 0.5);
+  base(eb, '#D8B08E'); crayon(key + 'eb', eb, PAL.pupEar, { dist: 3, angle: 0.8, w: 1.5, slop: 1 }); ink(key + 'ebL', eb, { closed: true, w: 1.0, curv: 0.5 });
+  const skull = ell(cx, cy, r, r * 0.92, 28);
+  base(skull, '#FFF8EA'); crayon(key + 'sk', skull, PAL.pup, { dist: 3.4, angle: 0.9, w: 1.6, slop: 1.4 });
+  crayon(key + 'sk2', skull.filter((p) => p[1] > cy + r * 0.2 || p[0] > cx + r * 0.4), PAL.pupDeep, { dist: 5, angle: -0.5, w: 1.3, slop: 0 });
+  const patch = ell(cx - r * 0.22, cy - r * 0.2, r * 0.34, r * 0.3, 14, 0.3);
+  crayon(key + 'pt', patch, '#E2C29A', { dist: 2.6, angle: 0.4, w: 1.3, slop: 0.6 });
+  const sn = ell(cx - r * 0.82, cy + r * 0.3, r * 0.58, r * 0.42, 20);
+  base(sn, '#FFF8EA'); crayon(key + 'sn', sn, PAL.pup, { dist: 3, angle: 0.4, w: 1.4, slop: 1 });
+  ink(key + 'skL', skull.slice(18).concat(skull.slice(0, 13)), { w: 1.1, curv: 0.5 });
+  ink(key + 'snL', sn.slice(5).concat(sn.slice(0, 2)), { w: 1.05, curv: 0.5 });
+  const nose = ell(cx - r * 1.32 - (o.poke || 0) * r * 0.06, cy + r * 0.1, r * 0.2 * (1 + (o.sniff || 0) * 0.12), r * 0.16, 14);
+  base(nose, PAL.nose); const ng = ell(cx - r * 1.38, cy + r * 0.04, r * 0.06, r * 0.04, 8); base(ng, '#8A7A80');
+  ink(key + 'm', [P_(-1.05, 0.56), P_(-0.82, 0.66), P_(-0.56, 0.54)], { w: 1.0, curv: 0.6 });
+  if (o.blink) ink(key + 'eyc', [P_(-0.4, -0.14), P_(-0.27, -0.1), P_(-0.14, -0.14)], { w: 1.1, curv: 0.6 });
+  else { const e = ell(cx - r * 0.28, cy - r * 0.16, r * 0.12, r * 0.14, 12); base(e, '#231A1E'); base(ell(cx - r * 0.31, cy - r * 0.21, r * 0.04, r * 0.04, 8), '#FFFFFF'); }
+  crayon(key + 'ck', ell(cx - r * 0.5, cy + r * 0.42, r * 0.16, r * 0.1, 10), '#F2A496', { dist: 2, angle: 0.3, w: 1.1, slop: 0.3 });
+  const ef = ear(key + 'ef', 0.12, -0.76, 1.05, -0.05 + earAng);
+  base(ef, '#D8B08E'); crayon(key + 'ef', ef, PAL.pupEar, { dist: 3, angle: 0.8, w: 1.6, slop: 1 }); crayon(key + 'ef2', ef.slice(2, 6), '#9A6038', { dist: 4, angle: -0.4, w: 1.3, slop: 0 });
+  ink(key + 'efL', ef, { closed: true, w: 1.05, curv: 0.5 });
+}
+function drawPuppy(t) {
+  const [px, py] = PUPPY; if (!seen([px - 150, py - 190, px + 120, py + 20])) return;
+  const p = pupPose(t), tuck = 12 * p.tuck;
+  const tf = (pts) => pts.map(([x, y]) => [px + x * p.sx, py - p.lift + y * p.sy]);
+  const leg = (key, x, back) => {
+    const l = tf(capsule([x, -44], [x + (back ? 4 : -4), -6 + (back ? -tuck : -tuck * 0.7)], 8, 7, 4));
+    base(l, '#FFF8EA'); crayon(key, l, back ? PAL.pupDeep : PAL.pup, { dist: 2.4, angle: 1.4, w: 1.3, slop: 0.5 }); ink(key + 'L', l, { closed: true, w: 0.9, curv: 0.3 });
+  };
+  leg('ppl1', 46, true); leg('ppl2', -20, true);
+  const tw = p.wag, tail = tf([[56, -70], [56 + 20 * Math.cos(-1.1 + tw), -70 + 20 * Math.sin(-1.1 + tw)], [56 + 36 * Math.cos(-1.25 + tw * 1.3), -70 + 36 * Math.sin(-1.25 + tw * 1.3)]]);
+  ink('pptail', tail, { w: 3.2, color: PAL.pupEar, curv: 0.6, boil: 0.5 });
+  const body = tf(ell(8, -60, 60, 31, 26, -0.04));
+  base(body, '#FFF8EA'); crayon('ppb', body, PAL.pup, { dist: 3.4, angle: 0.95, w: 1.7, slop: 1.6 });
+  crayon('ppb2', body.filter((q) => q[1] > py - p.lift - 52 * p.sy), PAL.pupDeep, { dist: 5, angle: -0.4, w: 1.3, slop: 0 });
+  crayon('ppbp', tf(ell(24, -78, 22, 13, 14)), '#E3C49A', { dist: 2.6, angle: 0.5, w: 1.3, slop: 0.5 });
+  ink('ppbL', body, { closed: true, w: 1.1, curv: 0.4 });
+  leg('ppl3', 36, false); leg('ppl4', -34, false);
+  const col = tf([[-40, -88], [-24, -86], [-20, -62], [-36, -60]]); base(col, PAL.collar); ink('ppcol', col, { closed: true, w: 0.8, curv: 0.3 });
+  const [hx, hy] = tf([[-56, -98]])[0];
+  pupHead('pph', hx, hy, 37 * p.sy, { ear: p.ear });
+}
+function boatPose(t) {                                           // 纸船一直轻轻晃；水波（三次踩水）走到它那里，再大晃一下
+  let rot = 0.03 * Math.sin(TAU * 0.5 * t + 0.6), dy = 0.01 * Math.sin(TAU * 0.62 * t);
+  for (const th of BOAT_HITS) if (t > th) { const u = t - th; rot += 0.1 * Math.exp(-u / 0.5) * Math.sin(TAU * 1.5 * u); dy += 0.016 * Math.exp(-u / 0.45) * Math.sin(TAU * 1.5 * u + 1); }
+  return { rot, dy };
+}
+const BOAT = {                                                   // 纸船（船长 = 1，原点在水线中点，y 往下）：梯形船身 + 中间的三角帆
+  hull: [[-0.5, -0.17], [0.5, -0.17], [0.33, 0.035], [-0.33, 0.035]],
+  sail: [[-0.21, -0.17], [0, -0.66], [0.21, -0.17]],
+  flap: [[-0.44, -0.17], [0.44, -0.17], [0.38, -0.085], [-0.38, -0.085]],
+};
+function drawBoat(key, pos, L, t, o = {}) {
+  const ps = boatPose(t), c = Math.cos(ps.rot), s = Math.sin(ps.rot);
+  const tf = (pts, refl) => pts.map(([x, y]) => { const Y = refl ? -y * 0.8 : y; const X = x * L, YY = Y * L; return [pos[0] + X * c - YY * s + (refl ? 0.012 * L * Math.sin(Y * 30 + t * 4) : 0), pos[1] + ps.dy * L + X * s + YY * c]; });
+  const bb = tf([[-0.55, -0.7], [0.55, 0.6]]); if (!seen(bbox(bb, 10))) return;
+  // 倒影：船倒过来、淡淡的、横着一笔一笔
+  const rh = tf(BOAT.hull, true), rs = tf(BOAT.sail, true);
+  water(key + 'rw', rh.concat(rs.slice(1, 2)), '#E4ECF2', { layers: 1, alpha: 110, bleed: 0.06 });
+  for (let i = 0; i < 9; i++) { const yy = 0.05 + i * 0.065, half = 0.42 - Math.abs(i - 3) * 0.06; const [a, b] = tf([[-half, -yy], [half, -yy]], true); dash(key + 'rd' + i, a[0], a[1], b[0], b[1], i % 2 ? '#F4F8FB' : '#9EBFDA', 1.4 * LZ()); }   // 线宽按屏幕算：两个镜头里的船看着一样
+  const hull = tf(subdiv(BOAT.hull, 0.08)), sail = tf(subdiv(BOAT.sail, 0.08)), flap = tf(BOAT.flap);
+  base(sail, PAL.boat); base(hull, PAL.boat);
+  water(key + 'ss', tf([[0, -0.66], [0.21, -0.17], [0, -0.17]]), PAL.boatSh, { layers: 2, alpha: 110, bleed: 0.05 });
+  water(key + 'hs', tf([[-0.4, -0.06], [0.42, -0.06], [0.33, 0.035], [-0.33, 0.035]]), PAL.boatSh, { layers: 2, alpha: 120, bleed: 0.05 });
+  water(key + 'st', flap, PAL.stripe, { layers: 2, alpha: 150, bleed: 0.03, dir: 'in' });   // 小朋友用蜡笔在船边涂的一道红：水彩打底，再划三笔
+  for (let i = 0; i < 3; i++) ink(key + 'sd' + i, tf([[-0.41 + i * 0.03, -0.155 + i * 0.026], [0.41 - i * 0.03, -0.152 + i * 0.026]]), { w: 1.1, color: '#C63B2C', curv: 0, boil: 0.5 });
+  ink(key + 'sL', sail, { closed: true, w: 1.1, color: PAL.boatLine, curv: 0.05 });
+  ink(key + 'hL', hull, { closed: true, w: 1.15, color: PAL.boatLine, curv: 0.05 });
+  ink(key + 'fd', tf([[0, -0.64], [0, -0.18]]), { w: 0.7, color: '#7D8BA5', curv: 0 });
+  ink(key + 'fl', tf([[-0.38, -0.085], [0.38, -0.085]]), { w: 0.75, color: '#7D8BA5', curv: 0 });
+  ink(key + 'wl', tf([[-0.42, 0.03], [-0.1, 0.05], [0.25, 0.045], [0.45, 0.025]]), { w: 0.9, color: PAL.ripple, curv: 0.6 });
+}
+function ringPts(X0, Z0, rho, n = 56) { return Array.from({ length: n + 1 }, (_, i) => { const a = (i / n) * TAU; return S1(X0 + Math.cos(a) * rho * 760, FLOOR, Z0 + Math.sin(a) * rho); }); }
+function ringIn(key, pts, poly, o) {                             // 水波只画在水坑里面：一圈拆成在坑里的几段
+  let cur = [], k = 0;
+  const flush = () => { if (cur.length > 2) ink(key + '_' + k++, cur, o); cur = []; };
+  for (const p of pts) { if (inPoly(p[0], p[1], poly)) cur.push(p); else flush(); }
+  flush();
+}
+function ripples1(t) {
+  for (const sp of SPLASHES) for (let j = 0; j < 3; j++) {
+    const u = t - sp.t - j * 0.13; if (u < 0 || u > 1.35) continue;
+    const rho = RING_R0 + RING_V * u * (1 - j * 0.12), f = 1 - u / 1.35;
+    ringIn(sp.k + 'r' + j, ringPts(sp.X, sp.Z, rho), PUD, { w: (1.3 - j * 0.25) * (0.4 + 0.6 * f) * sp.size, color: mixHex(PAL.ripple, PAL.water, 1 - f * 0.9), curv: 0.5, boil: 0.5 });
+  }
+  const bu = (t * 0.9) % 1;                                      // 纸船边上一直有一圈小水波
+  const [bx, by] = BOAT1; const br = ell(bx, by + 4, 80 + bu * 140, (80 + bu * 140) * 0.18, 30);
+  ringIn('br', br, PUD, { w: 0.8 * (1 - bu), color: PAL.ripple, curv: 0.5, boil: 0.5 });
+}
+function reflections1(t) {                                       // 女孩、小狗在水里的倒影：横着的几笔颜色，跟着水晃
+  const g = girlPose(t), pu = pupPose(t);
+  const rows = (key, x, y0, lift, bands, poly) => {
+    let i = 0;
+    for (const [h0, h1, wd, color] of bands) for (let h = h0; h < h1; h += 9, i++) {
+      const y = y0 + lift + h + 4, wob = 5 * Math.sin(h * 0.07 + t * 3.2), half = wd / 2 * (0.75 + 0.25 * Math.sin(i * 1.7));
+      if (!inPoly(x + wob, y, poly)) continue;
+      dash(key + i, x - half + wob, y, x + half + wob, y + 1, mixHex(color, PAL.water, 0.55), 1.3);
+    }
+  };
+  rows('rg', GIRL[0] + 6, GIRL[1], g.lift, [[0, 96, 84, PAL.boot], [96, 140, 60, PAL.tights], [140, 262, 130, PAL.coat], [262, 370, 100, PAL.hair]], PUD);
+  rows('rp', PUPPY[0] - 20, PUPPY[1], pu.lift, [[0, 40, 120, PAL.pup], [40, 92, 150, PAL.pupDeep], [92, 140, 90, PAL.pupEar]], PUD);
+}
+function splashFx(key, x, y, t0, size, t) {                      // 溅起来的水：一圈水冠 + 往外飞的水珠，落回水面就没了
+  const u = t - t0; if (u < 0 || u > 0.75) return;
+  if (u < 0.36) {
+    const h = 84 * size * Math.sin(Math.PI * u / 0.36), wd = 74 * size * (1 + u * 1.8);
+    const crown = [[x - wd, y], [x - wd * 0.86, y - h * 0.75], [x - wd * 0.6, y - h * 0.3], [x - wd * 0.42, y - h], [x - wd * 0.2, y - h * 0.35], [x, y - h * 0.85], [x + wd * 0.22, y - h * 0.3], [x + wd * 0.45, y - h * 0.95], [x + wd * 0.62, y - h * 0.25], [x + wd * 0.88, y - h * 0.7], [x + wd, y], [x, y + 12 * size]];
+    base(crown, '#CDE6F7');
+    water(key + 'cw', crown, '#7FB2DC', { layers: 1, alpha: 120, bleed: 0.05 });
+    ink(key + 'cL', crown, { closed: true, w: 1.2, color: '#3F70A2', curv: 0.6, boil: 0.6 });
+    ink(key + 'ch', [[x - wd * 0.5, y - h * 0.45], [x - wd * 0.1, y - h * 0.6], [x + wd * 0.3, y - h * 0.5]], { w: 1.6, color: '#F6FBFE', curv: 0.6, boil: 0.6 });
+  }
+  const r = MV.rng(key + 'drops');
+  for (let i = 0; i < Math.round(16 * size); i++) {
+    const a = -Math.PI / 2 + (r() - 0.5) * 2.8, v = (260 + 380 * r()) * size, sz = (6 + r() * 7) * size;
+    const dx = Math.cos(a) * v * u, dy = Math.sin(a) * v * u + 0.5 * 2100 * u * u;
+    if (dy > 4) continue;
+    const vx = Math.cos(a) * v, vy = Math.sin(a) * v + 2100 * u, ang = Math.atan2(vy, vx);
+    const d = ell(x + dx, y + dy - 6, sz * 1.3, sz * 0.85, 10, ang);
+    base(d, '#D2EAFA'); ink(key + 'd' + i, d, { closed: true, w: 0.9, color: '#3F70A2', curv: 0.6, boil: 0.5 });
+    base(ell(x + dx - sz * 0.3, y + dy - 6 - sz * 0.25, sz * 0.28, sz * 0.22, 6), '#FFFFFF');
+  }
+}
+function dripState(d, t) {                                       // 水滴：在檐口慢慢鼓出来 → 掉下去 → 落地溅一下
+  let src, land, Z;
+  if (d.cloth !== undefined) { const c = CLOTHES[d.cloth], [x, y] = clothAt(c.u); src = [x + (c.k === 'sock' ? 4 : 0), y + (c.k === 'shirt' ? 82 : c.k === 'sock' ? 66 : 94)]; Z = 3.4; land = [src[0], VP[1] + FLOOR / Z]; }
+  else { src = S1(d.X, d.Y, d.Z); land = S1(d.X, FLOOR, d.Z); Z = d.Z; }
+  const g = 9.8 * 760 / Z, fall = Math.sqrt(2 * Math.max(1, land[1] - src[1]) / g);
+  const cyc = (t / d.per + d.ph) % 1, tc = cyc * d.per, grow = d.per - fall - 0.05;
+  return { src, land, Z, fall, tc, grow, n: Math.floor(t / d.per + d.ph) };
+}
+function drips1(t) {
+  for (const d of DRIPS) {
+    const s = dripState(d, t), sc = Math.sqrt(2.2 / s.Z);
+    if (s.tc < s.grow) { const k = s.tc / s.grow, sz = 3 + 4 * k; const q = ell(s.src[0], s.src[1] + sz * sc, sz * sc * 0.8, sz * sc, 10); base(q, '#EEF7FD'); ink(d.k + 'h', q, { closed: true, w: 0.6, color: '#5E8DB8', curv: 0.6 }); }
+    else if (s.tc < s.grow + s.fall) {
+      const u = s.tc - s.grow, y = s.src[1] + 0.5 * (9.8 * 760 / s.Z) * u * u;
+      const q = [[s.src[0], y - 13 * sc], [s.src[0] + 5 * sc, y - 1 * sc], [s.src[0], y + 5 * sc], [s.src[0] - 5 * sc, y - 1 * sc]];
+      base(q, '#EEF7FD'); ink(d.k + 'f', subdiv(q, 4), { closed: true, w: 0.6, color: '#5E8DB8', curv: 0.6 });
+    }
+    // 上一滴落下后：在小水坑里画两圈水波，落在地上就溅两颗小水珠
+    const tl = (s.tc - s.grow - s.fall + d.per) % d.per;
+    if (tl < 0.55) {
+      const f = 1 - tl / 0.55, [lx, ly] = s.land, sp = d.small !== undefined ? SPUDS[d.small] : null;
+      if (sp) { for (let j = 0; j < 2; j++) { const rr = (12 + tl * 150 - j * 14) * sc; if (rr > 4) ringIn(d.k + 'w' + j, ell(lx, ly, rr, rr * 0.2, 24).concat([[lx + rr, ly]]), sp.pts, { w: 0.8 * f, color: PAL.ripple, curv: 0.6 }); } }
+      else if (tl < 0.25) for (const sd of [-1, 1]) { const dx = sd * tl * 70 * sc, dy = -tl * 90 * sc + 0.5 * 1600 * tl * tl * sc; const q = ell(lx + dx, ly + dy - 2, 2.6 * sc, 2.2 * sc, 8); base(q, '#EEF7FD'); ink(d.k + 's' + sd, q, { closed: true, w: 0.5, color: '#5E8DB8' }); }
+    }
+  }
+}
+function shot1Dynamic(t) {
+  ripples1(t);
+  reflections1(t);
+  drawBoat('b', BOAT1, L1, t);
+  drawPuppy(t);
+  drawGirl(t);
+  for (const sp of SPLASHES) { const [x, y] = S1(sp.X, FLOOR, sp.Z); splashFx(sp.k, x + (sp.X < 0 ? 8 : 4), y, sp.t, sp.size, t); }
+  drips1(t);
+}
+function shot1(p, t, mode) {
+  if (mode !== 'dynamic') shot1Static();
+  if (mode !== 'static') shot1Dynamic(t);
+}
+
+// ═════════ 镜头 2：贴着水面的近景。世界坐标 = 静止时的画面坐标 ═════════
+const HZ = 572;                                                  // 水坑对岸（远处的水边）
+// 转场时近景是缩小着从水里晕开的，画面外也要画一截：算过整段转场里看得见的范围是 x -84…1933、y -115…1080，四周再留一点
+const SKY2 = [[-160, -200], [2080, -200], [2080, HZ + 10], [-160, HZ + 10]];
+const SKYCLIP2 = [[184, -200], [1703, -200], [1666, 466], [230, 466]];   // 两面墙中间露出来的天（云只在这里面，贴着墙边）
+const WALL2L = [[-160, -200], [182, -200], [236, 552], [-160, 562]];
+const WALL2R = [[1705, -200], [2080, -200], [2080, 562], [1662, 552]];
+const RB = { x: 900, y: 820, r: [630, 590, 550, 510, 470], w: 40, foot: 540 };   // 彩虹：圆心、每一道的外半径、宽、脚落在哪
+const CLOUDS2 = [
+  { k: 'c1', x: 420, y: 150, w: 820, h: 270, dx: -720, dy: -70 },
+  { k: 'c2', x: 1300, y: 120, w: 760, h: 240, dx: 600, dy: -40 },
+  { k: 'c3', x: 860, y: 330, w: 640, h: 190, dx: -700, dy: -40 },
+  { k: 'c4', x: 830, y: -10, w: 700, h: 210, dx: 120, dy: -280 },
+];
+const SUN2 = [330, 96];
+const part2 = (t) => ease.inOut(seg(t, T_LAND - 0.15, bt(6.3)));   // 云散开的进度
+// 彩虹一道 = 沿弧来回涂的锯齿线，一小笔一小笔（每笔种子固定，涂上就不再变）
+const BANDS = RB.r.map((ro, i) => {
+  const ri = ro - RB.w, rm = ro - RB.w / 2, a0 = Math.PI - Math.asin((RB.y - RB.foot) / rm), a1 = Math.asin((RB.y - RB.foot) / rm);
+  const n = Math.ceil((rm * (a0 - a1)) / 6), r = MV.rng('band' + i), pts = [];
+  for (let j = 0; j <= n; j++) { const a = lerp(a0, a1, j / n) + (r() - 0.5) * 0.003, rr = (j % 2 ? ro - 2 : ri + 2) + (r() - 0.5) * 6; pts.push([RB.x + Math.cos(a) * rr, RB.y - Math.sin(a) * rr]); }
+  const pts2 = []; for (let j = 0; j <= n; j += 2) { const a = lerp(a0, a1, (j + 1) / n), rr = (j % 4 ? ro - 6 : ri + 6) + (r() - 0.5) * 6; pts2.push([RB.x + Math.cos(a) * rr, RB.y - Math.sin(a) * rr]); }
+  return { i, ro, ri, rm, a0, a1, pts, pts2, color: PAL.rainbow[i] };
+});
+const bandProg = (i, t) => ease.out(seg(t, T_BANDS[i], T_BANDS[i] + BAND_DUR));
+function shot2Static() {
+  if (seen([-160, -200, 2080, HZ + 10])) {
+    water('s2sky', SKY2, PAL.sky2, { layers: 3, alpha: 120, bleed: 0.04, tex: 0.5 });
+    water('s2low', [[-160, 330], [2080, 330], [2080, HZ + 10], [-160, HZ + 10]], '#EEF1E4', { layers: 2, alpha: 120, bleed: 0.1 });
+    skyTiles('s2skyH', SKYCLIP2, '#B8D9F0', { dist: 24, angle: -0.4, w: 1.0 });   // 很淡很稀，晴天要透亮
+    const sun = ell(SUN2[0], SUN2[1], 66, 66, 24);
+    base(sun, '#FCE9A8'); crayon('sunA', sun, PAL.sun, { dist: 3.4, angle: 0.7, w: 1.7, slop: 2 }); crayon('sunB', sun.slice(6, 18), PAL.sunDeep, { dist: 5, angle: -0.6, w: 1.4, slop: 0 });
+    ink('sunL', sun, { closed: true, w: 1.1, color: '#C9792A', curv: 0.6 });
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU + 0.2, r0 = 84, r1 = 84 + (i % 2 ? 22 : 34); ink('ray' + i, [[SUN2[0] + Math.cos(a) * r0, SUN2[1] + Math.sin(a) * r0], [SUN2[0] + Math.cos(a) * r1, SUN2[1] + Math.sin(a) * r1]], { w: 1.4, color: PAL.sunDeep, boil: 0.9 }); }
+  }
+  for (const [k, poly, wall, deep, ang] of [['w2l', WALL2L, PAL.ochre, PAL.ochreDeep, 1.0], ['w2r', WALL2R, PAL.terra, PAL.terraDeep, 2.15]]) {
+    if (!seen(bbox(poly))) continue;
+    base(poly, mixHex(wall, '#FFFFFF', 0.55));
+    crayon(k + 'a', poly, wall, { dist: 5.5, angle: ang, w: 2.0, slop: 0 });
+    crayon(k + 'b', poly, wall, { dist: 11, angle: -ang * 0.5, w: 1.5, rand: 0.35, slop: 0 });
+    const by = Math.max(poly[2][1], poly[3][1]);
+    crayon(k + 'd', clipPoly(poly, rectPoly([-600, by - 170, 2500, by + 10])), deep, { dist: 6, angle: 0.3, w: 1.5, rand: 0.4, slop: 0 });
+  }
+  ink('w2lL', [[182, -200], [236, 552]], { w: 1.2, curv: 0.1 });
+  ink('w2rL', [[1705, -200], [1662, 552]], { w: 1.2, curv: 0.1 });
+  const pipe = [[60, -200], [96, -200], [100, 470], [64, 470]];   // 左墙上那根落水管
+  base(pipe, '#C4CEDC'); crayon('p2', pipe, '#7D8FA8', { dist: 3.4, angle: 1.5, w: 1.6, slop: 0.6 }); ink('p2L', pipe, { closed: true, w: 1.0, curv: 0.1 });
+  const bank = [[-160, HZ - 64], [2080, HZ - 64], [2080, HZ + 6], [-160, HZ + 6]];   // 对岸：湿的石板
+  water('bank', bank, PAL.ground, { layers: 2, alpha: 130, bleed: 0.03 });
+  const r = MV.rng('bankStones');
+  for (let x = -150, i = 0; x < 2070; i++) {
+    const w = 70 + r() * 60, st = ell(x + w / 2, HZ - 18 + r() * 8, w / 2, 14 + r() * 6, 16);
+    if (seen(bbox(st))) { crayon('bs' + i, st, i % 3 ? PAL.cobble : '#98A4B8', { dist: 4, angle: 0.3 + r() * 0.4, w: 1.3, slop: 1 }); ink('bsL' + i, st.slice(10).concat(st.slice(0, 3)), { w: 0.8, color: PAL.inkSoft, curv: 0.5 }); }
+    x += w + 6;
+  }
+  [[150, HZ - 40], [230, HZ - 30], [1690, HZ - 38], [1760, HZ - 30]].forEach(([gx, gy], i) => { for (let j = -2; j <= 2; j++) ink('gr' + i + j, [[gx + j * 6, gy + 18], [gx + j * 9, gy], [gx + j * 13, gy - 18 - Math.abs(j) * -3]], { w: 1.2, color: PAL.leafDeep, curv: 0.5, boil: 0.7 }); });
+  // 水：近处的天倒在水里，越近越深；横着的反光、两边墙的倒影
+  const wat = [[-160, HZ - 2], [2080, HZ - 2], [2080, 1130], [-160, 1130]];
+  if (seen(bbox(wat))) {
+    base(wat, '#E1EFF8');
+    water('w2', wat, PAL.water, { layers: 3, alpha: 125, bleed: 0.03, tex: 0.4 });
+    water('w2d', [[-160, 860], [2080, 860], [2080, 1130], [-160, 1130]], PAL.waterDeep, { layers: 2, alpha: 110, bleed: 0.08 });
+    water('w2wl', [[-160, HZ + 4], [250, HZ + 4], [214, 1040], [-160, 1060]], PAL.ochre, { layers: 1, alpha: 80, bleed: 0.06 });   // 两边墙倒在水里
+    water('w2wr', [[1652, HZ + 4], [2080, HZ + 4], [2080, 1060], [1690, 1040]], PAL.terra, { layers: 1, alpha: 80, bleed: 0.06 });
+    ink('w2edge', [[-160, HZ + 4], [600, HZ + 6], [1300, HZ + 3], [2080, HZ + 5]], { w: 1.0, color: PAL.waterLine, curv: 0.4 });
+    const r2 = MV.rng('w2refl');
+    for (let i = 0; i < 40; i++) { const y = HZ + 20 + r2() * 520, x = -100 + r2() * 2100, len = 60 + r2() * 140; dash('w2r' + i, x, y, x + len, y + 1, i % 2 ? '#F4F9FC' : '#9CC6E6', 1.6); }
+    for (let i = 0; i < 9; i++) { const y = HZ + 30 + i * 46 + r2() * 20, x = -300 + r2() * 200; dash('w2rl' + i, x, y, x + 220 + r2() * 200, y + 1, mixHex(PAL.ochre, PAL.water, 0.3), 1.7); }
+    for (let i = 0; i < 9; i++) { const y = HZ + 30 + i * 46 + r2() * 20, x = 1700 + r2() * 160; dash('w2rr' + i, x, y, x + 260 + r2() * 200, y + 1, mixHex(PAL.terra, PAL.water, 0.3), 1.7); }
+  }
+}
+function rainbowSky(t) {
+  for (const b of BANDS) {
+    const p = bandProg(b.i, t); if (p <= 0) continue;
+    const m = p * (b.pts.length - 1), n = Math.floor(m);
+    if (!seen(bbox(b.pts.slice(0, n + 2)))) continue;
+    for (let j = 0; j < n; j++) dash('rb' + b.i + '_' + j, b.pts[j][0], b.pts[j][1], b.pts[j + 1][0], b.pts[j + 1][1], b.color, 2.0);
+    if (n < b.pts.length - 1) { const a = b.pts[n], c = b.pts[n + 1], f = m - n; if (f > 0.05) dash('rb' + b.i + '_' + n, a[0], a[1], lerp(a[0], c[0], f), lerp(a[1], c[1], f), b.color, 2.0); }
+    const m2 = Math.floor(p * (b.pts2.length - 1));                // 第二层：浅一点、稀一点，错开半格再涂一遍
+    for (let j = 0; j < m2; j++) dash('rc' + b.i + '_' + j, b.pts2[j][0], b.pts2[j][1], b.pts2[j + 1][0], b.pts2[j + 1][1], mixHex(b.color, '#FFFFFF', 0.25), 1.5);
+  }
+}
+function rainbowWater(t) {                                       // 彩虹倒在水里：一道一道横着的短笔，跟着彩虹一起出来
+  for (const b of BANDS) {
+    const p = bandProg(b.i, t); if (p <= 0) continue;
+    const n = 30, r = MV.rng('rbw' + b.i);
+    for (let j = 0; j <= n * p; j++) {
+      const a = lerp(b.a0, b.a1, j / n), x = RB.x + Math.cos(a) * b.rm, y = 2 * HZ - (RB.y - Math.sin(a) * b.rm) + 8;
+      const len = 24 + r() * 40, wob = 6 * Math.sin(y * 0.05 + t * 2.4);
+      if (seen([x - len, y - 4, x + len, y + 4])) dash('rw' + b.i + '_' + j, x - len / 2 + wob, y, x + len / 2 + wob, y + 1, mixHex(b.color, PAL.water, 0.45), 1.7);
+    }
+  }
+}
+function clouds2(t) {
+  const pr = part2(t);
+  for (const c of CLOUDS2) {
+    const cc = { ...c, x: c.x + c.dx * pr + 10 * Math.sin(t * 0.7 + c.x), y: c.y + c.dy * pr };
+    const pts = clipPoly(cloudPts(cc), SKYCLIP2);
+    if (pts.length < 3 || !seen(bbox(pts))) continue;
+    drawCloud(c.k, pts, { w: 1.0 });
+  }
+}
+function pup2Pose(t) {                                           // 近景的小狗：落点之后从右边探进来，从第 5 拍起每半拍嗅一下
+  const enter = ease.out(seg(t, T_LAND + 0.04, T_LAND + 0.8));
+  let poke = 0; const k = Math.floor((t - bt(5)) / (BEAT / 2));
+  if (k >= 0) { const tk = bt(5) + k * BEAT / 2; poke = Math.exp(-(t - tk) / 0.11) * (1 - Math.exp(-(t - tk) / 0.025)); }
+  return { dx: 1100 * (1 - enter) - 22 * poke, dy: 7 * Math.sin(t * 2.2), poke, sniff: poke, ear: 0.18 * Math.sin(t * 3.1) - 0.3 * (1 - enter), blink: t > 4.62 && t < 4.76, k };
+}
+function drawPup2(t) {
+  const p = pup2Pose(t), hx = 1275 + p.dx, hy = 545 + p.dy, r = 150, WL = 700;   // 头的中心、半径；脖子进水的那条线
+  if (!seen([hx - 330, hy - 300, 2420, WL + 300])) return;
+  // 倒影：胸口、头在水里的几道颜色，跟着水晃
+  for (let i = 0; i < 16; i++) { const y = WL + 8 + i * 15, half = 180 - i * 4, x = hx + 230 + 7 * Math.sin(i * 0.9 + t * 3); dash('p2r' + i, x - half, y, x + half + 200, y + 1, mixHex(i > 11 ? PAL.pupEar : PAL.pup, PAL.water, 0.4), 1.8); }
+  dash('p2rn', hx - r * 1.4 + 6 * Math.sin(t * 3), 2 * WL - hy - 40, hx - r * 1.12, 2 * WL - hy - 38, mixHex(PAL.nose, PAL.water, 0.5), 2.2);
+  // 脖子和背：从头后面往上到肩膀，再平着出画；胸口往下进水
+  const body = [[hx + 40, hy - 135], [hx + 200, hy - 250], [hx + 420, hy - 282], [2420, hy - 272], [2420, WL + 20], [hx + 330, WL + 16], [hx + 170, WL - 6], [hx + 70, hy + 118]];
+  base(body, '#FFF8EA'); crayon('p2b', body, PAL.pup, { dist: 4, angle: 0.95, w: 1.8, slop: 3 });
+  crayon('p2bd', [[hx + 170, WL - 6], [hx + 330, WL + 16], [2420, WL + 20], [2420, hy - 60], [hx + 300, hy - 40]], PAL.pupDeep, { dist: 6, angle: -0.4, w: 1.5, slop: 2 });
+  crayon('p2bp', ell(hx + 560, hy - 180, 120, 64, 18, -0.08), '#E3C49A', { dist: 3, angle: 0.5, w: 1.5, slop: 2 });   // 背上一块浅棕
+  const col = [[hx + 100, hy - 196], [hx + 152, hy - 222], [hx + 206, hy + 150], [hx + 150, hy + 158]];
+  base(col, PAL.collar); crayon('p2c', col, '#B5302A', { dist: 4, angle: 1.3, w: 1.4, slop: 1 }); ink('p2cL', col, { closed: true, w: 1.0, curv: 0.2 });
+  ink('p2bL', [[hx + 40, hy - 135], [hx + 200, hy - 250], [hx + 420, hy - 282], [2420, hy - 272]], { w: 1.15, curv: 0.5 });
+  ink('p2cbL', [[hx + 70, hy + 118], [hx + 170, WL - 6]], { w: 1.1, curv: 0.5 });
+  pupHead('p2h', hx, hy, r, { ear: p.ear, poke: p.poke, sniff: p.sniff, blink: p.blink });
+  ink('p2wl', [[hx + 150, WL - 4], [hx + 340, WL + 14], [2420, WL + 16]], { w: 1.0, color: PAL.ripple, curv: 0.5 });   // 胸口进水的地方
+  if (p.poke > 0.2) for (let i = 0; i < 3; i++) {                // 嗅嗅：鼻子前面冒几道短线
+    const nx = hx - r * 1.55, ny = hy + r * 0.1 + (i - 1) * 24, L = 22 + 12 * p.poke;
+    ink('sn' + p.k + i, [[nx - 6, ny], [nx - 6 - L * 0.5, ny - 4 + (i - 1) * 4], [nx - 6 - L, ny + (i - 1) * 8]], { w: 1.1, color: PAL.inkSoft, curv: 0.6, boil: 0.5 });
+  }
+}
+function ripples2(t) {
+  for (let j = 0; j < 3; j++) { const u = ((t * 0.8) + j / 3) % 1, rx = 240 + u * 520; ink('r2b' + j, ell(BOAT2[0], BOAT2[1] + 8, rx, rx * 0.05, 40).concat([[BOAT2[0] + rx, BOAT2[1] + 8]]), { w: 1.2 * (1 - u), color: PAL.ripple, curv: 0.5, boil: 0.5 }); }
+  const p = pup2Pose(t); if (p.dx < 500) for (let j = 0; j < 2; j++) { const u = ((t * 0.7) + j / 2) % 1, rx = 140 + u * 320, cx = 1560 + p.dx; ink('r2p' + j, ell(cx, 712, rx, rx * 0.06, 32).concat([[cx + rx, 712]]), { w: 1.1 * (1 - u), color: PAL.ripple, curv: 0.5, boil: 0.5 }); }
+}
+function bloomEdge(bl) {                                         // 转场：晕开的水彩边，外圈深、里面两圈浅（画在近景这边，紧贴着遮罩的边）；晕开得小时边也细
+  if (!bl) return;
+  const wk = clamp(bl.R / 260, 0.25, 1);
+  [[0.012, 7, '#4A79A8'], [0.04, 4, '#7FAAD2'], [0.075, 2.6, '#B5D3EA']].forEach(([inset, w, color], j) => {
+    const pts = bloomPts(bl.s[0], bl.s[1], bl.R * (1 - inset) - 4, 96);
+    ink('bloom' + j, pts.map(([x, y]) => [(x - W / 2) / CAM.z + CAM.x, (y - H / 2) / CAM.z + CAM.y]), { closed: true, brush: 'wax', w: w * wk * 1.6, color, curv: 0.5, boil: 1.2 });
+  });
+}
+function shot2(p, t, mode, bloom) {
+  if (mode !== 'dynamic') shot2Static();
+  if (mode !== 'static') {
+    rainbowSky(t);
+    clouds2(t);
+    rainbowWater(t);
+    ripples2(t);
+    drawBoat('b', BOAT2, L2, t);
+    drawPup2(t);
+    bloomEdge(bloom);
+  }
+}
+
+// ═════════ 静背景的缓存（每版抖动画一次）、转场 ═════════
+const CACHE = {};
+async function staticImage(shot, bi) {
+  const key = shot + ':' + bi;
+  if (CACHE[key]) return CACHE[key];
+  const save = BI; BI = bi; CULL = null;
+  const c = await render((p, t) => (shot === 1 ? shot1 : shot2)(p, t, 'static'), REST, 0);
+  const img = P.createImage(cw, ch); img.drawingContext.drawImage(c, 0, 0); img.setModified(true);
+  BI = save;
+  return (CACHE[key] = img);
+}
+// 晕开的形状：外沿一圈圆滚滚的小鼓包、鼓包之间是尖的凹口（水彩往外渗的那种菜花边），整体再歪一点
+function bloomPts(cx, cy, R, n = 160) {
+  return Array.from({ length: n }, (_, i) => { const a = (i / n) * TAU, k = 1 + 0.07 * Math.sin(2 * a + 0.7) + 0.05 * Math.sin(3 * a + 2.1) + 0.07 * (Math.abs(Math.sin(7 * a + 0.4)) - 0.64); return [cx + Math.cos(a) * R * k, cy + Math.sin(a) * R * k]; });
+}
+const BLOOM_K = (() => { const ks = bloomPts(0, 0, 1, 720).map(([x, y]) => Math.hypot(x, y)); return { min: Math.min(...ks), max: Math.max(...ks) }; })();
+const BLOOM_R = 1330 / BLOOM_K.min;                              // 晕开到底时，最短的那个方向也盖过画面角
+function pushState(t) {                                          // 推进：纸船在画面上从原位走到近景的位置，放大倍数按对数插值
+  const e = ease.inOut(seg(t, T_PUSH, T_LAND)), z1 = MV.lerpLog(1, ZB, e), z2 = z1 / ZB;
+  const s = [lerp(BOAT1[0], BOAT2[0], e), lerp(BOAT1[1], BOAT2[1], e)];
+  return { e, s, cam1: { x: BOAT1[0] - (s[0] - W / 2) / z1, y: BOAT1[1] - (s[1] - H / 2) / z1, z: z1 }, cam2: { x: BOAT2[0] - (s[0] - W / 2) / z2, y: BOAT2[1] - (s[1] - H / 2) / z2, z: z2 } };
+}
+const bloomR = (t) => BLOOM_R * Math.pow(seg(t, T_BLOOM, T_LAND), 1.7);   // 晕开越来越快，拍上正好盖满
+async function transition(g, t) {
+  const st = pushState(t), R = bloomR(t);
+  // 镜头 1：被晕开的水盖住的东西不画
+  const rin = R * BLOOM_K.min * 0.97;
+  CULL = R > 1 ? (b) => { const [x0, y0] = toScr(st.cam1, b[0], b[1]), [x1, y1] = toScr(st.cam1, b[2], b[3]); return Math.max(Math.hypot(x0 - st.s[0], y0 - st.s[1]), Math.hypot(x1 - st.s[0], y0 - st.s[1]), Math.hypot(x0 - st.s[0], y1 - st.s[1]), Math.hypot(x1 - st.s[0], y1 - st.s[1])) > rin; } : null;
+  g.drawImage(await render((p, tt) => shot1(p, tt, 'all'), st.cam1, t), 0, 0, W, H);
+  lights1(g, t, st.cam1);
+  if (R < 1) { CULL = null; return; }
+  // 镜头 2：只画晕开范围里的
+  const rout = R * BLOOM_K.max + 20;
+  CULL = (b) => { const [x0, y0] = toScr(st.cam2, b[0], b[1]), [x1, y1] = toScr(st.cam2, b[2], b[3]); const nx = clamp(st.s[0], x0, x1), ny = clamp(st.s[1], y0, y1); return Math.hypot(nx - st.s[0], ny - st.s[1]) < rout; };
+  const bloom = { s: st.s, R };
+  await MV.reveal(g, (m) => bloomPts(st.s[0], st.s[1], R).forEach(([x, y], i) => (i ? m.lineTo(x, y) : m.moveTo(x, y))), async (m) => {
+    m.drawImage(await render((p, tt) => shot2(p, tt, 'all', bloom), st.cam2, t), 0, 0, W, H);
+    lights2(m, t, st.cam2);
+  }, 6);
+  CULL = null;
+}
+
+// ═════════ 光：最后在 2D 上用加色叠（浅色笔刷涂不亮，会和底下的颜色混）═════════
+let glow;
+function makeGlow() {                                            // 带一点颗粒的暖光
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'), img = g.createImageData(S, S), r = MV.rng('glow');
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const d = Math.hypot(x - S / 2, y - S / 2) / (S / 2), f = Math.pow(clamp(1 - d), 1.9) * (0.82 + 0.18 * r()), k = (y * S + x) * 4; img.data[k] = 255 * f; img.data[k + 1] = 232 * f; img.data[k + 2] = 188 * f; img.data[k + 3] = 255; }
+  g.putImageData(img, 0, 0); glow = c;
+}
+function addGlow(g, cam, x, y, R, a, ry) {
+  const [sx, sy] = toScr(cam, x, y), rx = R * cam.z, rr = (ry ?? R) * cam.z;
+  g.globalAlpha = clamp(a); g.drawImage(glow, sx - rx, sy - rr, rx * 2, rr * 2);
+}
+const SPARK1 = [[960, 712, 0], [1080, 760, 1.3], [1380, 905, 2.1], [1150, 1010, 3.2], [880, 735, 4.4]];
+function lights1(g, t, cam) {
+  g.save(); g.globalCompositeOperation = 'lighter';
+  addGlow(g, cam, 1010, 330, 330, 0.34, 240);                    // 小巷尽头亮着
+  SPARK1.forEach(([x, y, ph]) => addGlow(g, cam, x, y, 22, 0.55 * Math.max(0, Math.sin(t * 3.1 + ph)), 9));   // 水面闪一闪
+  for (const sp of SPLASHES) { const [x, y] = S1(sp.X, FLOOR, sp.Z); addGlow(g, cam, x, y - 20, 140 * sp.size, 0.45 * decay(t, sp.t, 0.13), 70 * sp.size); }   // 踩下去那一下水面一亮
+  g.restore();
+}
+const SPARK2 = [[640, 700, 0], [1010, 742, 1.7], [760, 800, 3.1], [1210, 720, 2.4], [520, 760, 4.2], [1380, 790, 5.0]];
+function lights2(g, t, cam) {
+  const pr = part2(t);
+  g.save(); g.globalCompositeOperation = 'lighter';
+  addGlow(g, cam, SUN2[0], SUN2[1], 520, 0.12 + 0.42 * pr);      // 云散开，太阳越来越亮
+  addGlow(g, cam, SUN2[0], 2 * HZ - SUN2[1], 300, 0.08 + 0.2 * pr, 120);
+  SPARK2.forEach(([x, y, ph]) => addGlow(g, cam, x, y, 26, (0.2 + 0.5 * pr) * Math.max(0, Math.sin(t * 2.7 + ph)), 10));
+  g.restore();
+}
+
+// ═════════ 歌词：按笔顺一笔一笔用蜡笔写 ═════════
+// 字的笔画中线来自 hanzi-writer-data（Make Me a Hanzi 的数据，jsDelivr 上按字取 JSON）。蜡笔写在一张白纸上，再整张 multiply 叠到画面上：
+// 白的地方乘上去不变，只留下蜡笔的字，字边上淡的地方也不会冒白边
 const MED = {};
-const LY = { x: 34, top: 648, size: 56, gap: 2 };
-function lyricChars() {      // 每个字：出现的时间、位置、固定的手写歪斜
-  const res = []; let i = 0; const r = rng("lyricHand");
-  WORDS.forEach(([w, t0]) => { [...w].forEach((ch, j) => { res.push({ ch, t: t0 + j * 0.09, i, rot: (r() - 0.5) * 0.08, dy: (r() - 0.5) * 6, sc: 0.96 + r() * 0.08 }); i++; }); });
-  return res;
-}
-const LCH = lyricChars();
-function partial(pts, f) {   // 一笔只画出前 f 那么长（写字的过程）
-  if (f >= 1) return pts; const segs = []; let L = 0;
-  for (let k = 1; k < pts.length; k++) { const d = Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); segs.push(d); L += d; }
-  const want = L * f, res = [pts[0]]; let acc = 0;
-  for (let k = 1; k < pts.length; k++) { const d = segs[k - 1]; if (acc + d >= want) { const u = (want - acc) / d; res.push([lerp(pts[k - 1][0], pts[k][0], u), lerp(pts[k - 1][1], pts[k][1], u)]); break; } res.push(pts[k]); acc += d; }
-  return res;
-}
-function drawLyricPass() {
-  P.clear(); P.push(); P.translate(-W / 2, -H / 2);
+const LY = { x: 64, top: 922, size: 88, gap: 8 };
+const LHAND = Array.from({ length: 8 }, (_, i) => { const r = MV.rng('hand' + i); return { rot: (r() - 0.5) * 0.08, dy: (r() - 0.5) * 8, sc: 0.95 + r() * 0.1 }; });
+let lyrCanvas = null; const LYR_CACHE = {};
+function lyricPaint(L) {
+  P.background(255);
   const S = LY.size;
-  LCH.forEach((c) => {
-    if (T < c.t) return;
-    const ox = LY.x + c.i * (S + LY.gap) + S / 2, oy = LY.top + S / 2 + c.dy;
-    const tf = (x, y) => { const X = (x / 1024 - 0.5) * S * c.sc, Y = ((900 - y) / 1024 - 0.5) * S * c.sc; return [ox + X * Math.cos(c.rot) - Y * Math.sin(c.rot), oy + X * Math.sin(c.rot) + Y * Math.cos(c.rot)]; };
-    const strokes = c.ch === "，" ? [[[300, 330], [340, 300], [345, 240], [300, 160]]] : (MED[c.ch] || []);
-    const prog = clamp((T - c.t) / 0.1) * strokes.length;      // 一个字 0.1 秒写完
+  L.chars.forEach((c, i) => {
+    if (c.u <= 0) return;
+    const hd = LHAND[i], ox = LY.x + i * (S + LY.gap) + S / 2, oy = LY.top + S / 2 + hd.dy;
+    const tf = (x, y) => { const X = (x / 1024 - 0.5) * S * hd.sc, Y = ((900 - y) / 1024 - 0.5) * S * hd.sc; return [ox + X * Math.cos(hd.rot) - Y * Math.sin(hd.rot), oy + X * Math.sin(hd.rot) + Y * Math.cos(hd.rot)]; };
+    const strokes = MED[c.ch] || [], prog = c.u * strokes.length;
     strokes.forEach((m, k) => {
       const f = clamp(prog - k); if (f <= 0) return;
-      let pts = partial(m.map(([x, y]) => tf(x, y)), f); if (pts.length < 2) return;
-      ink("ly" + c.i + "_" + k, pts, { brush: "wax", w: 3.6, color: PAL.lyric, curv: 0.5, boil: 0.5 });
+      const pts = partial(m.map(([x, y]) => tf(x, y)), f); if (pts.length < 2) return;
+      ink('ly' + i + '_' + k, pts, { brush: 'wax', w: 5.2, color: PAL.lyric, curv: 0.5, boil: 0.6 });
     });
   });
-  P.pop();
+}
+async function lyricLayer(t, L) {
+  const done = L.chars.every((c) => c.u >= 1);
+  if (done && LYR_CACHE[BI]) return LYR_CACHE[BI];
+  const c = await render(() => lyricPaint(L), REST, t);
+  if (!done) return c;
+  const keep = document.createElement('canvas'); keep.width = cw; keep.height = ch; keep.getContext('2d').drawImage(c, 0, 0);
+  return (LYR_CACHE[BI] = keep);
 }
 
-// ===================== 纸 =====================
+// ═════════ 纸：开场生成一次（固定种子的值噪声 + 竖向细纸纹 + 纤维），最后整张 multiply ═════════
+let paperTex;
 function makePaper() {
-  const r = rng("paper");
+  const r = MV.rng('paper');
   const grid = (n) => { const a = new Float32Array(n * n); for (let i = 0; i < a.length; i++) a[i] = r(); return { a, n }; };
   const vn = (g, x, y) => { const n = g.n, i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
     const at = (ii, jj) => g.a[(((jj % n) + n) % n) * n + (((ii % n) + n) % n)];
     return lerp(lerp(at(i, j), at(i + 1, j), sx), lerp(at(i, j + 1), at(i + 1, j + 1), sx), sy); };
-  const big = grid(32), mid = grid(128), fine = grid(512);
-  const c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
-  const img = g.createImageData(W, H);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const m = vn(big, x / 90, y / 90) * 0.55 + vn(mid, x / 20, y / 20) * 0.45;
-    const tooth = vn(fine, x / 1.7, y / 2.8);                               // 纸纹：竖向略长的细颗粒
-    const tone = 0.965 + (m - 0.5) * 0.05 - Math.max(0, tooth - 0.66) * 0.16;
-    const k = (y * W + x) * 4; img.data[k] = 251 * tone + 4; img.data[k + 1] = 244 * tone + 3; img.data[k + 2] = 228 * tone; img.data[k + 3] = 255;
+  const big = grid(32), mid = grid(128), fine = grid(512), s = W / cw;
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'), img = g.createImageData(cw, ch);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const X = x * s, Y = y * s, m = vn(big, X / 135, Y / 135) * 0.55 + vn(mid, X / 30, Y / 30) * 0.45, tooth = vn(fine, X / 2.6, Y / 4.2);
+    const tone = 0.965 + (m - 0.5) * 0.05 - Math.max(0, tooth - 0.66) * 0.16, k = (y * cw + x) * 4;
+    img.data[k] = 251 * tone + 4; img.data[k + 1] = 245 * tone + 3; img.data[k + 2] = 230 * tone; img.data[k + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  g.globalAlpha = 0.07; g.strokeStyle = "#8a7a60"; g.lineWidth = 0.6;              // 纸里的纤维
-  for (let i = 0; i < 260; i++) { const x = r() * W, y = r() * H, a = r() * 6.28, L = 4 + r() * 14; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 0.5) * L / 2, y + Math.sin(a + 0.5) * L / 2, x + Math.cos(a) * L, y + Math.sin(a) * L); g.stroke(); }
-  g.globalAlpha = 1;
-  paperTex = c;
-}
-function makeGlow() { // 带纸纹颗粒的暖光（加色用）
-  const S = 512, c = document.createElement("canvas"); c.width = S; c.height = S; const g = c.getContext("2d");
-  const img = g.createImageData(S, S); const r = rng("glow");
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const d = Math.hypot(x - S / 2, y - S / 2) / (S / 2); const f = Math.pow(clamp(1 - d), 1.8) * (0.8 + 0.2 * r()); const k = (y * S + x) * 4;
-    img.data[k] = 255 * f; img.data[k + 1] = 196 * f; img.data[k + 2] = 92 * f; img.data[k + 3] = 255; }
-  g.putImageData(img, 0, 0); glowSprite = c;
+  g.globalAlpha = 0.07; g.strokeStyle = '#8a7a60'; g.lineWidth = 0.6;
+  for (let i = 0; i < 300; i++) { const x = r() * cw, y = r() * ch, a = r() * TAU, L = (5 + r() * 18) / s; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 0.5) * L / 2, y + Math.sin(a + 0.5) * L / 2, x + Math.cos(a) * L, y + Math.sin(a) * L); g.stroke(); }
+  g.globalAlpha = 1; paperTex = c;
 }
 
-// ===================== 合成 =====================
-async function pass(name, fn) {        // 用同一张 WebGL 画布画一遍，拷到这一层的 2D 画布
-  DRAW = fn; await P.redraw();
-  const c = layers[name] || (layers[name] = Object.assign(document.createElement("canvas"), { width: W, height: H }));
-  const g = c.getContext("2d"); g.clearRect(0, 0, W, H); g.drawImage(P.drawingContext.canvas, 0, 0, W, H);
-  return c;
+// ═════════ 合成 ═════════
+async function drawFrame(g, t) {
+  BI = Math.floor(t * BOIL + 1e-6) % BOILK; CULL = null;
+  if (t < T_PUSH) { g.drawImage(await render((p, tt) => shot1(p, tt, 'dynamic'), REST, t, await staticImage(1, BI)), 0, 0, W, H); lights1(g, t, REST); }
+  else if (t >= T_LAND) { g.drawImage(await render((p, tt) => shot2(p, tt, 'dynamic'), REST, t, await staticImage(2, BI)), 0, 0, W, H); lights2(g, t, REST); }
+  else await transition(g, t);
 }
-let DRAW = () => {};
-async function renderAt(t) {
-  T = t;
-  const bg = await pass("bg", drawBG), mid = await pass("mid", drawMid), crab = await pass("crab", drawCrabPass), front = await pass("front", drawFront), lyr = await pass("lyric", drawLyricPass);
-  const ctx = out.getContext("2d");
-  ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; ctx.clearRect(0, 0, W, H);
-  ctx.drawImage(bg, 0, 0); ctx.drawImage(mid, 0, 0); ctx.drawImage(crab, 0, 0); ctx.drawImage(front, 0, 0);
-  // 暖光：加色，叠在最后（浅色笔刷盖在深蓝上会变绿，所以光用加的）
-  if (lit()) {
-    const k = lightK(); const s = camScale(); ctx.globalCompositeOperation = "lighter";
-    const [hx, hy] = toScreen(LAMP.x, 246); let R = 230 * s * k; ctx.globalAlpha = 0.55; ctx.drawImage(glowSprite, hx - R, hy - R, 2 * R, 2 * R);
-    R = 90 * s * k; ctx.globalAlpha = 0.5; ctx.drawImage(glowSprite, hx - R, hy - R, 2 * R, 2 * R);
-    const [gx, gy] = toScreen(LAMP.x - 10, LAMP.base); const rx = 330 * s * k, ry = 80 * s * k; ctx.globalAlpha = 0.32; ctx.drawImage(glowSprite, gx - rx, gy - ry, 2 * rx, 2 * ry);
-    ctx.globalAlpha = 1;
-  }
-  // 窗户的灯微微闪
-  ctx.globalCompositeOperation = "lighter";
-  [...FAR, ...HOUSES].forEach((hs) => houseGeom(hs).winRects.forEach(([x, y, w, h], i) => { const fl = 0.5 + 0.5 * Math.sin(Math.floor(T * 6) / 6 * (5 + i) + hash(hs.k) % 7); const [sx, sy] = toScreen(x + w / 2, y + h / 2); const R = Math.max(w, h) * 1.3 * camScale();
-    ctx.globalAlpha = 0.1 + 0.08 * fl; ctx.drawImage(glowSprite, sx - R, sy - R, 2 * R, 2 * R); }));
-  ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(lyr, 0, 0);
-  // 笔画数据没取到的字（断网等），退回系统字体
-  ctx.fillStyle = PAL.lyric; ctx.font = `${LY.size * 0.9}px "PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  LCH.forEach((c) => { if (T >= c.t && c.ch !== "，" && !MED[c.ch]) ctx.fillText(c.ch, LY.x + c.i * (LY.size + LY.gap) + LY.size / 2, LY.top + LY.size / 2 + c.dy); });
-  // 纸：整张 multiply 一层暖白画纸
-  ctx.globalCompositeOperation = "multiply"; ctx.drawImage(paperTex, 0, 0); ctx.globalCompositeOperation = "source-over";
-  return out.toDataURL("image/png");
+async function overlay(g, t) {                                   // 最上层、不跟镜头动：蜡笔写的歌词 + 整张纸纹
+  BI = Math.floor(t * BOIL + 1e-6) % BOILK; CULL = null;
+  const L = MV.lyricAt(t, { per: BEAT / 2, pop: 0.32 });
+  g.globalCompositeOperation = 'multiply';
+  if (L) g.drawImage(await lyricLayer(t, L), 0, 0, W, H);
+  g.drawImage(paperTex, 0, 0, W, H);
+  g.globalCompositeOperation = 'source-over';
 }
 
-window.sceneReady = new Promise((resolve) => {
+const sketchReady = new Promise((resolve) => {
   new p5((p) => {
     P = p;
     p.setup = async () => {
-      p.createCanvas(W, H, p.WEBGL); p.pixelDensity(1); p.noLoop();
-      brush.instance(p); brush.load(); brush.scaleBrushes(1.6);
+      KX = Math.min((innerWidth || W) / W, (innerHeight || H) / H); cw = Math.round(W * KX); ch = Math.round(H * KX);
+      p.createCanvas(cw, ch, p.WEBGL).elt.style.display = 'none'; p.pixelDensity(1); p.noLoop();
+      brush.instance(p); brush.load(); brush.scaleBrushes(2.4);
+      // 坑：p5.brush 2.2.3 判断笔尖出没出画布，用的是缩放前的坐标（当一个单位就是一个像素，范围是画布的 -0.5 到 1.5 倍）。
+      // 这里按 KX 和镜头缩放来画，坐标会超出那个范围：超出的那段笔画原地不动、笔触全堆成一团，从外面起笔的排线整条不画（缩小出图、推拉时最明显）。
+      // 画布外的笔触 WebGL 自己会裁掉，所以把这个判断关掉
+      brush.Position.prototype.isInCanvas = () => true;
       // 写字用的蜡笔：比自带的 crayon 散得少一点，字才认得清
-      brush.add("wax", { type: "default", weight: 0.62, scatter: 0.75, sharpness: 0.7, grain: 1.0, opacity: 155, spacing: 0.14, pressure: [1.15, 0.85], rotate: "natural" });
-      out = document.createElement("canvas"); out.width = W; out.height = H; out.id = "out"; document.body.appendChild(out);
-      makePaper(); makeGlow();
-      await Promise.all([...new Set(LYRIC.replace("，", ""))].map(async (ch) => {
-        try { const res = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(ch)}.json`); MED[ch] = (await res.json()).medians; }
-        catch (e) { console.warn("笔画数据没取到，这个字用系统字体：" + ch); }
-      }));
+      brush.add('wax', { type: 'default', weight: 0.62, scatter: 0.75, sharpness: 0.7, grain: 1.0, opacity: 155, spacing: 0.14, pressure: [1.15, 0.85], rotate: 'natural' });
       resolve();
     };
-    p.draw = () => { DRAW(); };
+    p.draw = () => {
+      if (!PAINT) return;
+      if (BGIMG) { p.push(); p.image(BGIMG, -cw / 2, -ch / 2, cw, ch); p.pop(); } else p.background(PAL.paper);
+      p.push(); p.translate(-cw / 2, -ch / 2); p.scale(KX);
+      p.translate(W / 2, H / 2); p.scale(CAM.z); p.translate(-CAM.x, -CAM.y);   // 镜头的推拉在 p5 里做，矢量重画
+      PAINT(p, T);
+      p.pop();
+    };
   });
 });
-window.renderAt = renderAt;
+
+MV.page({
+  W, H, fps: FPS, duration: DURATION,
+  ready: async () => {
+    await sketchReady;
+    makePaper(); makeGlow();
+    // 笔画数据：先用本地的 glyphs.js（scripts/glyphs.py 存的，页面里引了就用），缺的从 jsDelivr 取；网络问题取不到时出片报错停下，不会有的帧有字、有的没有
+    Object.assign(MED, await MV.glyphs(window.LYRICS[0][2]));
+  },
+  draw: drawFrame,
+  overlay,
+});
 </script></body></html>

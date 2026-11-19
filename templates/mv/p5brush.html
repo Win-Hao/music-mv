@@ -1,0 +1,178 @@
+<!doctype html>
+<!-- music-mv 的整片页面（p5.js v2 + p5.brush：蜡笔、水彩这类笔刷画风）。和 index.html 一样：整支 MV 是这一个页面，按时间 t 画；
+     镜头表 SHOTS 里相邻两个镜头时间重叠一段，重叠的那几拍走 transition。复制成 mv/index.html 用（kit.js 一起拷过去），命令同 index.html。
+     p5 只有一张 WebGL 画布：画一个镜头 = 让 p5 按这个镜头重画一遍（render），马上拷进 kit 的 2D 画布（下一次重画会把它盖掉）。
+     转场时两个镜头各重画一遍，按遮罩叠，所以 MV.reveal 要 await。镜头的推拉写在每个镜头的 cam(t) 里，在 p5 里矢量重画；
+     不要在 2D 里放大拷过来的位图，放大了会糊。
+     慢：笔画多的画面在 4 核电脑上 1920×1080 一帧约 1.5–2 秒，转场那几拍翻倍。慢在笔画数量，所以这里两样都做了：
+     - p5 画布按出图的像素开（渲 960×540 的草稿就开 960×540），p.scale 以后照 W×H 的坐标画：缩小草稿才真的省时间
+     - 静的背景缓存：每个镜头不动的东西写进 still(p, t)，线条一秒抖 12 次、4 版轮流，每版只画一次存成图，之后每帧先贴它再画会动的（paint）。
+       镜头在慢推慢移时，按盖住这个镜头整段的机位画一张，贴的时候按当前机位放大、挪过去；推得多（5% 以上）的镜头别缓存，全写进 paint
+     再省：草稿用 --fps 12、先只渲关键的几段。动态模糊每开一倍就慢一倍，一般不开。
+     页面里不要写全局的 draw、setup、preload 函数：p5 看到它们会自动进全局模式，报 could not resolve an active WEBGL sketch。
+     p5 用实例模式（new p5(p => …)，brush.instance(p)）。brush.set 的第三个参数是粗细倍数（1 是这支笔原来的粗细，常用 0.5–3），不是像素。
+     歌词用 kit 的 MV.drawLyric，字体是网页加载的思源黑体（下面的 <link>），ready 里 MV.font 等它下好；换画风自己的歌词画法时这两处一起换。
+     要换成你的：W、H（竖屏 1080×1920）、SHOTS 里每个镜头的 still / paint(p, t) 和 cam(t)、transition、歌词画法。 -->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.2.8/800.css">
+<script src="https://cdn.jsdelivr.net/npm/p5@2.3.3/lib/p5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/p5.brush.js"></script>
+<script src="kit.js"></script>
+<script src="song.js" onerror="console.warn('没有 song.js：按 MV.tempo 推拍子')"></script>
+<script src="lyrics.js" onerror="console.warn('没有 lyrics.js：不上歌词')"></script>
+<style>html, body { margin: 0; overflow: hidden; background: #000; }</style>
+</head><body><script>
+const W = 1920, H = 1080, FPS = 30;   // 竖屏：W = 1080, H = 1920
+const { lerp, seg, ease } = MV;
+if (!window.SONG) MV.tempo(120, 0);
+const DURATION = (window.SONG && SONG.duration) || 12;
+const U = Math.min(W, H) / 1080;      // 尺寸单位，横竖屏一样大
+const BOIL = 12, BOILK = 4;           // 线条一秒抖 12 次，像手画；4 版抖动轮流用，静的背景每版只画一次。填色不跟着抖（不然一闪一闪）
+const boilOf = (t) => Math.floor(t * BOIL + 1e-6) % BOILK;
+let T = 0, BI = 0, P, PAINT = null, CAM = null, BG = null, paper, KX = 1, CW = W, CH = H;
+
+// 每个元素自己的种子：同一个元素每帧拿到同样的随机数，只有线条按抖动的版本换
+function seed(p, key, boil) {
+  const h = MV.hash(key + (boil ? ':' + BI : ''));
+  p.randomSeed(h); p.noiseSeed(h);
+}
+const ring = (cx, cy, r, n = 28) => Array.from({ length: n }, (_, i) => [cx + r * Math.cos((i / n) * Math.PI * 2), cy + r * Math.sin((i / n) * Math.PI * 2)]);
+
+// 让 p5 按某个镜头重画一遍，返回 p5 的画布：拿到就马上 drawImage，下一次重画会把它盖掉。bg：先贴的静背景（stillOf 给的）
+async function render(paint, cam, t, bg = null, bi = boilOf(t)) {
+  T = t; BI = bi; PAINT = paint; CAM = cam; BG = bg;
+  await P.redraw();
+  return P.drawingContext.canvas;
+}
+// 静背景的缓存：按「盖住这个镜头整段的机位」（整段里每一帧画面框的外接框）画，每版抖动一张
+const STILL = {};
+function coverCam(shot) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i <= 40; i++) {
+    const c = shot.cam(lerp(shot.start, Math.min(shot.end, DURATION), i / 40)), hw = W / 2 / c.z, hh = H / 2 / c.z;
+    x0 = Math.min(x0, c.x - hw); x1 = Math.max(x1, c.x + hw); y0 = Math.min(y0, c.y - hh); y1 = Math.max(y1, c.y + hh);
+  }
+  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: Math.min(W / (x1 - x0), H / (y1 - y0)) };
+}
+async function stillOf(shot, bi) {
+  const key = shot.name + ':' + bi;
+  if (!STILL[key]) {
+    const cam = shot.cover || (shot.cover = coverCam(shot));
+    const c = await render(shot.still, cam, shot.start, null, bi);
+    const img = P.createImage(CW, CH); img.drawingContext.drawImage(c, 0, 0); img.setModified(true);
+    STILL[key] = { img, cam };
+  }
+  return STILL[key];
+}
+const blit = async (g, shot, t) => {
+  const bg = shot.still ? await stillOf(shot, boilOf(t)) : null;
+  g.drawImage(await render(shot.paint, shot.cam(t), t, bg), 0, 0, W, H);
+};
+
+// ───── 镜头 1：远景，两个人在坡上，跟着拍子一颠一颠。天、太阳、山坡不动，放进 still 缓存；两个人每帧现画 ─────
+function stillFar(p, t) {
+  p.background('#F3EFE6');
+  for (let k = 0; k < 3; k++) {                                              // 水彩：同一块颜色叠两三遍（每遍种子不同）越叠越实，fillBleed 让边往外渗
+    seed(p, 'sun' + k, false); brush.noStroke(); brush.noHatch(); brush.fill('#F2B66D', 200); brush.fillBleed(0.12);
+    brush.circle(W * 0.75, H * 0.25, 90 * U);
+  }
+  seed(p, 'hill', true); brush.noFill(); brush.set('2B', '#3B3F5C', 1.4);
+  brush.spline([[0, H * 0.74], [W * 0.3, H * 0.68], [W * 0.62, H * 0.72], [W, H * 0.66]], 0.5);   // 轮廓线按抖动的版本换
+}
+function paintFar(p, t) {
+  const hop = Math.sin(Math.PI * MV.beatPhase(t)) * 18 * U;
+  for (const [k, x, r, c] of [['a', 0.42, 62, '#C9785B'], ['b', 0.52, 44, '#6E9BC4']]) {
+    const cy = H * 0.7 - r * U - (k === 'b' ? hop : 0);
+    seed(p, 'body-' + k, false); brush.noStroke(); brush.noFill();          // 蜡笔：来回排线涂满
+    brush.hatch(5 * U, 0.6, { rand: 0.25, continuous: true }); brush.hatchStyle('crayon', c, 1.6);
+    brush.polygon(ring(W * x, cy, r * U * 1.03)); brush.noHatch();
+    seed(p, 'line-' + k, true); brush.noFill(); brush.set('2B', '#2B2E44', 1.2); brush.spline([...ring(W * x, cy, r * U), ring(W * x, cy, r * U)[0]], 0.5);
+  }
+}
+// ───── 镜头 2：近景，蜡笔排线涂的脸（推得慢，但整个镜头都在动，不缓存）─────
+function paintNear(p, t) {
+  p.background('#F6F0E4');
+  const cx = W / 2, cy = H * 0.52, R = 240 * U;
+  seed(p, 'face', false); brush.noStroke(); brush.noFill();
+  brush.hatch(6 * U, 0.7, { rand: 0.25, continuous: true }); brush.hatchStyle('crayon', '#E3A07E', 2);   // 蜡笔：来回排线
+  brush.polygon(ring(cx, cy, R * 1.02)); brush.noHatch();
+  seed(p, 'face-line', true); brush.set('crayon', '#3A2E2A', 1.2); brush.spline([...ring(cx, cy, R), ring(cx, cy, R)[0]], 0.5);
+  const close = Math.max(0, 1 - Math.abs(((t + 0.3) % 3.2) - 0.1) / 0.1);    // 每 3.2 秒眨一次眼
+  for (const s of [-1, 1]) {
+    seed(p, 'eye' + s, true); brush.set('crayon', '#2B2E44', 1.6);
+    brush.line(cx + s * 80 * U - 18 * U, cy - 30 * U, cx + s * 80 * U + 18 * U, cy - 30 * U + 10 * U * (1 - close));
+  }
+}
+
+// ───── 镜头表：相邻两个镜头的时间重叠一段，重叠的那几拍就是转场。still 可以不写（不缓存）─────
+const T_CUT = MV.beatTime(8);                     // 第 8 拍（从 0 数）落在近景上
+const SHOTS = [
+  { name: '远景', start: 0, end: T_CUT, still: stillFar, paint: paintFar,
+    cam: (t) => ({ x: W / 2 + 0.03 * W * (t / DURATION), y: H / 2, z: 1 + 0.03 * ease.smooth(t / DURATION) }) },
+  { name: '近景', start: T_CUT - 0.8, end: DURATION + 1, paint: paintNear,
+    cam: (t) => ({ x: W / 2, y: H / 2, z: 1 + 0.04 * ease.smooth(seg(t, T_CUT, DURATION)) }) },
+];
+window.PLAN = SHOTS.slice(1).map((s, i) => +SHOTS[i].end.toFixed(3));   // 转场落点（成片秒，镜头里的甩镜也加进来），render_frames 会打印，给 video_rhythm --plan、contact_sheet --around 用
+
+async function drawFrame(g, t) {
+  const live = SHOTS.filter((s) => t >= s.start && t < s.end);
+  if (live.length >= 2) return transition(g, t, live[0], live[1]);
+  if (live.length === 1) return blit(g, live[0], t);
+}
+// 转场：收光。前半段圆缩到人身上露 A，后半段从圆里张开露 B，张满的那一刻（a.end）在拍上。两个镜头都要 p5 重画，所以 await
+async function transition(g, t, a, b) {
+  const cx = W * 0.47, cy = H * 0.58, mid = (b.start + a.end) / 2;
+  const R = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) + 30 * U;   // 圆刚好盖满画面：从一开始就看得见在收
+  const r = t < mid ? R * (1 - ease.inOut(seg(t, b.start, mid))) : R * ease.inOut(seg(t, mid, a.end));
+  g.fillStyle = '#2B2E44'; g.fillRect(0, 0, W, H);                               // 圈外用画风里最深的颜色，不用纯黑
+  await MV.reveal(g, (m) => m.arc(cx, cy, Math.max(16 * U, r), 0, Math.PI * 2), (m) => blit(m, t < mid ? a : b, t), 24 * U);   // 收到针孔就换，不收到 0
+}
+
+// 纸纹：开页面做一次，最后整片 multiply 一层，露出纸的颗粒
+function makePaper() {
+  const c = document.createElement('canvas'); c.width = Math.round(W / 2); c.height = Math.round(H / 2);
+  const g = c.getContext('2d'), img = g.createImageData(c.width, c.height), r = MV.rng('paper');
+  for (let i = 0; i < c.width * c.height; i++) { const v = 0.93 + r() * 0.07; img.data[i * 4] = 255 * v; img.data[i * 4 + 1] = 249 * v; img.data[i * 4 + 2] = 238 * v; img.data[i * 4 + 3] = 255; }
+  g.putImageData(img, 0, 0); return c;
+}
+
+const sketchReady = new Promise((resolve) => {
+  new p5((p) => {
+    P = p;
+    p.setup = async () => {
+      // p5 画布按出图的像素开（页面视口就是出图大小），再 p.scale(KX) 照 W×H 的坐标画：缩小出草稿时笔画也少画像素，真的省时间
+      KX = Math.min((innerWidth || W) / W, (innerHeight || H) / H); CW = Math.max(16, Math.round(W * KX)); CH = Math.max(16, Math.round(H * KX));
+      p.createCanvas(CW, CH, p.WEBGL).elt.style.display = 'none'; p.pixelDensity(1); p.noLoop();   // 画在 p5 自己的画布上，kit 再拷到出片的画布
+      brush.instance(p); brush.load(); brush.scaleBrushes(KX);   // 笔的粗细按出图大小缩：p5.brush 的笔粗按屏幕像素算、不跟 p.scale 走，不缩的话草稿上线条粗一倍
+      brush.Position.prototype.isInCanvas = () => true;   // p5.brush 2.2.3 按缩放前的坐标判断笔画出没出画布，用了 p.scale（镜头拉远、缩小出图）会把笔画堆成一团；画布外的 WebGL 自己会裁
+      paper = makePaper();
+      resolve();
+    };
+    p.draw = () => {
+      if (!PAINT) return;
+      if (BG) {   // 先贴静背景：它是按 BG.cam 画的，换算到现在的机位 CAM（只放大不缩小，盖得住整个画面）
+        p.push(); p.translate((BG.cam.x - CAM.x) * CAM.z * KX, (BG.cam.y - CAM.y) * CAM.z * KX); p.scale(CAM.z / BG.cam.z);
+        p.image(BG.img, -CW / 2, -CH / 2, CW, CH); p.pop();
+      }
+      p.push(); p.translate(-CW / 2, -CH / 2); p.scale(KX);
+      p.translate(W / 2, H / 2); p.scale(CAM.z); p.translate(-CAM.x, -CAM.y);   // 镜头的推拉在 p5 里做，矢量重画
+      PAINT(p, T);
+      p.pop();
+    };
+  });
+});
+
+MV.page({
+  W, H, fps: FPS, duration: DURATION,
+  ready: async () => {
+    await sketchReady;
+    if (window.LYRICS) await MV.font(`${MV.lyricStyle.weight} ${MV.lyricStyle.size}px ${MV.lyricStyle.font}`);   // 歌词字体下好再画；没下到会报出来
+  },
+  draw: drawFrame,
+  overlay: (g, t) => {                            // 纸纹 + 歌词：最上层、不跟镜头动。歌词换成画风自己的写法（比如按笔顺一笔笔写）
+    g.globalCompositeOperation = 'multiply'; g.drawImage(paper, 0, 0, W, H); g.globalCompositeOperation = 'source-over';
+    MV.drawLyric(g, t);
+  },
+  blur: () => 1,
+});
+</script></body></html>

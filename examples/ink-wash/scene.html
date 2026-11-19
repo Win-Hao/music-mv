@@ -1,0 +1,1000 @@
+<!doctype html>
+<!--
+  中国水墨（写意 / ink wash）· 晨雾江上：渔翁戴斗笠撑一叶小舟穿过芦苇，竹篙拍上点水惊起白鹭，墨在水里晕开、落成层层远山，白鹭飞成天上的一笔。
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。6 秒，BPM 72，两个镜头，中间一次「墨在水里晕开」的转场。
+
+  关键画法（Canvas 2D，纸、笔、洇都自己写，不靠画图库；页面用 ../../templates/mv/kit.js 的 MV.page）：
+  1. 分层：每个镜头拆成几层缓存好的墨（对岸、远水、中景芦苇、近水、近景芦苇；远山四层、近岸），按视差跟着镜头走：
+     画面 x = 世界 x + p × V × (t − ref)。所有墨先画进一张透明的「墨层」，最后 multiply 叠到纸上，纸纹从墨底下透出来。
+     纸不跟镜头动：镜头移的是纸上的墨（GIF 也因此小：纸白的地方每张都一样）。
+  2. 纸：开页面造一张宣纸（makePaper）：几千根弯曲的纤维 + 两层云絮状的明暗 + 细颗粒，同时留一张「纤维图」FW，洇墨时查它。
+  3. 笔（brush）：一笔 = 中线 + 粗细曲线；起笔藏锋（先细、顿一下鼓起来），收笔出锋或回锋。笔头横切成 3–40 束笔毛：先按并集铺一层，
+     每束再补一点墨（笔触里一丝丝深浅），侧锋时一边饱一边淡；干笔时每束沿笔路按自己的噪声断开，越往笔尾越干 → 飞白。
+     种子是「这一笔的名字 + 第几束毛」，同一笔每一张的飞白断口都在同一处。
+  4. 洇（wetten）：画完的一团墨逐像素洇一次：墨化开一点，水线顺着纤维乱一点，线内补一层淡墨，最外沿一道浅水渍；朱色往边上积一圈（pool）。
+  5. 颜色：墨分五色只靠浓度（焦 .95、浓 .8、重 .6、淡 .3、清 .1）。只有墨 #181516 和一个朱 #C22A18：全片只有初升的太阳是朱，
+     两个镜头里是同一个太阳、同一个位置，慢慢往上升，下半截被一缕雾擦淡。
+  6. 物件：芦苇的叶子每片一笔撇出去（藏锋起、越走越细、出锋收尖，有的半路折一下），茎一笔，芦花几下干的淡墨；风按 9 档弯，用到哪档才画、洇、缓存。
+     渔翁：斗笠一片淡墨加两笔浓墨斜面、一笔帽檐、顶上焦墨一点；蓑衣是一把从肩往下撒开的干笔（飞白就是蓑草）；脸藏在斗笠底下，不画五官。
+     竹篙从人身后过，画到人这里断开一截（画家的避让），握篙的手在蓑衣外头。小舟：侧锋一笔淡墨拖出船帮，浓墨一笔船舷，倒影几笔断开的淡墨。
+     水：大片留白，只扫几笔横的淡墨、清墨。白鹭：身子是纸白（在墨层上按身形挖掉），淡墨细线勾、留断口，喙浓墨、腿焦墨，飞羽一根根分开。
+     远山：几座峰各一个圆顶（一边陡一边缓）取最高的那座，淡墨一层层铺（山脊叠得最深、往下化开），米点顺着山脊点；四层山一层比一层近、墨一层比一层重。
+  7. 雾和光：雾是一条条横的雾带（四分之一分辨率、首尾相接），在墨层上 destination-out 擦掉墨 = 露出纸白，每帧按 t 平移；
+     先画远的、擦一道雾、再画近的，雾只盖住它后面的东西。不用黄色、不发光：晨光就是大片留白。
+  8. 动起来：镜头一直往左慢移（手卷从右往左看，近水那层一秒 55 px），一个镜头里只这一种慢动作；会动的墨一秒 12 张
+     （芦苇、船和人、涟漪、水花、白鹭按张数取、缓存），雾按 t 平滑地漂。拍上：竹篙一扎入水，溅几点墨（「啪」）、荡开扁扁的涟漪，白鹭隔一张受惊伸脖、再一张起飞。
+  9. 转场 = 墨在水里晕开：篙拔出水那一点冒出一滴墨，先贴着水面摊开（中心最浓），再漫上来盖住画面：前沿最浓、后面拖着打卷的墨丝、越往里越淡，
+     淡到透出镜头 B。低分辨率（640×360）逐格算墨的浓度 D 和露出 B 的遮罩 M，放大贴上：A 只留墨还没晕到的地方，B 只在晕开、变淡的地方露出来，
+     再叠上晕开的墨。前沿 = 半径 R(t) − 距离 + 噪声，噪声在跟着水走的坐标里，墨团是一个形状在长大，不是一片噪声在闪。
+     R 开头 0.3 秒一冒、之后匀速；R_END 开页面时按噪声算好，让前沿正好在落点那一拍扫过最后一个角；之后残墨 0.8 秒退净（浓墨化开再退成淡墨）。
+     白鹭、太阳跨两个镜头一直画在最上面：白鹭飞过浓墨时是一只白鸟，越飞越远越小，第 6 拍简成一笔浓墨。
+  10. 歌词 = 题跋：竖排两列，从右往左写在右上的空白里。字形取 hanzi-writer-data 的笔画中线，按笔顺用同一支笔写（横细竖粗，每个字歪一点、
+     大小差几个百分点），运笔速度一样，笔画多的字写得久；一列蘸一次墨，往下越写越枯；按字实际的高度往下排（「一」不占整格）。
+     不写标点（两列之间就是停顿），不加印章；写完的字也洇一次；画在 overlay 里（最上层、不跟镜头动）。
+
+  时间线（第 0 拍在 0 秒，一拍 0.833 秒）：
+    第 0–2 拍  小舟往左走，渔翁撑着上一篙；第 1 拍起拔篙、竖起来、往下扎。
+    第 2 拍（1.667 秒）竹篙入水：溅墨点、涟漪一圈圈荡开；白鹭隔一张伸脖受惊，再一张起飞。第 2.25 拍起写第一列「一篙点破晨雾」。
+    第 3 拍（2.5 秒）篙尖出水，墨从篙眼晕开。第 5 拍（4.167 秒，window.PLAN）整幅晕满、落到远山，残墨再退。
+    第 5.15 拍起写第二列「白鹭飞成一笔」；第 6 拍（5.0 秒）白鹭简成天上的一笔，之后接着往远处飘。
+  画面只由 t 决定：随机数都是 MV.rng / MV.hash 加固定种子（「元素名 + 序号」）；笔毛、山脊的一维噪声种子取 MV.hash、格点用整数混合（每帧要算几万次，
+  比 MV.noise 快，结果同样只由种子决定）。不用 Math.random() / Date，不存上一帧（芦苇、船、白鹭、写完的字有缓存，内容只取决于第几张 / 第几档 / 第几个字）。
+  速度（4 核、没独显的电脑）：开页面准备约 3.1–3.3 秒（取笔画数据、造纸、烤各层）；1920×1080 一帧 0.11–0.29 秒（含出 PNG；转场那几拍两个镜头都画，最慢）。
+  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 出 72 张，再
+    ffmpeg -framerate 12 -i %06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0
+    4.4 MB（640×360、72 帧；128 色 4.8 MB，超了）。
+  坑：
+    - 笔毛一束束各填各的，毛之间会露出细缝像条纹：先填满并集再补深浅；干笔噪声的步长太短，飞白碎成噪点
+    - 水渍太深会多出一圈「描边」：山的 ring 别超过 .12
+    - 逐像素洇墨的成本跟面积走：会动的东西用贴身的小画布、按张数缓存，别整屏洇
+    - 缓存图的下边、两头会切出一道直线：山脚、山尾先用渐变擦掉（fadeDown / fadeEnds）再洇
+    - 一秒 12 张的动作别用小数比时刻（t < T + 1/12 会差一张），按第几张（整数）比
+    - 晕墨的噪声幅度要跟着半径一起从 0 长出来，不然开头一帧就冒出一大团
+    - 晕墨里整片匀的灰像一团烟：刚滴下去中心最浓，晕开后前沿最浓，里面只留几缕墨丝
+    - 长篙从人前面横过会像串在人身上：画在人后面，人这里断开一截
+    - 自己开的画布都要放在 CPU 上（ctx2d 里的 willReadFrequently）：浏览器按用法给画布开、关 GPU 加速，同一个 t 单独渲和顺着渲会差几级
+  外部资源：hanzi-writer-data@2.0.1（jsDelivr，Arphic Public License），只取歌词里 11 个字的笔画中线（MV.glyphs：网络问题取不到时出片报错停下；数据里没有的字才退回系统楷体）。
+-->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }</style>
+</head><body><script>
+'use strict';
+// ───────────────────────── 时间线：全部从拍子算（BPM 72，第 0 拍在 0 秒，一拍 0.833 秒）─────────────────────────
+const W = 1920, H = 1080, FPS = 30, BPM = 72, DUR = 6;
+MV.tempo(BPM, 0);
+const { clamp, lerp, seg, ease } = MV;
+const bt = (n) => MV.beatTime(n);
+const T_PLANT = bt(2);            // 1.667 秒 竹篙点进水里：溅几点墨、荡开涟漪，白鹭受惊
+const T_FLY = (Math.round(T_PLANT * 12) + 2) / 12;   // 白鹭隔两张（一秒 12 张）起飞；按张数算，免得小数比大小差一张
+const T_LIFT = bt(3);             // 2.500 秒 篙尖出水，墨从篙眼那儿晕开
+const T_LAND = bt(5);             // 4.167 秒 墨晕满画面、退成淡墨：落到远山（转场落点）
+const T_ONE = bt(6);              // 5.000 秒 白鹭飞成天上的一笔
+const T_W1 = bt(2.25), T_W2 = bt(5.15);   // 两列题跋起笔
+const HAZE = 0.8;                 // 落点之后残墨再退多久
+window.PLAN = [+T_LAND.toFixed(3)];
+const LYRIC = '一篙点破晨雾，白鹭飞成一笔';
+window.LYRICS = [[+T_W1.toFixed(3), DUR, LYRIC]];
+const POSES = 12, q12 = (t) => Math.floor(t * POSES + 1e-6) / POSES;   // 会动的墨一秒 12 张
+const V = 55;                     // 镜头往左慢移（手卷从右往左看）：近水那层一秒走 55 px，远的层乘视差 p
+const INK = [24, 21, 22], VERM = [194, 42, 24];
+const TAU = Math.PI * 2;
+const SYS_FONT = '"KaiTi","STKaiti","Kaiti SC","PingFang SC","Microsoft YaHei",serif';
+
+// ───────────────────────── 工具 ─────────────────────────
+const sm = (a, b, v) => { const k = clamp((v - a) / (b - a)); return k * k * (3 - 2 * k); };
+const gs = (x, c, s) => Math.exp(-(((x - c) / s) ** 2));
+const hashStr = MV.hash, rng = MV.rng, rnd = (key) => rng(key)();
+// 一维噪声（笔毛断口、山脊）：种子用 MV.hash 取，格点用整数混合。每帧要算几万次，比 MV.noise 快；结果同样只由种子决定
+function lat(seed, i) { let h = (seed ^ Math.imul(i | 0, 0x27d4eb2d)) >>> 0; h = Math.imul(h ^ (h >>> 15), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296 * 2 - 1; }
+function n1(seed, x) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return lat(seed, i) * (1 - u) + lat(seed, i + 1) * u; }
+function fbm1(seed, x) { return .62 * n1(seed, x) + .27 * n1(seed + 101, x * 2.13) + .11 * n1(seed + 211, x * 4.37); }
+// 二维值噪声（纸、雾、晕墨）：MV.rng 铺一张随机格子，平滑插值，四周循环
+function grid(key, n) { const r = rng(key), a = new Float32Array(n * n); for (let i = 0; i < a.length; i++) a[i] = r(); return { a, n }; }
+function vn(g, x, y) {
+  const n = g.n, i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const i0 = ((i % n) + n) % n, j0 = ((j % n) + n) % n, i1 = (i0 + 1) % n, j1 = (j0 + 1) % n, a = g.a;
+  return lerp(lerp(a[j0 * n + i0], a[j0 * n + i1], sx), lerp(a[j1 * n + i0], a[j1 * n + i1], sx), sy);
+}
+function cv(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
+// 自己开的画布都放在 CPU 上（willReadFrequently）：浏览器会按用法给画布开 / 关 GPU 加速，开和不开叠出来的像素差几级，
+// 同一个 t 先渲、后渲会不一样；全在 CPU 上，画面才只由 t 决定
+const ctx2d = (c) => c.getContext('2d', { willReadFrequently: true });
+const ink = (a, col = INK) => `rgba(${col[0]},${col[1]},${col[2]},${clamp(a).toFixed(3)})`;
+const bez = (a, b, c, d, u) => { const v = 1 - u; return [0, 1].map((k) => v * v * v * a[k] + 3 * v * v * u * b[k] + 3 * v * u * u * c[k] + u * u * u * d[k]); };
+const rot = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a)];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+
+// ───────────────────────── 宣纸 ─────────────────────────
+let PAPER = null, FW = null;      // FW：每个像素的纤维 / 吸水度（0..1），洇墨和纸挡墨都查它
+function makePaper() {
+  const fc = cv(W, H), f = ctx2d(fc), r = rng('fiber');
+  f.lineCap = 'round'; f.strokeStyle = '#000';
+  for (let i = 0; i < 6500; i++) {             // 纸纤维：短短长长、弯弯的
+    const x = r() * W, y = r() * H, a = r() * TAU, L = 5 + r() * r() * 75, b = (r() - .5) * 1.5;
+    f.globalAlpha = .25 + .75 * r(); f.lineWidth = .5 + r() * 1.2;
+    f.beginPath(); f.moveTo(x, y); f.quadraticCurveTo(x + Math.cos(a + b) * L * .5, y + Math.sin(a + b) * L * .5, x + Math.cos(a) * L, y + Math.sin(a) * L); f.stroke();
+  }
+  const fd = f.getImageData(0, 0, W, H).data;
+  const big = grid('paper-big', 24), mid = grid('paper-mid', 96), fine = grid('paper-fine', 640), pore = grid('paper-pore', 512);
+  PAPER = cv(W, H); const pg = ctx2d(PAPER), im = pg.createImageData(W, H), d = im.data;
+  FW = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const k = y * W + x, fib = fd[k * 4 + 3] / 255;
+    const cloud = vn(big, x / 110, y / 110) * .6 + vn(mid, x / 26, y / 26) * .4;     // 云絮：纸浆厚薄不匀
+    const g = vn(fine, x / 3.2, y / 3.2);
+    const tone = 1 + (cloud - .5) * .05 + fib * .028 - (g - .5) * .022;
+    d[k * 4] = clamp(241 * tone, 0, 255); d[k * 4 + 1] = clamp(235 * tone, 0, 255); d[k * 4 + 2] = clamp(221 * tone - fib * 3, 0, 255); d[k * 4 + 3] = 255;
+    FW[k] = clamp(.12 + .45 * vn(pore, x / 4.5, y / 4.5) + .3 * cloud + .5 * fib);
+  }
+  pg.putImageData(im, 0, 0);
+}
+const fwAt = (x, y) => { y |= 0; if (y < 0 || y >= H) return .5; x = (((x | 0) % W) + W) % W; return FW[y * W + x]; };
+
+// ───────────────────────── 洇 ─────────────────────────
+// c：画好一团墨的画布（只看 alpha），(ox, oy)：它在纸上的位置。o：r 水走多远、bleed 洇出去的淡墨、th 水线、
+// soft 水线软硬、ring 水渍深浅、ringW 水渍宽、feather 纤维把水线扰乱多少、grain 纸挡墨多少、pool 颜料往边上跑、col 颜料
+function wetten(c, ox, oy, o) {
+  const w = c.width, h = c.height, g = ctx2d(c);
+  const im = g.getImageData(0, 0, w, h), d = im.data;
+  const bc = cv(w, h), bg = ctx2d(bc);
+  bg.filter = `blur(${o.r}px)`; bg.drawImage(c, 0, 0); const bd = bg.getImageData(0, 0, w, h).data;
+  const sc = cv(w, h), sg = ctx2d(sc);      // 墨本身也化开一点（湿笔边是软的）
+  sg.filter = `blur(${o.cr ?? 1}px)`; sg.drawImage(c, 0, 0); const sd = sg.getImageData(0, 0, w, h).data, cm = o.cm ?? .6;
+  const col = o.col || INK, th = o.th ?? .04, soft = o.soft ?? .03, ringW = o.ringW ?? .05, fe = o.feather ?? .15, gr = o.grain ?? .15, bl = o.bleed ?? .25, ri = o.ring ?? .1;
+  for (let j = 0; j < h; j++) {
+    const wy = oy + j;
+    for (let i = 0; i < w; i++) {
+      const k = (j * w + i) * 4, A = d[k + 3] / 255, B = bd[k + 3] / 255;
+      if (A === 0 && B < .004) continue;
+      const f = fwAt(ox + i, wy), e = B + (f - .5) * fe * Math.min(1, B * 6 + .2);
+      const wet = sm(th, th + soft, e);
+      const bleed = wet * bl * Math.min(1, B * 2.2);
+      const ring = ri * wet * (1 - sm(th + soft, th + soft + ringW, e));
+      const pool = o.pool ? o.pool * clamp((A - B) * 2.5) * A : 0;
+      const core = clamp((A * (1 - cm) + sd[k + 3] / 255 * cm) * (1 - gr * f) + pool);
+      const a = 1 - (1 - core) * (1 - bleed) * (1 - ring);
+      d[k] = col[0]; d[k + 1] = col[1]; d[k + 2] = col[2]; d[k + 3] = Math.round(a * 255);
+    }
+  }
+  g.putImageData(im, 0, 0);
+  return c;
+}
+// 在 box（世界坐标）里画一团墨、洇一次、贴到 dst
+function wet(dst, box, o, draw) {
+  const x0 = Math.floor(box[0]), y0 = Math.floor(box[1]), c = cv(box[2] - x0, box[3] - y0), g = ctx2d(c);
+  g.translate(-x0, -y0); draw(g); wetten(c, x0, y0, o);
+  dst.drawImage(c, x0, y0);
+}
+
+// ───────────────────────── 笔 ─────────────────────────
+function spline(pts, n = 8) {           // Catmull-Rom：把几个手点拉成顺的笔路
+  if (pts.length < 3) return pts.map((p) => [p[0], p[1]]);
+  const o = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    for (let j = 0; j < n; j++) {
+      const u = j / n, u2 = u * u, u3 = u2 * u, f = (q) => .5 * (2 * p1[q] + (-p0[q] + p2[q]) * u + (2 * p0[q] - 5 * p1[q] + 4 * p2[q] - p3[q]) * u2 + (-p0[q] + 3 * p1[q] - 3 * p2[q] + p3[q]) * u3);
+      o.push([f(0), f(1)]);
+    }
+  }
+  o.push([pts[pts.length - 1][0], pts[pts.length - 1][1]]);
+  return o;
+}
+function resample(pts, step) {
+  const o = [pts[0]]; let carry = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]); if (d < 1e-6) continue;
+    let pos = step - carry;
+    while (pos <= d) { o.push([lerp(a[0], b[0], pos / d), lerp(a[1], b[1], pos / d)]); pos += step; }
+    carry = d - (pos - step);
+  }
+  const l = pts[pts.length - 1], p = o[o.length - 1];
+  if (Math.hypot(l[0] - p[0], l[1] - p[1]) > step * .35) o.push(l); else if (o.length > 1) o[o.length - 1] = l;
+  return o;
+}
+// 粗细曲线：head 起笔（hide 藏锋 / point 尖起 / none），tip 收笔（point 出锋 / round 回锋 / blunt 平）
+function prof(s, L, o, seed) {
+  const b = o.w; let m = 1;
+  if (o.head === 'hide') m *= (.5 + .5 * sm(0, .5 * b, s)) * (1 + .26 * Math.exp(-(((s - .6 * b) / (.45 * b)) ** 2)));
+  else if (o.head === 'point') m *= .12 + .88 * sm(0, o.headLen || 1.1 * b, s);
+  const r = L - s;
+  if (o.tip === 'point') m *= .05 + .95 * sm(0, o.tipLen || 1.7 * b, r);
+  else if (o.tip === 'round') m *= (1 + .14 * Math.exp(-(((r - .5 * b) / (.4 * b)) ** 2))) * (.6 + .4 * sm(0, .3 * b, r));
+  m *= 1 - (o.thin ?? .1) * Math.sin(Math.PI * clamp(s / L));
+  m *= 1 + (o.wob ?? .07) * n1(seed + 17, s / (b * 1.6 + 6));
+  return m;
+}
+// 一笔：pts 中线，o.w 笔宽，o.a 墨量（墨分五色），o.dry 干，o.f 只画出前面这么长（写字的过程）
+function brush(g, pts, o) {
+  const w = o.w, P = resample(spline(pts, o.seg || 8), o.step || clamp(w * .2, 1.2, 9));
+  const n = P.length, col = o.col || INK, seed = hashStr(o.seed || 'brush');
+  if (n < 2) { g.fillStyle = ink(o.a, col); g.beginPath(); g.arc(P[0][0], P[0][1], w * .5, 0, TAU); g.fill(); return; }
+  const S = new Float32Array(n); for (let i = 1; i < n; i++) S[i] = S[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
+  const L = S[n - 1] || 1;
+  let m = n;
+  if (o.f !== undefined && o.f < 1) { const want = o.f * L; m = 1; while (m < n && S[m] <= want) m++; if (m < 2) m = 2; }
+  const NX = new Float32Array(n), NY = new Float32Array(n), WD = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+    NX[i] = -dy / l; NY[i] = dx / l; WD[i] = w * prof(S[i], L, o, seed) * .5;
+  }
+  const KB = o.bands || clamp(Math.round(w / 2.2), 3, 40), r = rng((o.seed || 'brush') + ':load');
+  const dry = o.dry || 0, dry0 = o.dry0 ?? .25, gap = o.gap || Math.max(14, w * .9);
+  // 整笔先铺一层（所有笔毛的并集，一次填，笔毛之间没有缝），每束笔毛再按自己沾的墨补一点（笔触里一丝丝深浅）。
+  // side：侧锋，笔肚一边饱一边淡（1 = 法线正向那边饱，-1 反过来）；rim：最外几束毛多积一点色
+  const vr = o.var ?? .22, sd = o.side || 0, base = o.a * (1 - vr) * (1 - .42 * Math.abs(sd)), body = new Path2D(), bands = [];
+  // uneven：笔毛一束粗一束细（丝不等宽，不像尺子画的条纹）
+  const TB = [-1]; { const rw = rng((o.seed || 'brush') + ':w'), ws = []; for (let k = 0; k < KB; k++) ws.push(o.uneven ? .3 + 1.4 * rw() * rw() + .3 * rw() : 1);
+    const tot = ws.reduce((a, b) => a + b, 0); let acc = 0; for (const x of ws) { acc += x; TB.push(-1 + 2 * acc / tot); } }
+  for (let k = 0; k < KB; k++) {
+    const t0 = TB[k], t1 = TB[k + 1], edge = Math.abs((t0 + t1) / 2), pos = (t0 + t1) / 4 + .5;
+    const sf = 1 - Math.abs(sd) * .42 * (sd > 0 ? 1 - pos : pos), rim = 1 + (o.rim || 0) * sm(.75, 1, edge);
+    const load = clamp(o.a * (1 - vr * r()) * sf * rim, 0, .98), path = new Path2D();
+    for (let i = 0; i < m - 1; i++) {
+      if (dry > 0) {
+        const u = S[i] / L, dr = dry * (o.dryFrom !== undefined ? sm(o.dryFrom, 1, u) : dry0 + (1 - dry0) * Math.pow(u, 1.4)) * (.5 + edge);
+        if (.5 + .5 * fbm1(seed + k * 7919, S[i] / gap) < dr) continue;
+      }
+      const p = P[i], q = P[i + 1], h0 = WD[i], h1 = WD[i + 1];
+      for (const pp of [path, body]) {
+        pp.moveTo(p[0] + NX[i] * t0 * h0, p[1] + NY[i] * t0 * h0); pp.lineTo(p[0] + NX[i] * t1 * h0, p[1] + NY[i] * t1 * h0);
+        pp.lineTo(q[0] + NX[i + 1] * t1 * h1, q[1] + NY[i + 1] * t1 * h1); pp.lineTo(q[0] + NX[i + 1] * t0 * h1, q[1] + NY[i + 1] * t0 * h1); pp.closePath();
+      }
+    }
+    bands.push([path, load]);
+  }
+  g.fillStyle = ink(base, col); g.fill(body);
+  for (const [path, load] of bands) { const ex = 1 - (1 - load) / (1 - base); if (ex > .005) { g.fillStyle = ink(ex, col); g.fill(path); } }
+  g.fillStyle = ink(o.a * (o.cap ?? .85), col);
+  if (o.head === 'hide' || o.head === 'round') { g.beginPath(); g.arc(P[0][0], P[0][1], WD[0], 0, TAU); g.fill(); }
+  if (m < n) { g.fillStyle = ink(o.a * .9, col); g.beginPath(); g.arc(P[m - 1][0], P[m - 1][1], WD[m - 1] * .95, 0, TAU); g.fill(); }   // 正在走的笔头
+  else if (o.tip === 'round') { g.beginPath(); g.arc(P[n - 1][0], P[n - 1][1], WD[n - 1] * .9, 0, TAU); g.fill(); }
+}
+// 一团不规则的墨（点、苔点、米点、水花）
+function blob(g, cx, cy, rx, ry, a, key, col = INK, jag = .18) {
+  const r = rng(key), n = 22, ph = r() * 9;
+  g.fillStyle = ink(a, col); g.beginPath();
+  for (let i = 0; i <= n; i++) { const t = i / n * TAU, k = 1 + jag * n1(hashStr(key), t * 1.6 + ph); const x = cx + Math.cos(t) * rx * k, y = cy + Math.sin(t) * ry * k; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.closePath(); g.fill();
+}
+
+// ───────────────────────── 分层和雾 ─────────────────────────
+// 每层是一张缓存好的图，按视差跟着镜头走：画面 x = 世界 x + p × V × (t − ref)。ref 那一刻世界坐标就是画面坐标（A 取 T_PLANT，B 取 T_LAND）
+function bake(p, ref, box, paint) {
+  const [x0, y0, x1, y1] = box.map(Math.round), c = cv(x1 - x0, y1 - y0), g = ctx2d(c);
+  g.translate(-x0, -y0); paint(g);
+  return { c, ox: x0, oy: y0, p, ref };
+}
+const spanA = (p, y0, y1) => [-p * V * (T_LAND + .05 - T_PLANT) - 60, y0, W + p * V * T_PLANT + 60, y1];
+const spanB = (p, y0, y1) => [-p * V * (DUR - T_LAND) - 60, y0, W + p * V * (T_LAND - T_LIFT) + 60, y1];
+const drawLayer = (c, L, t) => c.drawImage(L.c, L.ox + L.p * V * (t - L.ref), L.oy);
+// 雾：一条横着的雾带（四分之一分辨率、左右首尾相接），在墨层上 destination-out 擦掉墨 = 露出纸白；每帧按 t 平移。
+// 先画远的、擦一道雾、再画近的：雾只盖住它后面的东西
+function makeMist(key, h, o = {}) {
+  const bw = 2 * W, lw = bw / 4, lh = Math.ceil(h / 4), c = cv(lw, lh), g = ctx2d(c), im = g.createImageData(lw, lh), d = im.data;
+  const oct = [[12, .55], [24, .3], [48, .15]].map(([n, w], i) => [grid(key + i, n), n, w]);
+  for (let j = 0; j < lh; j++) {
+    const v = (j + .5) / lh, pr = Math.exp(-(((v - .5) / (o.sig ?? .2)) ** 2));
+    for (let i = 0; i < lw; i++) {
+      let n = 0; for (const [gr, nn, w] of oct) n += w * vn(gr, i / lw * nn, v * (o.ny ?? 2.4) * nn / 12);
+      d[(j * lw + i) * 4 + 3] = Math.round(clamp((n - (o.cut ?? .34)) * (o.gain ?? 2.6)) * pr * 255);
+    }
+  }
+  g.putImageData(im, 0, 0);
+  return { c, bw, h, y: o.y, v: o.v, k: o.k, x0: o.x0 || 0 };
+}
+function mist(c, M, t) {
+  const x = (((M.x0 + M.v * t) % M.bw) + M.bw) % M.bw;
+  c.globalCompositeOperation = 'destination-out'; c.globalAlpha = M.k;
+  c.drawImage(M.c, x - M.bw, M.y - M.h / 2, M.bw, M.h); c.drawImage(M.c, x, M.y - M.h / 2, M.bw, M.h);
+  c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+}
+let MIST = null;
+function makeMists() {
+  MIST = {
+    ah: makeMist('mistAh', 250, { y: 470, v: 7, k: 1, sig: .2, cut: .24, gain: 3.2 }),          // A：对岸那条，远山只露出几段
+    ar: makeMist('mistAr', 190, { y: 668, v: 24, k: .9, sig: .2, cut: .26, gain: 3 }),         // A：中景芦苇根上
+    b1: makeMist('mistB1', 200, { y: 642, v: 3, k: .95, cut: .26, gain: 3 }),                  // B：最远一层山脚
+    b2: makeMist('mistB2', 230, { y: 628, v: -6, k: .9, cut: .26, gain: 3 }),                  // B：第二层山脚
+    b3: makeMist('mistB3', 270, { y: 726, v: 13, k: .95, sig: .22, cut: .26, gain: 3 }),       // B：主峰山腰往下，山像浮在雾上
+    b4: makeMist('mistB4', 230, { y: 806, v: 18, k: .95, sig: .22, cut: .26, gain: 3 }),       // B：近山山脚
+    sun: makeMist('mistSun', 110, { y: 292, v: -9, k: .9, sig: .24, cut: .24, gain: 3 }),      // 太阳下半截那缕雾（两个镜头共用）
+  };
+}
+
+// ───────────────────────── 芦苇 ─────────────────────────
+// 一棵芦苇：茎一笔；叶子每片一笔撇出去（藏锋按下去，越走越细，出锋收尖，有的半路折一下）；顶上一簇芦花是几下干的淡墨。
+// 风：bend −1..1，茎越往上弯得越多，叶子跟着顺过去，芦花甩得最多。按 2×LEV+1 档用到时才画、洇、缓存（一秒 12 张里挑档），
+// 形状的随机数只在 reed() 里取一次，同一片叶子的飞白种子不随档变
+const LEV = 4;
+function reed(key, o) {
+  const r = rng(key), h = o.h, s = h / 600, n = o.n ?? 2 + Math.floor(r() * 3), leaves = [];
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 ? 1 : -1;
+    leaves.push({ f: .07 + .6 * (i + .2 + .6 * r()) / n, side: r() < .85 ? side : -side, len: h * (.3 + .3 * r()), a0: .25 + .35 * r(), droop: .3 + .55 * r(),
+      kink: r() < .3, w: (12 + 9 * r()) * s * (o.lw ?? 1), a: .82 + .16 * r() });
+  }
+  const pl = [];
+  if (o.plume ?? r() < .8) for (let k = 0; k < 7; k++) pl.push({ ang: (r() - .5) * .9, len: (40 + 44 * r()) * s, w: (6 + 5 * r()) * s, a: .26 + .2 * r(), curl: (r() - .3) * .7 });
+  return { key, x: o.x, y: o.y, h, s, p: o.p, ref: o.ref, tone: o.tone, wo: o.wo, lean: o.lean ?? (r() - .4) * .2, sway: o.sway ?? (.1 + .06 * r()), leaves, pl, stemW: (o.sw ?? 6) * s };
+}
+function reedStrokes(P, bend) {
+  const S = [], h = P.h;
+  const stemAt = (f) => [P.lean * h * f + bend * P.sway * h * Math.pow(f, 1.7), -h * f];
+  const stem = []; for (let k = 0; k <= 8; k++) stem.push(stemAt(k / 8));
+  S.push({ pts: stem, o: { w: P.stemW, a: .8 * P.tone, head: 'hide', tip: P.pl.length ? 'blunt' : 'point', dry: .4, dryFrom: .35, seed: P.key + 'stem', gap: 30, thin: .1 } });
+  for (const [i, L] of P.leaves.entries()) {
+    let ang = -Math.PI / 2 + L.side * L.a0 + bend * .45 * (.4 + L.f), p = stemAt(L.f);
+    const pts = [p], st = L.len / 4;
+    for (let k = 0; k < 4; k++) {
+      ang += L.side * L.droop * (k === 2 && L.kink ? 1.7 : .32) * (k ? 1 : .3) + bend * .06;
+      p = [p[0] + Math.cos(ang) * st, p[1] + Math.sin(ang) * st]; pts.push(p);
+    }
+    S.push({ pts, o: { w: L.w, a: L.a * P.tone, head: 'hide', tip: 'point', tipLen: L.len * .45, thin: -.25, dry: .35, dryFrom: .45, seed: P.key + 'leaf' + i, gap: 28, wob: .1 } });
+  }
+  if (P.pl.length) {                     // 芦花：往风吹的那边垂，几下干笔淡墨
+    const T = stemAt(1), dir = -Math.PI / 2 + .6 + .75 * bend;
+    for (const [i, q] of P.pl.entries()) {
+      const a0 = dir + q.ang, L = q.len;
+      const pts = [T, [T[0] + Math.cos(a0) * L * .5, T[1] + Math.sin(a0) * L * .5], [T[0] + Math.cos(a0 + q.curl) * L, T[1] + Math.sin(a0 + q.curl) * L + L * .22]];
+      S.push({ pts, o: { w: q.w, a: q.a * P.tone, head: 'point', tip: 'point', dry: .65, dryFrom: .15, gap: 9, seed: P.key + 'pl' + i, var: .4 } });
+    }
+  }
+  return S;
+}
+const PLANT_ART = new Map();
+function plantArt(P, lev) {
+  const key = P.key + ':' + lev; if (PLANT_ART.has(key)) return PLANT_ART.get(key);
+  const S = reedStrokes(P, lev / LEV);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, wmax = 0;
+  for (const s of S) { wmax = Math.max(wmax, s.o.w); for (const p of s.pts) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); } }
+  const pad = Math.ceil(wmax + 12);
+  x0 = Math.floor(x0 - pad); y0 = Math.floor(y0 - pad);
+  const c = cv(x1 + pad - x0, y1 + pad - y0), g = ctx2d(c);
+  g.translate(-x0, -y0);
+  for (const s of S) brush(g, s.pts, s.o);
+  wetten(c, Math.round(P.x + x0), Math.round(P.y + y0), P.wo);
+  const art = { c, dx: x0, dy: y0 };
+  if (PLANT_ART.size > 220) PLANT_ART.delete(PLANT_ART.keys().next().value);
+  PLANT_ART.set(key, art);
+  return art;
+}
+// 风：一阵阵从左往右吹过去（世界 x 越靠右越晚到），按 12 张/秒取
+const windAt = (x, tq) => clamp(.28 + .5 * Math.sin(1.7 * tq - x / 330) + .32 * MV.noise('gust', tq * .8 - x / 760), -1, 1);
+function drawPlants(c, list, t, tq) {
+  for (const P of list) {
+    const lev = clamp(Math.round(windAt(P.x, tq) * LEV), -LEV, LEV), a = plantArt(P, lev);
+    c.drawImage(a.c, P.x + a.dx + P.p * V * (t - P.ref), P.y + a.dy);
+  }
+}
+
+// ───────────────────────── 镜头 A：晨雾江上，小舟穿过芦苇 ─────────────────────────
+let A_FAR, A_FARWATER, A_WATER, MID_REEDS, NEAR_REEDS;
+const WO_NEAR = { r: 2, cr: .9, cm: .5, bleed: .18, th: .05, soft: .04, ring: .1, ringW: .05, feather: .2, grain: .14 };
+const WO_MID = { r: 2.6, cr: 1.3, cm: .65, bleed: .26, th: .04, soft: .04, ring: .12, ringW: .05, feather: .22, grain: .18 };
+function hStroke(g, key, x0, x1, y, w, a, o = {}) {        // 水面上一笔横的：起止尖、中段越走越干
+  const r = rng(key), pts = [];
+  for (let j = 0; j <= 4; j++) pts.push([lerp(x0, x1, j / 4), y + (r() - .5) * (o.wave ?? 5) + (o.tilt ?? 0) * j / 4]);
+  brush(g, pts, { w, a, head: 'point', tip: 'point', headLen: o.hl ?? 60, tipLen: o.tl ?? 120, dry: o.dry ?? .6, dryFrom: o.df ?? .3 + .3 * r(), gap: o.gap ?? 40, seed: key, var: .3, wob: .14, thin: (r() - .5) * .3 });
+}
+function bakeA() {
+  // 对岸：一抹清墨的矮山（山顶边上自带水渍），岸边一排横点、短竖是远处的芦苇和树。大半被雾吞掉
+  A_FAR = bake(.2, T_PLANT, spanA(.2, 340, 560), (g) => {
+    const hl = (x) => 456 - 36 * gs(x, 210, 210) - 22 * gs(x, 640, 170) - 8 * gs(x, 1010, 220) - 30 * gs(x, 1560, 240) - 16 * gs(x, 1930, 170) + 5 * fbm1(hashStr('farhill'), x / 60);
+    wet(g, [-220, 360, 2100, 540], { r: 4, cr: 2, cm: .8, bleed: .3, th: .025, soft: .03, ring: .12, ringW: .04, feather: .18, grain: .16 }, (h) => {
+      for (const [dep, a] of [[12, .05], [34, .045], [80, .035]]) {
+        h.fillStyle = ink(a); h.beginPath(); h.moveTo(-220, hl(-220));
+        for (let x = -220; x <= 2100; x += 6) h.lineTo(x, hl(x));
+        for (let x = 2100; x >= -220; x -= 6) h.lineTo(x, Math.min(hl(x) + dep, 492));
+        h.closePath(); h.fill();
+      }
+    });
+    wet(g, [-220, 440, 2100, 530], { r: 2.5, bleed: .25, th: .04, ring: .1, feather: .2, grain: .16 }, (h) => {
+      const r = rng('shore');
+      for (let i = 0; i < 300; i++) {
+        const x = -200 + r() * 2280, y = 478 + r() * 12, k = r();
+        if (k < .55) blob(h, x, y, 6 + 8 * r(), 2.5 + 2 * r(), .1 + .08 * r(), 'sh' + i);
+        else brush(h, [[x, y + 4], [x + (r() - .5) * 6, y - 10 - 16 * r()]], { w: 2.5 + 2 * r(), a: .12 + .08 * r(), head: 'point', tip: 'point', seed: 'shr' + i });
+      }
+      hStroke(h, 'shoreline', -200, 2080, 494, 5, .1, { hl: 300, tl: 300, dry: .5 });
+    });
+  });
+  A_FARWATER = bake(.45, T_PLANT, spanA(.45, 490, 690), (g) => {
+    wet(g, [-260, 500, 2120, 680], { r: 3, bleed: .2, th: .04, ring: .08, feather: .2, grain: .18 }, (h) => {
+      const r = rng('fwater');
+      for (let i = 0; i < 9; i++) { const y = 520 + i * 17 + r() * 10, x0 = -240 + r() * 1700, l = 260 + 600 * r(); hStroke(h, 'fw' + i, x0, x0 + l, y, 3 + 4 * r(), .05 + .05 * r(), { gap: 50 }); }
+    });
+  });
+  // 近处的水：大片留白，只在船四周、下半截扫几笔淡墨
+  A_WATER = bake(1, T_PLANT, spanA(1, 700, 1080), (g) => {
+    wet(g, [-260, 700, 2140, 1080], { r: 3, bleed: .22, th: .04, ring: .08, feather: .2, grain: .2 }, (h) => {
+      const r = rng('nwater');
+      const rows = [[742, .1], [770, .12], [880, .16], [905, .13], [948, .14], [990, .11], [1032, .1], [1062, .09]];
+      for (const [i, [y, a]] of rows.entries()) for (let k = 0; k < 2; k++) {
+        const x0 = -240 + r() * 1900, l = 180 + 520 * r();
+        hStroke(h, 'nw' + i + k, x0, x0 + l, y + (r() - .5) * 14, 4 + 8 * r(), a * (.7 + .5 * r()), { gap: 46, tilt: (r() - .5) * 8 });
+      }
+    });
+  });
+  // 中景芦苇（和白鹭一层，p = .7）：小、淡墨
+  MID_REEDS = [];
+  const clump = (key, xa, xb, y, n, ha, hb) => { const r = rng(key); for (let i = 0; i < n; i++) MID_REEDS.push(reed(key + i, { x: lerp(xa, xb, (i + r()) / n), y: y + (r() - .5) * 10, h: ha + (hb - ha) * r(), tone: .34 + .14 * r(), p: .7, ref: T_PLANT, lw: .85, sw: 7, wo: WO_MID })); };
+  clump('mrA', 260, 660, 704, 9, 140, 250);
+  clump('mrB', 690, 790, 696, 3, 100, 150);
+  clump('mrC', 1250, 1480, 708, 7, 130, 220);
+  clump('mrD', -160, 120, 700, 4, 120, 200);
+  // 近景芦苇（p = 1.3）：大、浓墨，从画面左下、右下伸上来，镜头一移就从船前头走过去
+  NEAR_REEDS = [];
+  const near = (key, x, h, o = {}) => NEAR_REEDS.push(reed(key, { x, y: 1112, h, tone: .84 + .1 * rnd(key + 'tone'), p: 1.3, ref: T_PLANT, wo: WO_NEAR, ...o }));
+  [[-330, 640], [-250, 700], [-170, 560], [-90, 660], [-10, 600], [70, 690], [150, 520], [230, 560], [300, 440], [365, 360]].forEach(([x, h], i) => near('nl' + i, x, h));
+  near('nmid', 860, 300, { n: 2, plume: false });
+  [[1490, 330], [1570, 370], [1660, 300], [1750, 350], [1840, 290], [1925, 330]].forEach(([x, h], i) => near('nr' + i, x, h));
+}
+
+// ───────────────────────── 小舟和渔翁 ─────────────────────────
+const WL = 852;                                         // 近处水面：篙从这里入水、出水
+const PLANT = [1205, WL];                               // 拍上入水的点（T_PLANT 时的画面坐标）
+const plantAt = (t) => [PLANT[0] + V * (t - T_PLANT), WL];   // 篙眼钉在水里：画面上跟着镜头往右走
+const EXIT = plantAt(T_LIFT);                           // 拔篙出水的点，墨从这里晕开
+const exitAt = (t) => [EXIT[0] + V * (t - T_LIFT), WL];
+// 镜头跟着船：船在画面上只前后挪一点（撑一篙往前窜一下），上下浮 2 px
+function boatPos(tq) {
+  const x = 1000 + 22 * (1 - ease.out(seg(tq, 0, .85))) - 56 * ease.out(seg(tq, T_PLANT, T_PLANT + 1.6));
+  return { x, y: 802 + 2.2 * Math.sin(TAU * tq / 2.4), roll: .007 * Math.sin(TAU * tq / 2.4 + 1.3) };
+}
+// 竹篙：手握的地方 Gu 跟着身子走；篙的方向 φ（从手往篙尖、和竖直向下的夹角，正 = 篙尖在身后）、手到篙尖的长度 s。
+// 钉在水底时篙尖在世界里不动，φ、s 由手和篙尖算；拔篙是篙顺着自己往上抽（s 变短）、慢慢竖起来；往下扎是 s 变长，拍上入水
+const PL = 650, DEEP = 70;
+const LEAN = [[0, .24], [.8, .32], [1.1, .06], [1.45, .08], [T_PLANT, .14], [2.3, .34], [2.7, .07], [3.4, .04]];
+const HAND = [[0, [38, 26]], [.8, [44, 34]], [1.15, [26, -38]], [1.45, [22, -30]], [T_PLANT, [32, 6]], [2.3, [44, 36]], [2.75, [26, -38]], [3.4, [20, -34]]];   // 握篙的手在蓑衣外头，看得见手在篙上
+function bodyAt(tq) {
+  const B = boatPos(tq), th = MV.keys(tq, LEAN), hv = MV.keys(tq, HAND);
+  const at = (v) => add([B.x, B.y], rot(v, B.roll));
+  const F = at([150, -18]), hip = [F[0] + 10 * th, F[1] - 80];
+  const S = add(hip, rot([0, -76], -th)), head = add(S, rot([-3, -22], -th));
+  return { B, at, th, F, hip, S, head, Gu: add(S, hv) };
+}
+const aim = (G, tip) => [Math.atan2(tip[0] - G[0], tip[1] - G[1]), Math.hypot(tip[0] - G[0], tip[1] - G[1])];   // → [φ, s]
+const ST = {};   // 几个交接时刻的篙（开页面时算一次）：上一篙拔出前、拍上入水、拍上出水
+function poleState(tq, Gu) {
+  if (!ST.lift0) { ST.lift0 = aim(bodyAt(.85).Gu, [1324 + V * .85, WL + DEEP]); ST.plant = aim(bodyAt(T_PLANT).Gu, PLANT); ST.exit = aim(bodyAt(T_LIFT).Gu, EXIT); }
+  if (tq < .85) return aim(Gu, [1324 + V * tq, WL + DEEP]);                              // 上一篙还钉着
+  if (tq < 1.3) { const u = seg(tq, .85, 1.3); return [lerp(ST.lift0[0], .06, ease.inOut(u)), lerp(ST.lift0[1], 110, ease.out(u))]; }   // 往上抽、竖起来
+  if (tq < T_PLANT) { const u = seg(tq, 1.3, T_PLANT); return [lerp(.06, ST.plant[0], ease.inOut(u)), lerp(110, ST.plant[1], ease.in(u))]; }   // 一扎，拍上入水
+  if (tq < T_LIFT) {                                                                     // 撑：篙尖钉在水底（跟着镜头走），快出水时往上抽
+    const p = plantAt(tq), u = tq < 2.33 ? ease.out(seg(tq, T_PLANT, T_PLANT + .17)) : 1 - ease.in(seg(tq, 2.33, T_LIFT));
+    return aim(Gu, [p[0] + 22 * u, WL + DEEP * u]);
+  }
+  const u = seg(tq, T_LIFT, 3.15); return [lerp(ST.exit[0], .1, ease.inOut(u)), lerp(ST.exit[1], 120, ease.out(u))];   // 拍上出水，往上抽
+}
+function figure(tq) {
+  const b = bodyAt(tq), [ph, s] = poleState(tq, b.Gu), ux = Math.sin(ph), uy = Math.cos(ph);
+  return { ...b, tip: [b.Gu[0] + ux * s, b.Gu[1] + uy * s], top: [b.Gu[0] - ux * (PL - s), b.Gu[1] - uy * (PL - s)], Gl: [b.Gu[0] + ux * 62, b.Gu[1] + uy * 62] };
+}
+function elbowOf(S, G, l1, l2) {        // 两节胳膊：肘往下
+  const dx = G[0] - S[0], dy = G[1] - S[1], D = Math.hypot(dx, dy) || 1, d = Math.min(D, l1 + l2 - .5);
+  const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), ux = dx / D, uy = dy / D;
+  const px = S[0] + ux * a, py = S[1] + uy * a, e1 = [px - uy * h, py + ux * h], e2 = [px + uy * h, py - ux * h];
+  return e1[1] > e2[1] ? e1 : e2;
+}
+function paintBoat(g, f, tq) {
+  const { B, at, th, F, hip, S, head } = f, r = rng('fisher'), k = Math.round(tq * POSES);
+  // 倒影：船底下几笔断开的淡墨，人影两笔清墨（每张偏一点，水在动）
+  for (let i = 0; i < 3; i++) {
+    const y = B.y + 24 + i * 11, w0 = 200 - i * 40, sx = 5 * Math.sin(k * 1.3 + i * 2);
+    brush(g, [[B.x - w0 + sx, y], [B.x + sx, y + 2], [B.x + w0 * .9 + sx, y]], { w: 6 - i, a: .2 - .04 * i, head: 'point', tip: 'point', dry: .6, dryFrom: .2, gap: 26, seed: 'refl' + i });
+  }
+  for (let i = 0; i < 2; i++) {
+    const x = F[0] - 4 + i * 10 + 4 * Math.sin(k * 1.7 + i), y = B.y + 34;
+    brush(g, [[x, y], [x + 6 * Math.sin(k + i), y + 40], [x - 4, y + 86]], { w: 10 - 3 * i, a: .13, head: 'point', tip: 'point', dry: .55, dryFrom: .1, gap: 18, seed: 'frefl' + i });
+  }
+  // 船身：侧锋一笔淡墨拖出船帮（上沿饱），浓墨一笔船舷（船头尖、起翘），下沿一笔干的，里面一道淡的是对面的船舷
+  const top = [[-252, -30], [-205, -14], [-110, -6], [0, -5], [110, -6], [205, -12], [246, -24]].map(at);
+  const bot = [[-240, -24], [-190, 1], [-90, 12], [0, 14], [100, 11], [196, 1], [240, -18]].map(at);
+  brush(g, top.map((p, i) => [(p[0] + bot[i][0]) / 2, (p[1] + bot[i][1]) / 2 - 1]), { w: 25, a: .5, side: -1, rim: .3, head: 'point', headLen: 50, tip: 'point', tipLen: 40, dry: .35, dryFrom: .6, var: .3, gap: 40, seed: 'hull', uneven: true, thin: -.15 });
+  brush(g, [[-236, -27], [-150, -15], [0, -13], [150, -14], [232, -22]].map(at), { w: 3.4, a: .42, head: 'point', tip: 'point', dry: .4, seed: 'rim2', gap: 30 });
+  brush(g, top, { w: 8.5, a: .9, head: 'point', headLen: 26, tip: 'round', dry: .25, dryFrom: .7, seed: 'gunwale', gap: 50 });
+  brush(g, bot, { w: 4.5, a: .5, head: 'point', tip: 'point', dry: .55, dry0: .3, seed: 'keel', gap: 30 });
+  // 竹篙从人身后过：先画进一张小图，把斗笠、头、蓑衣的轮廓（放宽几 px）擦掉再贴上，篙在人这里断开一截（画家的避让），墨线不压在人身上
+  const hc = add(head, rot([0, -5], -th)), BL = add(hc, rot([-62, 5], -th)), AP = add(hc, rot([3, -34], -th)), BR = add(hc, rot([63, 7], -th));
+  const hat = new Path2D(); hat.moveTo(BL[0], BL[1]); hat.quadraticCurveTo(lerp(BL[0], AP[0], .5) - 3, lerp(BL[1], AP[1], .5) - 2, AP[0], AP[1]);
+  hat.quadraticCurveTo(lerp(AP[0], BR[0], .5) + 3, lerp(AP[1], BR[1], .5) - 2, BR[0], BR[1]); hat.quadraticCurveTo(hc[0], hc[1] + 12, BL[0], BL[1]); hat.closePath();
+  const sil = new Path2D(hat), cp = [add(S, rot([-18, 0], -th)), add(S, rot([20, 0], -th)), add(hip, rot([52, 34], -th)), add(hip, rot([-46, 32], -th))];
+  sil.moveTo(head[0] + 13, head[1] + 2); sil.arc(head[0], head[1] + 2, 13, 0, TAU);
+  sil.moveTo(cp[0][0], cp[0][1]); for (const p of cp.slice(1)) sil.lineTo(p[0], p[1]); sil.closePath();
+  const pc = cv(g.canvas.width, g.canvas.height), pg = ctx2d(pc);
+  pg.setTransform(g.getTransform());
+  // 竹篙：一笔浓墨，几处竹节焦墨挑一下；入水那截淡下去、折一下（水里看着偏）
+  let end = f.tip, under = null;
+  if (f.tip[1] > WL) { const q = (f.tip[1] - WL) / (f.tip[1] - f.top[1]); end = [lerp(f.tip[0], f.top[0], q), WL]; under = [end, [f.tip[0] + 10, f.tip[1]]]; }
+  brush(pg, [f.top, end], { w: 7, a: .86, head: 'round', tip: 'blunt', dry: .3, dryFrom: .65, gap: 40, seed: 'pole', thin: 0, wob: .04 });
+  const len = Math.hypot(end[0] - f.top[0], end[1] - f.top[1]), ux = (end[0] - f.top[0]) / len, uy = (end[1] - f.top[1]) / len;
+  for (let s = 70; s < len - 30; s += 96) { const p = [f.top[0] + ux * s, f.top[1] + uy * s]; brush(pg, [[p[0] - uy * 6, p[1] + ux * 6], [p[0] + uy * 6, p[1] - ux * 6]], { w: 3, a: .92, head: 'round', tip: 'point', seed: 'node' + s }); }
+  if (under) brush(pg, under, { w: 6, a: .18, head: 'blunt', tip: 'point', dry: .4, seed: 'poleUnder' });
+  pg.globalCompositeOperation = 'destination-out'; pg.fillStyle = pg.strokeStyle = '#000'; pg.lineWidth = 9; pg.lineJoin = 'round'; pg.fill(sil); pg.stroke(sil);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(pc, 0, 0); g.restore();
+  // 人：腿两笔淡墨；蓑衣是一把干笔从肩往下撒开（飞白就是蓑草）；脸藏在斗笠底下，不画五官
+  const legs = [[[-5, 0], [-12, 0]], [[6, 0], [12, 0]]];
+  legs.forEach(([a, b], i) => { const kn = [lerp(hip[0], F[0], .5) - 8 * th - 3 + i * 4, lerp(hip[1], F[1], .5)];
+    brush(g, [[hip[0] + a[0], hip[1] + 6], kn, [F[0] + b[0], F[1]]], { w: 9, a: .46 + .08 * i, head: 'round', tip: 'blunt', dry: .3, seed: 'leg' + i }); });
+  const Ef = elbowOf(add(S, [5, 4]), f.Gl, 44, 42);
+  brush(g, [add(S, [5, 4]), Ef, f.Gl], { w: 9, a: .5, head: 'round', tip: 'round', dry: .25, seed: 'armF' });
+  for (let i = 0; i < 9; i++) {
+    const u = i / 8, rr = r(), a = add(S, rot([lerp(-13, 15, u), 5], -th)), b = add(hip, rot([lerp(-40, 48, u) + (r() - .5) * 8, 28 + 10 * Math.sin(u * 3.2)], -th));
+    brush(g, [a, [lerp(a[0], b[0], .5) + (u - .5) * 6, lerp(a[1], b[1], .5)], b], { w: 13 + 7 * rr, a: .62 + .22 * r(), head: 'hide', tip: 'point', tipLen: 24, dry: .62, dryFrom: .2, gap: 12, seed: 'cape' + i, var: .45 });
+  }
+  brush(g, [add(S, rot([-16, 3], -th)), add(S, rot([0, 7], -th)), add(S, rot([18, 4], -th))], { w: 10, a: .82, head: 'hide', tip: 'point', seed: 'collar' });
+  blob(g, head[0], head[1] + 2, 10, 11, .5, 'head');
+  // 斗笠：一片淡墨铺成扁圆锥，两笔浓墨勾出斜面，帽檐一笔，顶上焦墨一点
+  g.fillStyle = ink(.36); g.fill(hat);
+  brush(g, [AP, add(AP, rot([-30, 18], -th)), BL], { w: 6, a: .78, head: 'hide', tip: 'point', seed: 'hatL' });
+  brush(g, [AP, add(AP, rot([31, 19], -th)), BR], { w: 5, a: .6, head: 'hide', tip: 'point', dry: .3, seed: 'hatR' });
+  brush(g, [add(BL, [-2, 1]), add(hc, rot([0, 11], -th)), add(BR, [2, 1])], { w: 7, a: .88, head: 'hide', tip: 'point', seed: 'brim' });
+  for (const s of [-.45, .1, .55]) brush(g, [add(AP, rot([2, 4], -th)), [lerp(BL[0], BR[0], .5 + s * .5), lerp(BL[1], BR[1], .5 + s * .5) - 3]], { w: 2, a: .32, head: 'point', tip: 'point', seed: 'rib' + s });
+  blob(g, AP[0], AP[1] + 1, 4, 3.5, .92, 'hatTop');
+  const En = elbowOf(S, f.Gu, 44, 42);
+  brush(g, [S, En, f.Gu], { w: 10, a: .72, head: 'round', tip: 'round', dry: .2, seed: 'armN' });
+  blob(g, f.Gu[0], f.Gu[1], 6.5, 6, .8, 'handU'); blob(g, f.Gl[0], f.Gl[1], 6, 5.5, .7, 'handL');
+}
+const BOAT_ART = new Map();
+function boatArt(tq) {
+  const key = Math.round(tq * POSES); if (BOAT_ART.has(key)) return BOAT_ART.get(key);
+  const f = figure(tq), xs = [f.B.x - 290, f.B.x + 290, f.top[0], f.tip[0]], ys = [f.B.y + 150, f.top[1], f.tip[1], f.head[1] - 70];
+  const x0 = Math.floor(Math.min(...xs) - 30), y0 = Math.floor(Math.min(...ys) - 30), x1 = Math.ceil(Math.max(...xs) + 30), y1 = Math.ceil(Math.max(...ys) + 30);
+  const c = cv(x1 - x0, y1 - y0), g = ctx2d(c);
+  g.translate(-x0, -y0); paintBoat(g, f, tq);
+  wetten(c, x0, y0, { r: 2.2, cr: 1, cm: .5, bleed: .2, th: .05, soft: .04, ring: .12, ringW: .05, feather: .22, grain: .14 });
+  const art = { c, x0, y0 };
+  if (BOAT_ART.size > 3) BOAT_ART.delete(BOAT_ART.keys().next().value);
+  BOAT_ART.set(key, art);
+  return art;
+}
+// 涟漪：篙眼四周一圈圈扁椭圆，每圈几段干笔淡墨弧（近的下半圈深一点），越荡越大越淡。拍上开始，每 0.2 秒一圈
+function ripples(c, tq) {
+  if (tq < T_PLANT) return;
+  const ctr = plantAt(tq);
+  for (let k = 0; k < 4; k++) {
+    const a = tq - (T_PLANT + k * .2); if (a < 0) continue;
+    const R = 20 + 260 * (1 - Math.exp(-a / 1.15)), al = (.42 - .07 * k) * Math.exp(-a / 1.7), rr = rng('ring' + k);
+    for (let j = 0; j < 5; j++) {
+      const a0 = j / 5 * TAU + rr() * .7, span = .75 + .45 * rr(), pts = [];
+      for (let q = 0; q <= 6; q++) { const th = a0 + span * q / 6; pts.push([ctr[0] + Math.cos(th) * R, ctr[1] + Math.sin(th) * R * .24]); }
+      const nearSide = Math.sin(a0 + span / 2) > 0;
+      brush(c, pts, { w: (nearSide ? 4.8 : 3.2) * (1 + a * .25), a: al * (nearSide ? 1 : .65), head: 'point', tip: 'point', dry: .5, dryFrom: .3, gap: 20, seed: 'rip' + k + '_' + j, var: .3 });
+    }
+  }
+}
+// 拍上那一下：入水处往上溅几点墨（「啪」），几笔短短的干笔往上挑
+function splash(c, tq) {
+  const a = tq - T_PLANT; if (a < 0 || a > .6) return;
+  const p = plantAt(tq);
+  for (let i = 0; i < 16; i++) {
+    const r = rng('drop' + i), vx = (r() - .5) * 360, vy = -(220 + 300 * r()), x = p[0] + vx * a, y = WL - 4 + vy * a + 650 * a * a;
+    if (y > WL + 2) continue;
+    const s = (2.4 + 4 * r() * r()) * (1 - .4 * a);
+    blob(c, x, y, s, s * (.8 + .4 * r()), .6 + .3 * r(), 'drop' + i, INK, .25);
+  }
+  if (a < .3) for (let i = 0; i < 7; i++) {
+    const ang = -Math.PI / 2 + (i - 3) * .32, L = (26 + 22 * rnd('cr' + i)) * Math.sin(Math.PI * Math.min(1, a / .3 + .25));
+    brush(c, [[p[0] + Math.cos(ang) * 8, WL - 2 + Math.sin(ang) * 3], [p[0] + Math.cos(ang) * (8 + L), WL - 2 + Math.sin(ang) * (3 + L)]], { w: 4, a: .55, head: 'hide', tip: 'point', dry: .45, seed: 'crown' + i });
+  }
+}
+function wake(c, tq) {          // 船尾拖两道淡淡的水痕，船头一笔
+  const B = boatPos(tq), st = [B.x + 238, B.y + 2], bw = [B.x - 252, B.y - 6];
+  for (const [i, dy, len] of [[0, -8, 300], [1, 16, 380]]) brush(c, [st, [st[0] + len * .5, st[1] + dy * .6], [st[0] + len, st[1] + dy]], { w: 4.2, a: .17, head: 'point', tip: 'point', dry: .7, dryFrom: .1, gap: 30, seed: 'wake' + i });
+  brush(c, [bw, [bw[0] - 26, bw[1] + 9], [bw[0] - 70, bw[1] + 14]], { w: 3.6, a: .22, head: 'point', tip: 'point', dry: .4, seed: 'bow0' });
+  brush(c, [[bw[0] + 12, bw[1] + 18], [bw[0] - 30, bw[1] + 24]], { w: 3, a: .15, head: 'point', tip: 'point', dry: .5, seed: 'bow1' });
+}
+function drawA(c, t, tq) {
+  drawLayer(c, A_FAR, t); mist(c, MIST.ah, t);
+  drawLayer(c, A_FARWATER, t);
+  drawPlants(c, MID_REEDS, t, tq); mist(c, MIST.ar, t);
+  drawLayer(c, A_WATER, t);
+  ripples(c, tq); wake(c, tq);
+  const b = boatArt(tq); c.drawImage(b.c, b.x0, b.y0);
+  splash(c, tq);
+  drawPlants(c, NEAR_REEDS, t, tq);
+}
+
+// ───────────────────────── 镜头 B：远山层叠，大片留白 ─────────────────────────
+let B_FAR1, B_FAR2, B_MID, B_LOW, B_WATER, B_NEAR, B_REEDS;
+// 山脊：几座峰各是一个圆顶（中心 c、高 h、左右半宽 wl / wr，一边陡一边缓），取最高的那座：峰和峰之间自然有个豁口，不会叠成一个锥；再加两层起伏
+const ridgeOf = (key, base, peaks, rough, sc = 60) => {
+  const sd = hashStr(key);
+  return (x) => { let y = base; for (const [c, h, wl, wr] of peaks) { const u = (x - c) / (x < c ? wl : wr ?? wl); y = Math.min(y, base - h * Math.exp(-u * u)); } return y + rough * (fbm1(sd, x / sc) + .4 * fbm1(sd + 7, x / (sc * .3))); };
+};
+function washMountain(g, ridge, xa, xb, bands) {   // 淡墨一层层铺：山脊那几层叠得最深，往下化开
+  for (const [dep, a] of bands) {
+    g.fillStyle = ink(a); g.beginPath(); g.moveTo(xa, ridge(xa));
+    for (let x = xa; x <= xb; x += 5) g.lineTo(x, ridge(x));
+    for (let x = xb; x >= xa; x -= 5) g.lineTo(x, ridge(x) + dep);
+    g.closePath(); g.fill();
+  }
+}
+function fadeEnds(g, xa, xb, y0, y1, side) {    // 山的一头化进纸里
+  g.save(); g.globalCompositeOperation = 'destination-out';
+  const gr = g.createLinearGradient(xa, 0, xb, 0); gr.addColorStop(side > 0 ? 0 : 1, 'rgba(0,0,0,0)'); gr.addColorStop(side > 0 ? 1 : 0, 'rgba(0,0,0,1)');
+  g.fillStyle = gr; g.fillRect(Math.min(xa, xb), y0, Math.abs(xb - xa), y1 - y0); g.restore();
+}
+function fadeDown(g, xa, xb, ya, yb) {        // 山脚往下化进纸里（不然缓存图的下边会切出一道直线）
+  g.save(); g.globalCompositeOperation = 'destination-out';
+  const gr = g.createLinearGradient(0, ya, 0, yb); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
+  g.fillStyle = gr; g.fillRect(xa, ya, xb - xa, yb - ya + 2); g.restore();
+}
+function miDots(g, ridge, key, xa, xb, n, a, depth) {   // 米点：横着的一点点，顺着山脊点，越靠山脊越密、越浓
+  const r = rng(key);
+  for (let i = 0; i < n; i++) {
+    const x = xa + r() * (xb - xa), d = Math.pow(r(), 2.2), y = ridge(x) + 3 + d * depth;
+    blob(g, x, y, 12 + 14 * r(), 4.5 + 4 * r(), a * (1.3 - d) * (.6 + .5 * r()), key + i, INK, .3);
+  }
+}
+function rock(g, cx, cy, w, h, key) {   // 石头：几笔侧锋干笔斜着拖（斧劈皴），上沿笔肚饱、墨最重，往下越拖越干；顶上焦墨点苔
+  const r = rng(key);
+  brush(g, [[cx - .5 * w, cy + .4 * h], [cx - .42 * w, cy - .1 * h], [cx - .2 * w, cy - .46 * h]], { w: .34 * w, a: .5, side: 1, rim: .3, head: 'hide', tip: 'point', dry: .55, dryFrom: .45, gap: 16, seed: key + 'L', uneven: true });
+  brush(g, [[cx - .3 * w, cy - .42 * h], [cx + .05 * w, cy - .5 * h], [cx + .42 * w, cy - .22 * h]], { w: .3 * w, a: .62, side: -1, rim: .3, head: 'hide', tip: 'point', dry: .6, dryFrom: .4, gap: 16, seed: key + 'T', uneven: true });
+  brush(g, [[cx + .3 * w, cy - .3 * h], [cx + .46 * w, cy + .05 * h], [cx + .5 * w, cy + .42 * h]], { w: .22 * w, a: .3, side: -1, head: 'hide', tip: 'point', dry: .7, dryFrom: .2, gap: 14, seed: key + 'R', uneven: true });
+  brush(g, [[cx - .05 * w, cy - .44 * h], [cx - .02 * w, cy], [cx - .1 * w, cy + .4 * h]], { w: 4, a: .45, head: 'hide', tip: 'point', dry: .45, seed: key + 'F' });
+  for (let i = 0; i < 4; i++) blob(g, cx + (r() - .6) * w * .7, cy - .5 * h + r() * 6, 3 + 2 * r(), 2.5 + 1.5 * r(), .9, key + 'd' + i, INK, .3);
+}
+function bakeB() {
+  const MW = { r: 4, cr: 2.2, cm: .8, bleed: .18, th: .025, soft: .03, ring: .08, ringW: .03, feather: .16, grain: .05 };
+  // 第一层（最远）：清墨一抹，横贯全幅，几乎化在纸里
+  const f1 = ridgeOf('bf1', 640, [[700, 70, 240], [1120, 92, 260], [1560, 62, 220], [1920, 40, 200], [300, 50, 220]], 5);
+  B_FAR1 = bake(.06, T_LAND, spanB(.06, 480, 760), (g) => wet(g, [-100, 500, 2100, 760], MW, (h) => { washMountain(h, f1, -100, 2100, [[14, .035], [40, .03], [110, .026]]); fadeDown(h, -100, 2100, 700, 758); }));
+  // 第二层：中间几座峰，清墨，两头化掉
+  const f2 = ridgeOf('bf2', 630, [[930, 150, 95, 170], [1170, 112, 160, 120], [790, 82, 90, 120], [1390, 70, 140, 170]], 7);
+  B_FAR2 = bake(.12, T_LAND, spanB(.12, 400, 760), (g) => wet(g, [560, 420, 1640, 760], MW, (h) => {
+    washMountain(h, f2, 580, 1620, [[14, .06], [40, .05], [110, .04]]);
+    miDots(h, f2, 'mi2', 720, 1420, 30, .07, 40);
+    fadeEnds(h, 1380, 1620, 400, 760, 1); fadeEnds(h, 580, 760, 400, 760, -1); fadeDown(h, 560, 1640, 690, 758);
+  }));
+  // 第三层：左边一大片，主峰最高（一边陡一边缓），淡墨一层层晕，山脊上米点；右头化进雾里
+  const f3 = ridgeOf('bmid', 730, [[520, 440, 110, 150], [660, 320, 70, 100], [830, 270, 110, 120], [300, 260, 120, 100], [110, 200, 120, 130], [-90, 170, 140, 120], [990, 170, 100, 140]], 12, 46);
+  B_MID = bake(.3, T_LAND, spanB(.3, 240, 800), (g) => wet(g, [-340, 260, 1160, 800], MW, (h) => {
+    washMountain(h, f3, -340, 1150, [[7, .09], [22, .08], [56, .07], [120, .06], [240, .05], [460, .03]]);
+    miDots(h, f3, 'mi3', -300, 1060, 90, .13, 80);
+    fadeEnds(h, 980, 1150, 240, 800, 1); fadeDown(h, -340, 1160, 690, 798);
+  }));
+  // 第四层（最近的山）：低一点、墨重一点，压在主峰脚下，山脊上几个焦墨苔点
+  const f4 = ridgeOf('blow', 800, [[150, 240, 110, 190], [480, 175, 150, 110], [-110, 170, 140, 120], [700, 110, 110, 140]], 9, 40);
+  B_LOW = bake(.45, T_LAND, spanB(.45, 480, 840), (g) => wet(g, [-340, 500, 920, 840], { ...MW, ring: .1 }, (h) => {
+    washMountain(h, f4, -340, 900, [[7, .13], [24, .11], [60, .09], [140, .07], [300, .04]]);
+    miDots(h, f4, 'mi4', -300, 820, 70, .2, 70);
+    const r = rng('moss4');
+    for (let i = 0; i < 18; i++) { const x = -300 + r() * 1100, y = f4(x) + 2; if (f4(x) > 690) continue; brush(h, [[x, y + 6], [x + (r() - .5) * 3, y - 6 - 8 * r()]], { w: 4 + 3 * r(), a: .45 + .2 * r(), head: 'round', tip: 'point', seed: 'moss' + i }); }
+    fadeEnds(h, 700, 900, 480, 840, 1); fadeDown(h, -340, 920, 770, 838);
+  }));
+  B_WATER = bake(.6, T_LAND, spanB(.6, 690, 1080), (g) => wet(g, [-240, 700, 2140, 1080], { r: 3, bleed: .2, th: .04, ring: .08, feather: .2, grain: .2 }, (h) => {
+    const r = rng('bwater');
+    for (let i = 0; i < 8; i++) { const y = 724 + i * 34 + r() * 18, x0 = -200 + r() * 1900, l = 200 + 560 * r(); hStroke(h, 'bw' + i, x0, x0 + l, y, 3 + 5 * r(), .06 + .06 * r(), { gap: 50 }); }
+  }));
+  // 近岸：左下一角一道弯的土坡，侧锋几笔重墨压出坡沿，两块石头，焦墨点苔，岸上一丛芦苇（和上一个镜头的芦苇一个画法）
+  const bank = (x) => 884 + 190 * sm(-60, 720, x) + 18 * gs(x, 200, 80) - 10 * gs(x, 420, 60) + 7 * fbm1(hashStr('bank'), x / 40);
+  B_NEAR = bake(1, T_LAND, spanB(1, 820, 1080), (g) => wet(g, [-260, 830, 900, 1080], { r: 3, cr: 1.4, bleed: .24, th: .04, ring: .12, ringW: .05, feather: .22, grain: .14 }, (h) => {
+    const r = rng('bankS');
+    washMountain(h, bank, -260, 780, [[10, .12], [34, .08], [90, .06], [220, .04]]);   // 坡上沿深，往下淡
+    brush(h, [-250, -60, 140, 320, 500, 700].map((x) => [x, bank(x) + 4]), { w: 20, a: .74, side: 1, head: 'hide', tip: 'point', tipLen: 140, dry: .5, dryFrom: .5, gap: 30, seed: 'bankEdge', uneven: true, var: .35 });
+    for (let i = 0; i < 7; i++) {
+      const x = -230 + r() * 760, y = bank(x) + 28 + r() * 70;
+      if (y > 1090) continue;
+      brush(h, [[x, y], [x + 50 + 60 * r(), y + 10 + 14 * r()], [x + 120 + 90 * r(), y + 30 + 18 * r()]], { w: 16 + 12 * r(), a: .24 + .16 * r(), side: 1, head: 'point', tip: 'point', dry: .65, dryFrom: .2, gap: 24, seed: 'bankC' + i, uneven: true });
+    }
+    rock(h, 40, bank(40) + 20, 140, 62, 'rockA'); rock(h, 262, bank(262) + 30, 96, 42, 'rockB');
+    for (let i = 0; i < 26; i++) { const x = -240 + r() * 900, y = bank(x) - 2 + r() * 8; blob(h, x, y, 3 + 3 * r(), 2.5 + 2 * r(), .85, 'bdot' + i, INK, .3); }
+  }));
+  B_REEDS = [[-150, 330], [-70, 380], [130, 300], [190, 350], [350, 270], [430, 230], [540, 190]].map(([x, h], i) => reed('br' + i, { x, y: bank(x) + 10, h, tone: .8 + .1 * rnd('brt' + i), p: 1, ref: T_LAND, wo: WO_NEAR, sway: .18 + .06 * rnd('brs' + i) }));   // 岸边风大，芦苇摇得开一点
+}
+function tinyBoat(c, t, tq) {    // 远远的一叶小舟：船一笔、人两笔、斗笠一笔、篙一笔，船尾拖两道水痕
+  const x = 1168 - 9 * (t - T_LAND), y = 812, ph = Math.sin(TAU * (tq - T_LAND) / 1.7);
+  brush(c, [[x + 40, y + 2], [x + 160, y + 6], [x + 300, y + 11]], { w: 3, a: .13, head: 'point', tip: 'point', dry: .6, dryFrom: .1, seed: 'tw0', gap: 30 });
+  brush(c, [[x + 38, y - 2], [x + 150, y - 5], [x + 250, y - 6]], { w: 2.5, a: .1, head: 'point', tip: 'point', dry: .6, dryFrom: .1, seed: 'tw1', gap: 30 });
+  brush(c, [[x - 30, y + 9], [x + 34, y + 10]], { w: 3, a: .12, head: 'point', tip: 'point', dry: .6, seed: 'tref' });
+  brush(c, [[x - 48, y - 8], [x - 20, y + 1], [x + 22, y + 1], [x + 44, y - 5]], { w: 6.5, a: .8, head: 'point', headLen: 10, tip: 'round', dry: .3, seed: 'thull' });
+  const fx = x + 24, fy = y - 4, lean = .25 + .1 * ph;
+  brush(c, [[fx, fy - 24], [fx + 2, fy]], { w: 6, a: .7, head: 'round', tip: 'blunt', dry: .4, seed: 'tbody' });
+  brush(c, [[fx - 10, fy - 23], [fx, fy - 32], [fx + 10, fy - 22]], { w: 3.6, a: .86, head: 'hide', tip: 'point', seed: 'that' });
+  brush(c, [[fx - 34 * Math.sin(lean) * 2, fy - 64 * Math.cos(lean)], [fx + 22 * Math.sin(lean) + 8, y + 12]], { w: 2.2, a: .72, head: 'round', tip: 'blunt', seed: 'tpole' });
+}
+function drawB(c, t, tq) {
+  drawLayer(c, B_FAR1, t); mist(c, MIST.b1, t);
+  drawLayer(c, B_FAR2, t); mist(c, MIST.b2, t);
+  drawLayer(c, B_MID, t); mist(c, MIST.b3, t);
+  drawLayer(c, B_LOW, t); mist(c, MIST.b4, t);
+  drawLayer(c, B_WATER, t);
+  tinyBoat(c, t, tq);
+  drawLayer(c, B_NEAR, t);
+  drawPlants(c, B_REEDS, t, tq);
+}
+
+// ───────────────────────── 朱：初升的太阳（全片唯一的朱红）─────────────────────────
+// 一团朱落在纸上洇开（边上积一圈深的），两个镜头里在同一个地方、慢慢往上升；下半截被一缕雾擦淡
+const SUN = [1250, 50], sunY = (t) => 262 - 3.4 * t;
+let SUNC = null, SUNT = null;
+function makeSun() {
+  const R = 100; SUNC = cv(2 * R, 2 * R); SUNT = cv(2 * R, 2 * R);
+  const g = ctx2d(SUNC);
+  g.translate(R, R); blob(g, 0, 0, SUN[1], SUN[1] - 1.5, .88, 'sunDisc', VERM, .04);
+  const r = rng('sunMottle');
+  for (let i = 0; i < 9; i++) blob(g, (r() - .5) * 56, (r() - .5) * 56, 9 + 14 * r(), 8 + 12 * r(), .08 + .1 * r(), 'sm' + i, VERM, .3);   // 颜料厚薄不匀
+  g.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 5; i++) blob(g, (r() - .5) * 50, (r() - .5) * 50, 7 + 10 * r(), 6 + 8 * r(), .12 + .1 * r(), 'sw' + i, INK, .35);   // 水多的地方淡一块
+  wetten(SUNC, SUN[0] - R, 262 - R, { col: VERM, r: 3, cr: 1, cm: .45, bleed: .16, th: .06, soft: .05, ring: .26, ringW: .06, feather: .6, grain: .12, pool: .6 });
+}
+function drawSun(c, t) {
+  const R = 100, x0 = SUN[0] - R, y0 = sunY(t) - R, s = ctx2d(SUNT);
+  s.setTransform(1, 0, 0, 1, 0, 0); s.clearRect(0, 0, 2 * R, 2 * R); s.drawImage(SUNC, 0, 0);
+  s.translate(-x0, -y0); mist(s, MIST.sun, t);
+  c.drawImage(SUNT, x0, y0);
+}
+
+// ───────────────────────── 白鹭 ─────────────────────────
+// 身子是纸白：在墨层上按身形挖掉（destination-out），淡墨细线勾一圈、留几处断口；喙浓墨、腿焦墨。
+// 站着 → 受惊伸脖子 → 起飞（翅膀上下扇，一秒 12 张）→ 越飞越远越小 → 简成一笔浓墨（天上的一笔）
+const EGW = [515, 702];
+const egFeet = (t) => [EGW[0] + .7 * V * (t - T_PLANT), EGW[1]];    // 和中景芦苇一层（p = .7）
+const EG_P0 = [egFeet(T_FLY)[0], EGW[1] - 96];
+const EG_C1 = [EG_P0[0] - 100, EG_P0[1] - 230], EG_C2 = [390, 250], EG_P3 = [330, 188];
+const egScale = (t) => (t < T_ONE ? lerp(1, .25, ease.inOut(seg(t, 2.25, T_ONE))) : .25 - .03 * (t - T_ONE));
+function egPos(t) {
+  if (t < T_FLY) { const f = egFeet(t); return [f[0], f[1] - 96]; }
+  const p = bez(EG_P0, EG_C1, EG_C2, EG_P3, 1 - Math.pow(1 - seg(t, T_FLY, T_ONE), 1.7));
+  if (t > T_ONE) { p[0] -= 20 * (t - T_ONE); p[1] -= 8 * (t - T_ONE); }
+  return p;
+}
+function flapPhase(t) {          // 扇了几下：近处一秒 2.8 下，越远越慢
+  const a = 3.3, b = T_ONE, u = seg(t, a, b), I = t <= a ? 0 : t < b ? (b - a) * (u * u * u - u * u * u * u / 2) : (b - a) / 2 + (t - b);
+  return 2.8 * (t - T_FLY) - 1.3 * I;
+}
+// 翅膀（翅根在原点、往 −y 伸，x 正是往尾巴那边）：前缘一条弧到腕再到翅尖，后缘是一根根分开的飞羽尖，往里是次级飞羽
+const WING = [[-10, 0], [-18, -42], [-14, -84], [-4, -122], [6, -152], [14, -138], [20, -146], [26, -126], [33, -132], [37, -112], [44, -116], [46, -96], [50, -96], [48, -72], [44, -48], [38, -24], [28, 0]];
+function wingPts(root, beta, sc) {       // 按扇到的角度上下压扁（sinβ < 0 就翻到身子下面），往下扇时往后掠一点
+  const sb = Math.sin(beta), sw = sb < 0 ? 16 : -4;
+  return WING.map(([x, y]) => [root[0] + (x + sw * (-y / 152)) * sc, root[1] + y * sb * sc]);
+}
+function egretShape(tq) {
+  const pi = Math.round(tq * POSES) - Math.round(T_PLANT * POSES);   // 篙入水之后第几张
+  if (pi < 1) {                           // 站着：脖子 S 形，头轻轻点
+    const sw = Math.sin(tq * 2.3) * 3;
+    return { body: [6, 0, 46, 19, .42], neck: [[-30, -12], [-50, -36], [-30 + sw * .5, -62], [-40 + sw, -82], [-33 + sw, -92]], head: [-34 + sw, -93, 10, 7, 0],
+      beak: [[-43 + sw, -94], [-86 + sw, -89]], legs: [[[-2, 14], [-5, 52], [-8, 96]], [[10, 12], [12, 52], [16, 96]]], toes: true, plume: true, wingLine: true, wings: [] };
+  }
+  if (pi < 2) {                           // 受惊（拍后一张）：脖子一下伸直，身子往前一探、腿一屈（要蹬了）
+    return { body: [0, 4, 46, 19, .1], neck: [[-34, -6], [-46, -34], [-44, -64], [-40, -92]], head: [-42, -100, 10, 7, -.1],
+      beak: [[-51, -101], [-94, -100]], legs: [[[-4, 18], [-18, 52], [-8, 92]], [[8, 16], [0, 52], [12, 92]]], toes: true, wings: [] };
+  }
+  const age = tq - T_FLY, beta = 1.15 * Math.cos(TAU * flapPhase(tq)), la = lerp(Math.PI / 2 + .15, .1, sm(0, .42, age));
+  const hip = [26, 8], L1 = [hip[0] + Math.cos(la) * 92, hip[1] + Math.sin(la) * 92], L2 = [hip[0] + 4 + Math.cos(la + .05) * 90, hip[1] + 4 + Math.sin(la + .05) * 90];
+  return { body: [0, 0, 50, 14, -.06], neck: [[-38, -4], [-50, -12], [-46, -22], [-57, -21]], head: [-63, -20, 9, 6.5, 0],
+    beak: [[-71, -20], [-110, -15]], legs: [[hip, L1], [[hip[0] + 4, hip[1] + 4], L2]], toes: false, fly: true, beta,
+    wings: [{ root: [2, -10], beta: beta + .1, sc: .86, far: true }, { root: [-6, -6], beta, sc: 1 }] };
+}
+const EG_ART = new Map();
+function egretArt(tq) {
+  const key = Math.round(tq * POSES); if (EG_ART.has(key)) return EG_ART.get(key);
+  const s = egScale(tq), simp = sm(4.05, T_ONE, tq), R = Math.ceil(175 * s + 30), E = egretShape(tq), vis = 1 - simp;
+  const mk = cv(2 * R, 2 * R), m = ctx2d(mk), ic = cv(2 * R, 2 * R), k = ctx2d(ic);
+  const P = (p) => [R + p[0] * s, R + p[1] * s], lw = (w) => Math.max(1.3, w * s);
+  // 挖掉的身形（纸白）
+  m.translate(R, R); m.scale(s, s); m.fillStyle = '#000'; m.strokeStyle = '#000'; m.lineCap = m.lineJoin = 'round';
+  const [bx, by, brx, bry, br] = E.body;
+  m.beginPath(); m.ellipse(bx, by, brx, bry, br, 0, TAU); m.fill();
+  m.lineWidth = 12; m.beginPath(); spline(E.neck, 6).forEach((p, i) => (i ? m.lineTo(p[0], p[1]) : m.moveTo(p[0], p[1]))); m.stroke();
+  m.beginPath(); m.ellipse(E.head[0], E.head[1], E.head[2], E.head[3], E.head[4], 0, TAU); m.fill();
+  const wings = E.wings.map((wg) => ({ ...wg, pts: wingPts(wg.root, wg.beta, wg.sc) })).filter((wg) => !wg.far || Math.sin(wg.beta) > .12);
+  for (const wg of wings) { m.beginPath(); wg.pts.forEach((p, i) => (i ? m.lineTo(p[0], p[1]) : m.moveTo(p[0], p[1]))); m.closePath(); m.fill(); }
+  if (E.fly) { m.beginPath(); m.moveTo(36, -4); m.lineTo(56, 2); m.lineTo(38, 8); m.fill(); }
+  else { m.beginPath(); m.moveTo(40, 12); m.lineTo(64, 30); m.lineTo(34, 22); m.fill(); }
+  // 勾线：淡墨细线，留断口；喙浓墨、眼焦墨一点、腿焦墨
+  if (vis > .02) {
+    const A = (a) => a * vis, O = { head: 'point', tip: 'point', dry: .25, dryFrom: .6, var: .2 };
+    const ell = (a0, a1, n = 8) => { const o = []; for (let i = 0; i <= n; i++) { const a = lerp(a0, a1, i / n); const c = Math.cos(a), si = Math.sin(a); o.push(P([bx + c * brx * Math.cos(br) - si * bry * Math.sin(br), by + c * brx * Math.sin(br) + si * bry * Math.cos(br)])); } return o; };
+    brush(k, ell(Math.PI * .95, Math.PI * 1.85), { ...O, w: lw(3.2), a: A(.42), seed: 'egBack' });
+    brush(k, ell(Math.PI * .1, Math.PI * .8), { ...O, w: lw(2.8), a: A(.32), seed: 'egBelly' });
+    const nk = spline(E.neck, 4), nn = nk.length;
+    const off = (sg) => nk.map((p, i) => { const a = nk[Math.max(0, i - 1)], b = nk[Math.min(nn - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return P([p[0] - dy / l * 6 * sg, p[1] + dx / l * 6 * sg]); });
+    brush(k, off(1), { ...O, w: lw(2.6), a: A(.4), seed: 'egNeckF' });
+    brush(k, off(-1).slice(Math.floor(nn * .35)), { ...O, w: lw(2.2), a: A(.28), seed: 'egNeckB' });
+    const [hx, hy, hrx, hry] = E.head;
+    brush(k, [P([hx + hrx * .8, hy + hry * .6]), P([hx + hrx, hy - hry * .3]), P([hx, hy - hry]), P([hx - hrx * .9, hy - hry * .3])], { ...O, w: lw(2.4), a: A(.4), seed: 'egHead' });
+    brush(k, E.beak.map(P), { w: lw(4.6), a: A(.84), head: 'hide', tip: 'point', seed: 'egBeak' });
+    blob(k, ...P([hx - hrx * .25, hy - hry * .2]), lw(1.6), lw(1.6), A(.92), 'egEye', INK, .05);
+    for (const [i, lg] of E.legs.entries()) brush(k, lg.map(P), { w: lw(3.2), a: A(.88), head: 'round', tip: E.toes ? 'blunt' : 'point', seed: 'egLeg' + i, dry: .2 });
+    if (E.toes) for (const [i, lg] of E.legs.entries()) { const f = lg[lg.length - 1]; for (const d of [-14, 4, 12]) brush(k, [P(f), P([f[0] + d, f[1] + 3 - Math.abs(d) * .1])], { w: lw(2.4), a: A(.8), head: 'round', tip: 'point', seed: 'egToe' + i + d }); }
+    if (E.toes) {                         // 站在浅水里：脚下一道水纹，腿的倒影两笔清墨
+      brush(k, [P([-40, 99]), P([0, 101]), P([44, 99])], { w: lw(3), a: A(.2), head: 'point', tip: 'point', dry: .5, seed: 'egRip' });
+      for (const [i, lg] of E.legs.entries()) { const f = lg[lg.length - 1]; brush(k, [P([f[0], f[1] + 8]), P([f[0] + 3, f[1] + 26]), P([f[0] - 1, f[1] + 46])], { w: lw(3), a: A(.14), head: 'point', tip: 'point', dry: .5, seed: 'egRef' + i }); }
+    }
+    if (E.plume) for (let i = 0; i < 3; i++) brush(k, [P([26, -6 + i * 4]), P([64, 6 + i * 6]), P([96, 26 + i * 8])], { w: lw(1.8), a: A(.2), head: 'point', tip: 'point', dry: .5, seed: 'egPl' + i });
+    if (E.wingLine) brush(k, [P([-16, -6]), P([20, 4]), P([50, 18])], { ...O, w: lw(2.4), a: A(.3), seed: 'egWl' });
+    for (const [wi, wg] of wings.entries()) {        // 前缘一笔、后缘断着勾、飞羽之间几笔分开、覆羽一道
+      const pp = wg.pts.map(P), al = wg.far ? .6 : 1, mid = (a, b, u) => [lerp(pp[a][0], pp[b][0], u), lerp(pp[a][1], pp[b][1], u)];
+      brush(k, pp.slice(0, 5), { ...O, w: lw(3), a: A(.46 * al), seed: 'egWa' + wi });
+      brush(k, pp.slice(4), { ...O, w: lw(2.3), a: A(.3 * al), dry: .45, dryFrom: .2, seed: 'egWb' + wi });
+      for (const q of [5, 7, 9, 11]) brush(k, [pp[q], mid(q, 2, .42)], { w: lw(1.9), a: A(.26 * al), head: 'point', tip: 'point', seed: 'egF' + wi + q });
+      brush(k, [mid(1, 15, .38), mid(2, 13, .38), mid(3, 11, .3)], { ...O, w: lw(2), a: A(.2 * al), seed: 'egCov' + wi });
+    }
+  }
+  // 越飞越远：简成一笔浓墨（翅膀扇起来是一道弯、压下去是另一道弯）
+  if (simp > .01) {
+    const kk = E.fly ? Math.sin(E.beta) : .6, Q = (x, y) => P([x, y]);
+    brush(k, [Q(-128, -34 * kk + 6), Q(-60, -14 * kk), Q(-4, 6), Q(56, -14 * kk), Q(124, -34 * kk + 4)], { w: Math.max(2.4, 46 * s), a: .88 * simp, head: 'hide', tip: 'point', tipLen: 60 * s, thin: -.2, dry: .35, dryFrom: .55, gap: 12, seed: 'egOne' });
+  }
+  const pos = egPos(tq);
+  wetten(ic, Math.round(pos[0] - R), Math.round(pos[1] - R), { r: 1.2, cr: .6, cm: .4, bleed: .12, th: .1, ring: .06, feather: .25, grain: .1 });
+  const art = { mk, ic, R, vis };
+  if (EG_ART.size > 3) EG_ART.delete(EG_ART.keys().next().value);
+  EG_ART.set(key, art);
+  return art;
+}
+function drawEgret(c, t, tq) {
+  const a = egretArt(tq), p = egPos(t);
+  c.globalCompositeOperation = 'destination-out'; c.globalAlpha = .97 * a.vis; c.drawImage(a.mk, p[0] - a.R, p[1] - a.R);
+  c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.drawImage(a.ic, p[0] - a.R, p[1] - a.R);
+}
+
+// ───────────────────────── 转场：墨在水里晕开 ─────────────────────────
+// 篙拔出水的那一点（T_LIFT）冒出一团浓墨，在水里往外晕：前沿最浓，后面拖着打卷的墨丝，越往里越化越淡，淡到透出下一个镜头（远山）；
+// 墨越晕越开、越开越淡（浓墨化开再退成淡墨），落点（T_LAND）上整幅都晕到，之后残墨再退净。
+// 低分辨率（640×360）逐格算两张图：墨的浓度 D、露出 B 的遮罩 M，放大贴上。前沿 φ = R(t) − 距离 + 噪声 > 0；
+// 噪声在以晕开点为原点的坐标里（跟着水走），墨团是一个形状在长大，不是一片噪声在闪。墨丝 = 一张扭过两次的噪声的等值线
+const BLW = 640, BLH = 360, NBG = { x0: -1600, y0: -1000, step: 6, nx: 434, ny: 240 };
+let NB = null, MLO = null, DLO = null, MIMG = null, DIMG = null, R_END = 0;
+const NBO = [0, 0, 0];
+function nbAt(dx, dy) {        // 晕墨噪声（双线性取值）→ NBO = [大团, 细纹, 墨丝的等值线]
+  const { x0, y0, step, nx, ny } = NBG, gx = clamp((dx - x0) / step, 0, nx - 1.001), gy = clamp((dy - y0) / step, 0, ny - 1.001), ix = gx | 0, iy = gy | 0, fx = gx - ix, fy = gy - iy;
+  const q = (iy * nx + ix) * 3, q2 = q + nx * 3, b0 = (1 - fx) * (1 - fy), b1 = fx * (1 - fy), b2 = (1 - fx) * fy, b3 = fx * fy;
+  for (let c = 0; c < 3; c++) NBO[c] = NB[q + c] * b0 + NB[q + 3 + c] * b1 + NB[q2 + c] * b2 + NB[q2 + 3 + c] * b3;
+  return NBO;
+}
+function makeBloom() {
+  const g1 = grid('bloom1', 64), g2 = grid('bloom2', 128), g3 = grid('bloom3', 96), gw = grid('bloomW', 64);
+  NB = new Float32Array(NBG.nx * NBG.ny * 3);
+  for (let j = 0; j < NBG.ny; j++) for (let i = 0; i < NBG.nx; i++) {
+    const x = NBG.x0 + i * NBG.step, y = NBG.y0 + j * NBG.step, k = (j * NBG.nx + i) * 3;
+    const X = x + 300 * (vn(gw, x / 430, y / 430) - .5), Y = y + 300 * (vn(gw, x / 430 + 17.3, y / 430 + 9.1) - .5);   // 扭一下：墨团打卷
+    const X2 = X + 130 * (vn(g3, X / 160 + 5.2, Y / 160) - .5), Y2 = Y + 130 * (vn(g3, X / 160, Y / 160 + 2.7) - .5);   // 再扭一下：墨丝
+    NB[k] = .55 * vn(g1, X / 300, Y / 300) + .3 * vn(g1, X / 130 + 3.1, Y / 130 + 7.7) + .15 * vn(g2, X / 56, Y / 56);
+    NB[k + 1] = .6 * vn(g2, X2 / 46 + 1.3, Y2 / 46) + .4 * vn(g2, X2 / 20, Y2 / 20 + 4.4);
+    NB[k + 2] = .65 * vn(g3, X2 / 90 + 8.8, Y2 / 90 + 1.1) + .35 * vn(g3, X2 / 38, Y2 / 38 + 6.6);
+  }
+  // 拍上那一刻要正好整幅晕满：逐格算出离得最远（算上噪声）的那一格要多大的 R，前沿就在拍上扫过最后一个角
+  const O = exitAt(T_LAND);
+  for (let j = 0; j < BLH; j++) for (let i = 0; i < BLW; i++) {
+    const dx = (i + .5) * W / BLW - O[0], dy = (j + .5) * H / BLH - O[1], n = nbAt(dx, dy);
+    R_END = Math.max(R_END, Math.hypot(dx / 1.3, dy / .9) - 300 * (n[0] - .5) * 2.2 - 26 * (n[1] - .5) + 3);
+  }
+  MLO = cv(BLW, BLH); DLO = cv(BLW, BLH);
+  MIMG = ctx2d(MLO).createImageData(BLW, BLH); DIMG = ctx2d(DLO).createImageData(BLW, BLH);
+}
+function bloomField(t) {
+  // 墨团的半径：开头一冒（0.3 秒长到 200），之后匀速往外晕，拍上（T_LAND）那一刻前沿正好扫过最后一个角、整幅露出 B；之后残墨再退
+  const O = exitAt(t), u = seg(t, T_LIFT, T_LAND), v = sm(.6, 1, u);
+  const R = MV.keys(t, [[T_LIFT, 0], [T_LIFT + .3, 200, 'out'], [T_LAND, R_END, 'linear'], [T_LAND + 1.2, R_END + 650, 'out']]);
+  // 刚冒出来时贴着水面摊开（扁、边更毛），越晕越大才漫上来盖住整幅；开头 0.5 秒墨团里全是浓墨，还透不出 B
+  const A = Math.min(40 + .22 * R + 70 * (1 - sm(0, 700, R)), 300), L = Math.min(70 + .12 * R, 200), fw = 6 + .012 * R, dmax = .95 - .45 * u - .2 * sm(.75, 1, u);
+  const ay = lerp(.42, .9, sm(0, 1000, R)), m0 = .5 * L * (1 - v) + 140 * (1 - sm(T_LIFT + .15, T_LIFT + .8, t)), mw = L * (1 - v) + 2, haze = .07 * (1 - sm(T_LAND - .1, T_LAND + HAZE, t));
+  const md = MIMG.data, dd = DIMG.data;
+  for (let j = 0; j < BLH; j++) {
+    const dy = (j + .5) * H / BLH - O[1];
+    for (let i = 0; i < BLW; i++) {
+      const dx = (i + .5) * W / BLW - O[0], k = (j * BLW + i) * 4, n = nbAt(dx, dy), big = n[0], fine = n[1], fil = Math.pow(1 - Math.abs(2 * n[2] - 1), 4);
+      const phi = R - Math.hypot(dx / 1.3, dy / ay) + clamp(R / 150) * (A * (big - .5) * 2.2 + 26 * (fine - .5));
+      let M = 0, D = 0;
+      if (phi > 0) {
+        // 刚滴下去时墨聚在中间（中心最浓、往外渐淡，像一滴墨落进水里）；晕开以后墨被推到前沿，前沿最浓、里面化淡
+        const e = phi / L, rim = sm(0, fw, phi) * Math.exp(-e), wR = sm(150, 650, R);
+        const core = Math.pow(clamp(phi / (.7 * R + 1)), .6) * (.72 + .4 * (fine - .5) + .3 * fil);
+        D = clamp(dmax * ((1 - wR) * core + wR * rim * (.55 + .45 * fil + .3 * (fine - .5)))   // 前沿：最浓，带一点墨丝的纹
+          + dmax * .3 * fil * Math.exp(-e * .35) * sm(.45, .8, big)                          // 里头还拖着几缕打卷的墨丝，越往里越淡
+          + haze * sm(0, 90, phi) * clamp(big * 1.8 - .5));                                   // 化开的淡墨，一块一块的
+        M = sm(m0, m0 + mw, phi);
+      }
+      md[k + 3] = Math.round((t >= T_LAND ? 1 : M) * 255);
+      dd[k] = INK[0]; dd[k + 1] = INK[1]; dd[k + 2] = INK[2]; dd[k + 3] = Math.round(D * 255);
+    }
+  }
+  ctx2d(MLO).putImageData(MIMG, 0, 0); ctx2d(DLO).putImageData(DIMG, 0, 0);
+}
+
+// ───────────────────────── 题跋（歌词）─────────────────────────
+// 竖排，从右往左两列，题在右上的空白里。字形取 hanzi-writer-data 的笔画中线，按笔顺用上面那支笔写：
+// 起笔藏锋，撇捺钩提出锋、横竖点回锋，横细竖粗，每个字歪一点、大小差几个百分点；运笔速度一样，笔画多的字写得久。
+// 一列蘸一次墨：头一个字饱，往下越写越枯（墨淡一点、飞白多一点）。两列之间就是停顿，不写标点，不加印章
+const MED = {}, GLYPHS = [], GLYPH_DONE = new Map();
+function makeGlyphs() {
+  const r = rng('tiba');
+  LYRIC.split('，').forEach((txt, ci) => {
+    const chars = [...txt], T0 = ci ? T_W2 : T_W1, DW = 1.15;
+    const lens = chars.map((ch) => (MED[ch] ? MED[ch].reduce((a, p) => { let l = 0; for (let j = 1; j < p.length; j++) l += Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]); return a + l + 160; }, 0) : 2400));
+    const tot = lens.reduce((a, b) => a + b, 0);
+    let acc = 0, y = ci ? 196 : 140;
+    chars.forEach((ch, k) => {
+      const S = 88 + (r() - .5) * 10, t0 = T0 + DW * acc / tot; acc += lens[k];
+      // 按这个字笔画实际占的高度往下排：「一」这种扁字不占一整格，字和字之间空一样多
+      let top = -.45 * S, bot = .45 * S;
+      if (MED[ch]) { const ys = MED[ch].flat().map((p) => (388 - p[1]) / 1024 * S); top = Math.min(...ys) - .06 * S; bot = Math.max(...ys) + .06 * S; }
+      if (bot - top < .34 * S) { const c = (top + bot) / 2; top = c - .17 * S; bot = c + .17 * S; }
+      GLYPHS.push({ ch, id: ci * 16 + k, x: (ci ? 1684 : 1796) + (r() - .5) * 8, y: y - top, S, rot: (r() - .5) * .07, t0, t1: T0 + DW * acc / tot - .02, load: k / Math.max(1, chars.length - 1) });
+      y += bot - top + 14 + (r() - .5) * 8;
+    });
+  });
+}
+function strokeTip(pts) {     // 撇、捺、钩、提出锋；横、竖、点回锋
+  const a = pts[Math.max(0, pts.length - 3)], b = pts[pts.length - 1], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+  return (dx / l < -.35 || (dx / l > .45 && dy / l > .35) || dy / l < -.4) ? 'point' : 'round';
+}
+function glyphArt(G, f) {
+  if (f >= 1 && GLYPH_DONE.has(G.id)) return GLYPH_DONE.get(G.id);
+  const size = Math.ceil(G.S * 1.6), c = cv(size, size), g = ctx2d(c);
+  g.translate(size / 2, size / 2); g.rotate(G.rot);
+  if (MED[G.ch]) {
+    const S = G.S, strokes = MED[G.ch].map((m) => m.map(([x, y]) => [(x - 512) / 1024 * S, (388 - y) / 1024 * S]));
+    const lens = strokes.map((p) => { let l = 0; for (let j = 1; j < p.length; j++) l += Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]); return l + S * .16; });
+    const tot = lens.reduce((a, b) => a + b, 0); let acc = 0;
+    strokes.forEach((p, k) => {
+      const fk = clamp((f * tot - acc) / (lens[k] - S * .1)); acc += lens[k]; if (fk <= 0) return;
+      const L = lens[k] - S * .16, dotty = L < S * .22, tip = strokeTip(p);
+      const dx = p[p.length - 1][0] - p[0][0], dy = p[p.length - 1][1] - p[0][1], flat = Math.abs(dy) < Math.abs(dx) * .35 ? .8 : Math.abs(dx) < Math.abs(dy) * .3 ? 1.08 : 1;
+      brush(g, p, { w: S * .118 * flat * (dotty ? 1.25 : 1) * (.92 + .16 * rnd('lw' + G.id + k)), a: .95 - .1 * G.load, head: 'hide', tip: dotty ? 'point' : tip, tipLen: S * .2, thin: .2, wob: .1,
+        dry: (L > S * .5 ? .42 : .18) + .3 * G.load, dryFrom: .55 - .2 * G.load, gap: S * .22, seed: 'ly' + G.id + '_' + k, f: fk, var: .3, seg: 6 });
+    });
+  } else if (f > 0) {           // 笔画数据没取到（断网）：退回系统楷体
+    g.globalAlpha = clamp(f * 2); g.fillStyle = ink(.92); g.font = `${G.S * .9}px ${SYS_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(G.ch, 0, 0); g.globalAlpha = 1;
+  }
+  wetten(c, Math.round(G.x - size / 2), Math.round(G.y - size / 2), { r: 1.8, cr: .8, cm: .5, bleed: .14, th: .1, soft: .05, ring: .08, ringW: .05, feather: .35, grain: .14 });
+  if (f >= 1) GLYPH_DONE.set(G.id, c);
+  return c;
+}
+
+// ───────────────────────── 一帧 ─────────────────────────
+// 纸不跟镜头动（镜头移的是纸上的墨）。墨全画进一张透明的墨层，最后 multiply 叠到纸上，纸纹从墨底下透出来。
+// 转场那几拍 A、B 各画一张墨层：A 只留墨还没晕到的地方，B 只在晕开、变淡了的地方露出来，再叠上晕开的墨。
+// 太阳、白鹭跨两个镜头，画在最后（白鹭在墨层上挖出纸白，所以飞过浓墨时是一只白鸟）
+let DEV = null;
+function devs(g) {
+  const w = g.canvas.width, h = g.canvas.height;
+  if (!DEV || DEV.w !== w || DEV.h !== h) DEV = { w, h, ink: cv(w, h), a: cv(w, h), b: cv(w, h) };
+  return DEV;
+}
+function fresh(c, T) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, c.canvas.width, c.canvas.height); c.setTransform(T); c.imageSmoothingQuality = 'high'; return c; }   // 缩小出草稿时细笔画不断
+function drawFrame(g, t) {
+  const T = g.getTransform(), D = devs(g), tq = q12(t), box = [T.e, T.f, W * T.a, H * T.d];
+  g.drawImage(PAPER, 0, 0);
+  const o = fresh(ctx2d(D.ink), T);
+  if (t < T_LIFT) drawA(o, t, tq);
+  else if (t >= T_LAND) {
+    drawB(o, t, tq);
+    if (t < T_LAND + HAZE) { bloomField(t); o.save(); o.setTransform(1, 0, 0, 1, 0, 0); o.drawImage(DLO, ...box); o.restore(); }
+  } else {
+    const a = fresh(ctx2d(D.a), T), b = fresh(ctx2d(D.b), T);
+    drawA(a, t, tq); drawB(b, t, tq); bloomField(t);
+    for (const c of [a, b, o]) c.setTransform(1, 0, 0, 1, 0, 0);
+    a.globalCompositeOperation = 'destination-out'; a.drawImage(MLO, ...box); a.globalCompositeOperation = 'source-over';
+    b.globalCompositeOperation = 'destination-in'; b.drawImage(MLO, ...box); b.globalCompositeOperation = 'source-over';
+    o.drawImage(D.a, 0, 0); o.globalCompositeOperation = 'lighter'; o.drawImage(D.b, 0, 0); o.globalCompositeOperation = 'source-over';
+    o.drawImage(DLO, ...box);
+    o.setTransform(T);
+  }
+  drawSun(o, t);
+  drawEgret(o, t, tq);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.drawImage(D.ink, 0, 0); g.restore();
+}
+// 歌词：最上层、不跟镜头动。一笔一笔写出来的题跋，multiply 叠在纸上
+function overlay(g, t) {
+  if (!MV.lyricAt(t)) return;
+  g.globalCompositeOperation = 'multiply';
+  for (const G of GLYPHS) {
+    const f = clamp((t - G.t0) / (G.t1 - G.t0)); if (f <= 0) continue;
+    const c = glyphArt(G, f); g.drawImage(c, G.x - c.width / 2, G.y - c.height / 2);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+async function ready() {
+  // 笔画数据：先用本地的 glyphs.js（scripts/glyphs.py 存的，页面里引了就用），缺的从 jsDelivr 取；网络问题取不到时出片报错停下，不会有的帧有字、有的退回楷体
+  Object.assign(MED, await MV.glyphs(LYRIC));
+  makePaper(); makeMists(); bakeA(); bakeB(); makeSun(); makeBloom(); makeGlyphs();
+}
+MV.page({ W, H, fps: FPS, duration: DUR, ready, draw: drawFrame, overlay });
+</script></body></html>

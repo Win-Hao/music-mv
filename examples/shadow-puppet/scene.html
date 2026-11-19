@@ -1,0 +1,682 @@
+<!doctype html>
+<!--
+  皮影戏（Chinese shadow puppetry）· 锣鼓声里舞狮：关节皮影狮子跟着锣鼓点甩头、眨眼、扑绣球，油灯一晃暗下去又亮起来，狮子跃上高台
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。
+  白布幕后面点着油灯，刻好的染色兽皮贴在幕上演：观众看到的颜色是灯光透过皮子透出来的。6 秒，BPM 120，两个镜头（两套布景）。
+
+  关键画法（Canvas 2D，不靠库；给以后读代码学画法的 agent）：
+  1. 工具和分层：kit.js 的 MV.page。draw 里自己在离屏画布上合成，最后一次贴进 g；歌词牌在 overlay（最上层，不跟布景换）。
+     皮片、布、灯光图都按画布的物理分辨率刻（g.getTransform().a 就是逻辑 px → 物理 px），GIF、草稿、成片都清楚；画布大小变了才重刻。
+  2. 透光模型：每帧先在一张白底的「透光图」T 上，把每片皮用 multiply 叠上去（皮子的颜色 = 它让多少光透过去）。
+     镂空是真的挖掉（destination-out），那里只剩布、最亮；两片皮叠在一起自动更暗（狮子的远侧腿压在身子上、杆子压在高台上）。
+     最后：画面 = 幕后的灯光图 × T。不描轮廓线、不涂阴影，明暗全由「透多少光」决定。
+  3. 一片皮怎么刻（hide()）：先染色，再叠一层皮纹（斑驳、纤维），沿边留一道深色皮边，往里挖一道细刀口线，然后按纹样挖空：
+     回纹（fret()：一条底线上一排方折回钩，刻成细缝）、如意云、月牙鳞、钱孔、小圆孔、牙齿三角。同一张皮上可以补染第二种颜色（狮背的金脊、眉毛）。
+     几个圆拼成的皮（云片）皮边只能沿外轮廓走：放大一圈的并集垫深色、挖掉放大半圈的、再填染色，留下的细缝就是刀口线。
+  4. 布和灯：布纹（经纬线、粗纱、几处不匀）和钉死的地条一起烤进 TBG。幕后一盏油灯，亮点在幕中间偏上，四角暗；
+     火苗一直在跳：整幕亮度用固定种子的值噪声在 ±3–4% 里跳，亮点跟着挪几像素。亮度 > 1 时把灯光图再 lighter 叠一遍（冲一下），< 1 时盖一层黑。
+  5. 狮子是关节皮影：身子、头、下颌、尾巴、四条腿、眼珠（换片：睁 / 闭）各一片，每片的 (0,0) 就是它的线铆，只绕铆钉转、不变形。
+     远侧的两条腿染深一档、错开一点。腿的角度由「髋到落脚面的距离」定（acos），站着、下蹲时两只脚一直踩住，空中收腿，扑的那下前爪往前抓。
+     三根操纵杆（身子、脖子、前爪）都朝右下伸出画面；手那头离幕远，杆子画在 1/4 大小的画布上糊开再放大，靠近铆点的一段另画清楚的。
+     手持的抖：值噪声给身子、头一点位移和转角，一直在抖；落上高台亮相的那半拍手稳住（抖到 0.2 倍）。
+     尾巴的惯性晃：身子的加速度推一个弹簧，每帧从 0 秒重新积分到 t（步长 1/240 秒），所以只由 t 决定。
+  6. 动起来的手感：皮影按 t 连续动（30 fps），眨眼是瞬间换片。所有时刻从拍子算：每拍狮子往下一蹲、甩一下头（重拍甩得最大、嘴张得最大），
+     鼓槌钉在鼓架伸出的立柱上，拍间抬起、每拍落在鼓面上；锣在重拍上被敲得一晃，绣球被杆子每拍颠一下。挂线的云、彩穗一直在线上轻轻摆。
+  7. 转场「灯一暗一亮换一幕」：第 6.8–8 拍油灯一晃（灯光图的亮点先往左甩再往右回），第 6.85–7.44 拍暗到约 24%（不到黑帧）；
+     最暗时换布景：旧布景抽离幕布（putSoft()：在 1/3 大小的画布上糊开再放大，变大、变虚、变淡），新的高台、彩穗从幕外按上来（反过来，大虚淡 → 贴上变清楚）。
+     狮子不换：它从第 7 拍起跳，灯暗时正在半空，第 8 拍（重拍）落上高台，灯在同一拍回来并冲一下；绣球在暗里被杆子挪到台沿，落台那一下被震得弹起。
+     整个转场没有切：画面里一直是同一只狮子，布景是在暗里换的。
+  8. 歌词：一块深色皮牌，字是刻空的（Noto Serif SC 900 填字后 destination-out），一根杆举着从幕的左边沿着幕滑进来（裁在台框里，像从侧幕进场），第 2 拍到位。
+     牌子在 overlay 里用 multiply 乘到画面上：和幕上的皮一样叠暗，灯暗时它也暗。字按 MV.lyricAt 一个一个从牌后亮起一盏小灯
+     （径向光只保留字形里的部分，lighter 加上去，亮度跟着油灯走）。
+  9. 台框是木头的，在幕前面，不透光、不动；布也不动，没有镜头推拉。
+  时间线（第 n 拍 = n × 0.5 秒，拍子当锣鼓点）：
+    第 0 拍（重拍）猛甩头、锣一晃；第 1 拍小甩头；第 1.1 拍歌词牌从左边滑进来，冲过一点再退回，第 2 拍停稳；第 2 拍眨眼，字一个个亮；第 3 拍下蹲蓄力，第 3.3 拍起扑；
+    第 4 拍（重拍）扑到最高、前爪抓、一口咬住绣球，绣球被打飞，锣又一晃；第 4.6 拍落地压一下；第 5、6 拍甩头；第 6.6 拍再蹲，第 7 拍起跳；
+    第 6.8–8 拍灯一晃、暗下去、换布景；第 8 拍（重拍，4.0 秒，PLAN）落上高台站稳、灯亮冲一下、大甩头、绣球弹起；
+    第 9 拍绣球落回台沿再弹两下（第 9.5、9.75 拍）；第 9、10、11 拍甩头；第 10.5 拍眨眼。
+  画面只由 t 决定：随机数全用 MV.rng / MV.noise 加「元素名 + 序号」种子，不用 Math.random()、Date，不存上一帧。
+  速度：Canvas 2D 同步画完。开页面约 5 秒（大半在等 jsDelivr 的字体），刻皮片、烤布纹约 0.2 秒；1920×1080 一帧画约 0.03 秒，连 PNG 编码约 0.11 秒。
+  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png；ffmpeg scale=640:360:flags=lanczos，
+    palettegen=max_colors=56:stats_mode=diff:reserve_transparent=0，paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle，-loop 0，72 帧约 4.2 MB。
+    灯一直在闪，每帧整屏都变，GIF 压不下去：96 色约 5.6 MB、64 色约 4.5 MB；bayer_scale 调到 4、5 更小，但灯光的渐变出一圈圈色环，不如少几个颜色。
+  坑：操纵杆会横穿脸和歌词牌：狮子、绣球的杆子都朝右下出画，歌词牌放在左下、它的杆朝左下；挂线要细、清楚、淡，直接画在透光图上
+    （画在小画布上再放大会糊成一道道竖的暗带）；布纹里大斑太重，整幕会出竖条带；后加的光（落台那下冲亮）会把浅色皮冲白，要留颜色的皮染深；
+    腿的角度要在挪到髋上之前、在身子的坐标里取点算，挪过去再取点会把髋的偏移算两遍，腿全劈开。
+  字体：Noto Serif SC 900（@fontsource/noto-serif-sc@5.3.1，SIL OFL 1.1，jsDelivr 按字取分包）。没有别的外部资源。
+-->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.3.1/900.css">
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; overflow: hidden; background: #000; }</style>
+</head><body><script>
+'use strict';
+// ======================= 基本量 =======================
+const W = 1920, H = 1080, FPS = 30, DUR = 6, TAU = Math.PI * 2;
+MV.tempo(120, 0);                                   // 第 0 拍在 0 秒，一拍 0.5 秒；拍子就是锣鼓点
+const { clamp, lerp, seg } = MV, EZ = MV.ease, bt = MV.beatTime;
+const LYRIC = '锣鼓一响，狮子醒了';
+window.LYRICS = [[bt(2), bt(12), LYRIC]];
+const FONT = '"Noto Serif SC","Songti SC","SimSun",serif';
+const T_DARK = bt(7.5), T_LAND = bt(8);             // 3.75 秒灯最暗、换布景；4.0 秒（第 8 拍，重拍）落上高台
+window.PLAN = [+T_LAND.toFixed(3)];
+const GY = 850, LEG = 120, HIP = 46, REST = GY - LEG - HIP;      // 地条上沿、腿长、髋在身子中心下面多少、站着时身子中心的高度
+const PX = 1250, H1 = 190, H2 = 140, TOP2 = GY - H1 - H2, REST2 = TOP2 - LEG - HIP;   // 高台：中心 x、下层高、上层高、台面
+const XA = 760, XB = 960, XC = 1240;                // 狮子站的三处：开场、扑完、高台上
+const BALL2 = [PX + 240, GY - H1 - 46];             // 高台下层右边的台沿上，绣球落在这里
+const X0 = 34, Y0 = 50, X1 = W - 34, Y1 = H - 38;   // 台框里的幕
+const D = {   // 染料：数值 = 这块皮让多少光透过去（multiply 用）
+  red: '#F0643A', redLt: '#F8925C', redDk: '#8E2E18', redFar: '#C24A2C',
+  gold: '#F4C65E', goldDk: '#9A6A1C', green: '#76AE90', greenDk: '#33604C', sage: '#A9C9B6',
+  ink: '#4A372A', inkDk: '#2B1E16', wood: '#C88C58', woodDk: '#6C3F22', pale: '#F8EBD0', raw: '#E8C89A', eye: '#FFE9A8',
+};
+
+// ======================= 工具 =======================
+const sm = EZ.smooth;
+const nz = MV.noise;
+function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
+function dk(hex, k) { const n = parseInt(hex.slice(1), 16); return `rgb(${Math.round((n >> 16 & 255) * k)},${Math.round((n >> 8 & 255) * k)},${Math.round((n & 255) * k)})`; }
+function ell(cx, cy, rx, ry = rx, rot = 0) { const p = new Path2D(); p.ellipse(cx, cy, rx, ry, rot, 0, TAU); return p; }
+function rect(x, y, w, h) { const p = new Path2D(); p.rect(x, y, w, h); return p; }
+function poly(pts) { const p = new Path2D(); pts.forEach((q, i) => i ? p.lineTo(q[0], q[1]) : p.moveTo(q[0], q[1])); p.closePath(); return p; }
+function capsule(x1, y1, x2, y2, r1, r2 = r1) {
+  const a = Math.atan2(y2 - y1, x2 - x1), p = new Path2D();
+  p.arc(x1, y1, r1, a + Math.PI / 2, a - Math.PI / 2); p.arc(x2, y2, r2, a - Math.PI / 2, a + Math.PI / 2); p.closePath(); return p;
+}
+function plaquePath(w, h, r) {   // 四角内凹的牌子
+  const p = new Path2D(), x0 = -w / 2, x1 = w / 2, y0 = -h / 2, y1 = h / 2;
+  p.moveTo(x0 + r, y0); p.lineTo(x1 - r, y0); p.arc(x1, y0, r, Math.PI, Math.PI / 2, true); p.lineTo(x1, y1 - r);
+  p.arc(x1, y1, r, -Math.PI / 2, -Math.PI, true); p.lineTo(x0 + r, y1); p.arc(x0, y1, r, 0, -Math.PI / 2, true);
+  p.lineTo(x0, y0 + r); p.arc(x0, y0, r, Math.PI / 2, 0, true); p.closePath(); return p;
+}
+
+// ======================= 刻皮 =======================
+let K = 0;        // 逻辑 px → 物理 px（画布多大就按多大刻，GIF、草稿、成片都清楚）
+let MOT = null;   // 皮纹：浅色底上的斑驳和纤维（multiply 进每片皮）
+function makeMot() {
+  const s = 256, c = mk(s, s), x = c.getContext('2d'), r = MV.rng('hide-tex');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < 90; i++) {
+    const px = r() * s, py = r() * s, rad = 8 + r() * 46, g = x.createRadialGradient(px, py, 0, px, py, rad);
+    g.addColorStop(0, `rgba(120,80,50,${.05 + r() * .09})`); g.addColorStop(1, 'rgba(120,80,50,0)');
+    for (const ox of [-s, 0, s]) for (const oy of [-s, 0, s]) { x.save(); x.translate(ox, oy); x.fillStyle = g; x.fillRect(px - rad, py - rad, rad * 2, rad * 2); x.restore(); }
+  }
+  x.lineCap = 'round';
+  for (let i = 0; i < 140; i++) {   // 纤维、血管
+    const px = r() * s, py = r() * s, a = r() * TAU, l = 10 + r() * 40;
+    x.strokeStyle = `rgba(110,70,40,${.05 + r() * .08})`; x.lineWidth = .6 + r() * 1.1;
+    x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(a) * l * .5 + (r() - .5) * 12, py + Math.sin(a) * l * .5 + (r() - .5) * 12, px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke();
+  }
+  return c;
+}
+let CUR = '';     // 正在刻的那片皮的名字（皮纹的偏移用它做种子）
+// 一块染色的皮：染色 → 皮纹 → 皮边 + 刀口线 → 挖纹样
+function hide(g, path, dye, o = {}) {
+  const e = o.edge ?? 3.5, k = o.knife ?? 2.5, rule = o.rule || 'nonzero';
+  g.save();
+  g.fillStyle = dye; g.fill(path, rule);
+  g.clip(path, rule);
+  if (o.tex !== 0) {
+    const pt = g.createPattern(MOT, 'repeat'), r = MV.rng('mot' + CUR + dye);
+    pt.setTransform(new DOMMatrix().translate(r() * 256, r() * 256).rotate(r() * 360));
+    g.globalCompositeOperation = 'multiply'; g.globalAlpha = o.tex ?? 1; g.fillStyle = pt; g.fill(path, rule); g.globalAlpha = 1;
+  }
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  if (k > 0) { g.globalCompositeOperation = 'destination-out'; g.lineWidth = 2 * (e + k); g.strokeStyle = '#000'; g.stroke(path); }
+  g.globalCompositeOperation = 'source-over';
+  if (e > 0) { g.lineWidth = 2 * e; g.strokeStyle = o.edgeCol || dk(dye, .5); g.stroke(path); }
+  if (o.carve) { g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.strokeStyle = '#000'; o.carve(g); }
+  g.restore();
+}
+// 纹样（在 carve 里调用：填的、描的地方就挖空）
+function dot(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+function coin(g, x, y, r) { const p = new Path2D(); p.arc(x, y, r, 0, TAU); const s = r * .95; p.rect(x - s / 2, y - s / 2, s, s); g.fill(p, 'evenodd'); }   // 钱孔
+function slot(g, x, y, w, h) { const p = new Path2D(); p.roundRect(x, y, w, h, Math.min(w, h) / 2); g.fill(p); }
+function tri(g, x1, y1, x2, y2, x3, y3) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.lineTo(x3, y3); g.closePath(); g.fill(); }
+// 月牙：大圆减去往反方向挪开的小圆，a 是月牙鼓出去的方向
+function cres(g, x, y, r, a, th = .42) {
+  const d = r * th, rb = r * .92, xi = (rb * rb - r * r - d * d) / (2 * d), ta = Math.acos(clamp(xi / r, -1, 1)), tb = Math.atan2(Math.sqrt(Math.max(0, r * r - xi * xi)), xi + d);
+  const p = new Path2D(), c = Math.cos(a), s = Math.sin(a), T = (px, py) => [x + px * c - py * s, y + px * s + py * c];
+  for (let i = 0; i <= 12; i++) { const q = lerp(-ta, ta, i / 12), [px, py] = T(r * Math.cos(q), r * Math.sin(q)); i ? p.lineTo(px, py) : p.moveTo(px, py); }
+  for (let i = 0; i <= 12; i++) { const q = lerp(tb, -tb, i / 12), [px, py] = T(-d + rb * Math.cos(q), rb * Math.sin(q)); p.lineTo(px, py); }
+  p.closePath(); g.fill(p);
+}
+// 云纹：swirl 是一个回卷的旋涡刻成细线；cloud 是一朵祥云：一大一小两个卷 + 一条往右甩的云尾。
+// 不对称是故意的：两个一样大的卷并排、下面再刻一道弧，缩小以后像一张笑脸
+function swirl(g, x, y, r, sgn = 1, lw = 2.6, turns = 1.35) {
+  g.lineWidth = lw; g.beginPath();
+  for (let i = 0; i <= 40; i++) { const q = i / 40, a = sgn * q * turns * TAU, rr = r * (1 - q * .78); const px = x + Math.cos(a - Math.PI / 2) * rr * sgn, py = y + Math.sin(a - Math.PI / 2) * rr; i ? g.lineTo(px, py) : g.moveTo(px, py); }
+  g.stroke();
+}
+function cloud(g, x, y, s, lw = 2.6) {
+  swirl(g, x - 5 * s, y - 2 * s, 11 * s, 1, lw); swirl(g, x + 12 * s, y + 3 * s, 6.5 * s, -1, lw);
+  g.lineWidth = lw; g.beginPath(); g.moveTo(x - 16 * s, y + 7 * s); g.bezierCurveTo(x - 4 * s, y + 15 * s, x + 14 * s, y + 15 * s, x + 30 * s, y + 8 * s); g.stroke();
+}
+// 回纹：一条底线上一排方折的回钩，刻成细缝
+function fret(g, x, y, w, h, lw = 3) {
+  const n = Math.max(1, Math.round(w / (h * 1.15))), u = w / n;
+  g.lineWidth = lw; g.lineJoin = 'miter'; g.lineCap = 'butt'; g.beginPath();
+  g.moveTo(x, y + h); g.lineTo(x + w, y + h);
+  for (let i = 0; i < n; i++) {
+    const a = x + i * u;
+    g.moveTo(a + u * .12, y + h); g.lineTo(a + u * .12, y); g.lineTo(a + u * .88, y); g.lineTo(a + u * .88, y + h * .72);
+    g.lineTo(a + u * .36, y + h * .72); g.lineTo(a + u * .36, y + h * .34); g.lineTo(a + u * .62, y + h * .34);
+  }
+  g.stroke(); g.lineJoin = 'round'; g.lineCap = 'round';
+}
+
+// 一片皮 = 一张离屏画布（按物理分辨率刻），pivot 在 (0,0)
+function piece(key, box, draw) {
+  const [x0, y0, x1, y1] = box, pad = 4, w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+  const c = mk(w * K, h * K), g = c.getContext('2d');
+  g.setTransform(K, 0, 0, K, (pad - x0) * K, (pad - y0) * K); g.lineJoin = 'round'; g.lineCap = 'round';
+  CUR = key; draw(g);
+  return { c, x: x0 - pad, y: y0 - pad, w, h };
+}
+function put(ctx, P, x, y, rot = 0, s = 1) {
+  ctx.save(); ctx.translate(x, y); if (rot) ctx.rotate(rot); if (s !== 1) ctx.scale(s, s);
+  ctx.drawImage(P.c, P.x, P.y, P.w, P.h); ctx.restore();
+}
+const here = (ctx, P) => ctx.drawImage(P.c, P.x, P.y, P.w, P.h);   // 在当前变换的原点（铆钉）上贴一片
+
+// ======================= 狮子的刻法（朝右；每片的 (0,0) 就是它的铆钉）=======================
+function artBody(g) {
+  const p = new Path2D();
+  p.moveTo(-186, -18);
+  p.bezierCurveTo(-176, -74, -64, -84, 40, -74);
+  p.bezierCurveTo(124, -68, 178, -56, 180, -12);
+  p.bezierCurveTo(182, 28, 156, 50, 124, 56);
+  for (let x = 124; x > -160; x -= 28) { p.quadraticCurveTo(x - 4, 86, x - 14, 62); p.quadraticCurveTo(x - 22, 88, x - 28, 57); }   // 肚子下沿一排毛穗
+  p.bezierCurveTo(-190, 52, -198, 14, -186, -18); p.closePath();
+  hide(g, p, D.red, { edge: 4.5, knife: 3, edgeCol: D.redDk, carve: g => {
+    for (let x = -150; x <= 140; x += 26) cres(g, x, -50 + Math.pow(x / 160, 2) * 10, 8.5, Math.PI / 2, .48);   // 背上一排鳞（朝下的月牙）
+    fret(g, -140, -22, 260, 22, 3.2);                                                                            // 腰上一条回纹
+    for (let x = -126; x <= 110; x += 34) coin(g, x, 26, 7);
+    cloud(g, 128, -18, .78, 2.8); cloud(g, -150, 4, .7, 2.8);
+    for (let x = 110; x > -150; x -= 28) dot(g, x - 14, 66, 3);                                                   // 每撮毛穗一个透光孔
+  } });
+  // 背上一条金色的脊：同一张皮上补染一道
+  const sp = new Path2D(); sp.moveTo(-150, -66); sp.bezierCurveTo(-60, -84, 60, -80, 150, -60); sp.bezierCurveTo(60, -70, -60, -74, -150, -58); sp.closePath();
+  hide(g, sp, D.gold, { edge: 0, knife: 0, tex: .6, carve: g => { for (let x = -120; x <= 120; x += 24) dot(g, x, -69 + Math.abs(x) * .04, 2.2); } });
+}
+function artTail(g) {   // 铆钉在尾根，往左上卷
+  const p = new Path2D();
+  p.moveTo(6, 12); p.bezierCurveTo(-40, 14, -92, -18, -92, -70); p.bezierCurveTo(-92, -112, -52, -128, -30, -104);
+  p.bezierCurveTo(-18, -88, -38, -70, -52, -78); p.bezierCurveTo(-58, -48, -28, -14, 8, -12); p.closePath();
+  hide(g, p, D.gold, { edge: 3.5, knife: 2.4, edgeCol: D.goldDk, carve: g => { swirl(g, -66, -86, 16, 1, 3.2); for (const [x, y] of [[-30, -4], [-58, -22], [-76, -48]]) dot(g, x, y, 3.4); } });
+}
+function artLeg(g, dye) {   // 铆钉在髋，爪子在下面 (0, LEG)
+  const p = new Path2D();
+  p.moveTo(-26, -12); p.bezierCurveTo(-34, 36, -22, 76, -18, 98);
+  p.bezierCurveTo(-34, 108, -32, 128, -10, 128); p.lineTo(34, 128); p.bezierCurveTo(44, 120, 32, 104, 16, 100);
+  p.bezierCurveTo(20, 70, 30, 30, 26, -12); p.bezierCurveTo(10, -24, -12, -24, -26, -12); p.closePath();
+  hide(g, p, dye, { edge: 3.5, knife: 2.2, edgeCol: D.redDk, carve: g => {
+    cloud(g, 0, 18, .62, 2.6); slot(g, -3, 48, 6, 30); for (const x of [-4, 10, 24]) slot(g, x - 2, 112, 4, 12);
+  } });
+}
+function artHead(g) {   // 铆钉在脖子，脸朝右
+  const mane = new Path2D(), M = [];
+  for (let i = 0; i <= 8; i++) { const a = lerp(Math.PI * .55, Math.PI * 1.62, i / 8), x = 70 + Math.cos(a) * 94, y = -56 + Math.sin(a) * 86; M.push([x, y]); mane.moveTo(x + 28, y); mane.arc(x, y, 28, 0, TAU); }
+  hide(g, mane, D.gold, { edge: 3, knife: 2, edgeCol: D.goldDk, carve: g => { M.forEach(([x, y], i) => swirl(g, x, y, 14, i % 2 ? 1 : -1, 3)); } });
+  const ear = new Path2D(); ear.moveTo(30, -118); ear.quadraticCurveTo(20, -170, 64, -168); ear.quadraticCurveTo(70, -140, 58, -116); ear.closePath();
+  hide(g, ear, D.green, { edge: 2.5, knife: 1.6, edgeCol: D.greenDk, carve: g => cres(g, 44, -146, 8, Math.PI, .5) });
+  const p = new Path2D();
+  p.moveTo(-10, 20); p.bezierCurveTo(-35, -40, 0, -135, 85, -138); p.bezierCurveTo(150, -140, 182, -105, 186, -66);
+  p.bezierCurveTo(206, -58, 210, -30, 204, -10); p.bezierCurveTo(200, 10, 186, 22, 168, 24);
+  p.lineTo(70, 28); p.bezierCurveTo(40, 34, 10, 34, -10, 20); p.closePath();
+  hide(g, p, D.red, { edge: 4, knife: 2.6, edgeCol: D.redDk, carve: g => {
+    g.lineWidth = 5; g.beginPath(); g.arc(96, -102, 21, 0, TAU); g.stroke(); dot(g, 96, -102, 7);   // 额头上的圆镜
+    dot(g, 134, -60, 18);                                                                            // 眼眶（眼珠是另一片，换片眨眼）
+    cloud(g, 44, -40, .9, 3); swirl(g, 60, -84, 10, -1, 2.6);
+    cres(g, 196, -30, 7, 0, .5);                                                                     // 鼻孔
+    for (let x = 82; x <= 156; x += 15) tri(g, x, 13, x + 13, 13, x + 6.5, 25);                     // 上牙：刻空，透光发亮
+    fret(g, 140, -8, 46, 13, 2.4);
+  } });
+  const brow = new Path2D(); brow.moveTo(104, -80); brow.quadraticCurveTo(136, -108, 176, -82); brow.quadraticCurveTo(138, -92, 104, -80); brow.closePath();
+  hide(g, brow, D.green, { edge: 2, knife: 0, edgeCol: D.greenDk, carve: g => { for (const x of [124, 140, 156]) dot(g, x, -90 + Math.abs(x - 140) * .3, 2.2); } });
+}
+function artJaw(g) {   // 铆钉在嘴角，往右伸
+  const beard = new Path2D();
+  for (let i = 0; i < 4; i++) { const x = 16 + i * 21; beard.moveTo(x - 12, 24); beard.quadraticCurveTo(x - 10, 60, x, 74 - i * 4); beard.quadraticCurveTo(x + 10, 60, x + 12, 24); beard.closePath(); }
+  hide(g, beard, D.gold, { edge: 2.5, knife: 0, edgeCol: D.goldDk, carve: g => { for (let i = 0; i < 4; i++) slot(g, 14 + i * 21, 36, 4, 22); } });
+  const p = new Path2D(); p.moveTo(-8, -6); p.lineTo(104, -4); p.bezierCurveTo(116, 4, 112, 22, 94, 30); p.bezierCurveTo(60, 40, 14, 36, -8, 18); p.closePath();
+  hide(g, p, D.redLt, { edge: 3.2, knife: 1.8, edgeCol: D.redDk, carve: g => { for (let x = 22; x <= 92; x += 15) tri(g, x, 6, x + 13, 6, x + 6.5, -4); cres(g, 50, 20, 7, Math.PI / 2, .5); } });
+}
+function artEye(g, shut) {
+  if (!shut) {
+    hide(g, ell(0, 0, 19), D.eye, { edge: 2.2, knife: 0, edgeCol: D.goldDk });
+    g.fillStyle = D.inkDk; g.beginPath(); g.arc(5, 1, 9, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'destination-out'; dot(g, 2, -3, 3); g.globalCompositeOperation = 'source-over';
+  } else {   // 闭眼：一片红眼皮盖住，中间一道深色的眼缝
+    hide(g, ell(0, 0, 19), D.red, { edge: 2.2, knife: 0, edgeCol: D.redDk });
+    g.strokeStyle = D.inkDk; g.lineWidth = 4.5; g.beginPath(); g.arc(0, -10, 17, Math.PI * .22, Math.PI * .78); g.stroke();
+  }
+}
+// ======================= 道具、布景的刻法 =======================
+function artBall(g) {   // 绣球：铆钉在球心，下面拖一串穗子
+  const ts = new Path2D(); ts.arc(0, 52, 7, 0, TAU); for (let i = -2; i <= 2; i++) ts.roundRect(i * 5 - 1.8, 56, 3.6, 44 - Math.abs(i) * 5, 1.8);
+  hide(g, ts, D.red, { edge: 1.4, knife: 0, edgeCol: D.redDk, carve: g => dot(g, 0, 52, 2.4) });
+  hide(g, ell(0, 0, 46), D.gold, { edge: 3.5, knife: 2.4, edgeCol: D.goldDk, carve: g => {
+    for (let i = 0; i < 16; i++) { const a = i * TAU / 16 + .2; dot(g, Math.cos(a) * 38, Math.sin(a) * 38, 2.6); }
+  } });
+  const pet = new Path2D();
+  for (let i = 0; i < 6; i++) { const a = i * TAU / 6, x = Math.cos(a) * 17, y = Math.sin(a) * 17; pet.moveTo(x + 11, y); pet.ellipse(x, y, 11, 7, a, 0, TAU); }
+  hide(g, pet, D.red, { edge: 2, knife: 0, edgeCol: D.redDk, tex: .5, carve: g => { coin(g, 0, 0, 9); for (let i = 0; i < 6; i++) { const a = i * TAU / 6; dot(g, Math.cos(a) * 19, Math.sin(a) * 19, 2.2); } } });
+}
+function artDrum(g) {   // 堂鼓 + 鼓架：铆钉在架子底边中点。鼓架右边伸出一根立柱，鼓槌钉在柱顶（128, -300）上转
+  hide(g, capsule(84, -140, 128, -300, 6, 4.5), D.woodDk, { edge: 0, knife: 0, carve: g => { for (const k of [.3, .6]) slot(g, lerp(84, 128, k) - 1.5, lerp(-140, -300, k) - 8, 3, 16); } });
+  g.fillStyle = '#5B3A26'; g.beginPath(); g.arc(128, -300, 7, 0, TAU); g.fill();
+  g.globalCompositeOperation = 'destination-out'; dot(g, 128, -300, 2.4); g.globalCompositeOperation = 'source-over';   // 柱顶的线铆
+  const legs = new Path2D();
+  for (const s of [-1, 1]) { legs.moveTo(s * 70 - 7, -150); legs.lineTo(s * 70 + 7, -150); legs.lineTo(s * 96 + 7, 0); legs.lineTo(s * 96 - 7, 0); legs.closePath(); }
+  legs.rect(-84, -46, 168, 9);
+  hide(g, legs, D.woodDk, { edge: 0, knife: 0, carve: g => { for (const s of [-1, 1]) dot(g, s * 88, -42, 2.6); } });
+  const p = new Path2D(); p.moveTo(-96, -236); p.quadraticCurveTo(0, -250, 96, -236); p.quadraticCurveTo(118, -170, 96, -104);
+  p.quadraticCurveTo(0, -90, -96, -104); p.quadraticCurveTo(-118, -170, -96, -236); p.closePath();
+  hide(g, p, D.red, { edge: 4, knife: 2.6, edgeCol: D.redDk, carve: g => {
+    for (let i = 0; i <= 12; i++) { const x = lerp(-84, 84, i / 12); dot(g, x, -228 - 9 * (1 - (x / 96) ** 2), 2.8); dot(g, x, -112 + 9 * (1 - (x / 96) ** 2), 2.8); }
+    fret(g, -80, -184, 160, 22, 3.2);                                                          // 鼓腰一条回纹（中间一朵云、两边两个钱孔会像一张脸）
+    for (const s of [-1, 1]) for (const y of [-200, -170, -140]) cres(g, s * 90, y, 5.5, s > 0 ? 0 : Math.PI, .5);
+  } });
+  hide(g, ell(0, -240, 98, 15), D.raw, { edge: 2.5, knife: 0, edgeCol: D.woodDk, carve: g => { g.lineWidth = 2; g.beginPath(); g.ellipse(0, -240, 70, 9, 0, 0, TAU); g.stroke(); } });
+}
+function artStick(g) { hide(g, capsule(0, 0, 150, 0, 5, 6.5), D.wood, { edge: 2, knife: 0, edgeCol: D.woodDk }); hide(g, ell(150, 0, 12, 10), D.red, { edge: 2, knife: 0, edgeCol: D.redDk, carve: g => dot(g, 150, 0, 3) }); }
+function artGongFrame(g) {   // 锣架：两根柱子、横梁两头卷云，铆钉在底边中点
+  const p = new Path2D();
+  for (const s of [-1, 1]) { p.rect(s * 118 - 8, -360, 16, 352); p.moveTo(s * 118 - 30, 0); p.lineTo(s * 118 + 30, 0); p.lineTo(s * 118 + 18, -16); p.lineTo(s * 118 - 18, -16); p.closePath(); }
+  p.moveTo(-150, -366); p.lineTo(150, -366); p.quadraticCurveTo(176, -372, 172, -392); p.quadraticCurveTo(150, -404, 142, -384); p.lineTo(-142, -384);
+  p.quadraticCurveTo(-150, -404, -172, -392); p.quadraticCurveTo(-176, -372, -150, -366); p.closePath();
+  hide(g, p, D.wood, { edge: 2.5, knife: 0, edgeCol: D.woodDk, carve: g => {
+    for (let x = -120; x <= 120; x += 20) slot(g, x - 6, -378, 12, 3);
+    for (const s of [-1, 1]) { swirl(g, s * 160, -388, 8, -s, 2.2); for (let y = -330; y < -40; y += 46) dot(g, s * 118, y, 2.6); }
+  } });
+}
+function artGong(g) {   // 锣：挂在两根线上，铆钉在挂点（锣心上面 96）
+  hide(g, ell(0, 96, 82), D.gold, { edge: 4, knife: 2.6, edgeCol: D.goldDk, carve: g => {
+    g.lineWidth = 3; for (const r of [64, 44]) { g.beginPath(); g.arc(0, 96, r, 0, TAU); g.stroke(); }
+    for (let i = 0; i < 12; i++) { const a = i * TAU / 12; cres(g, Math.cos(a) * 54, 96 + Math.sin(a) * 54, 5, a, .5); }
+    dot(g, -34, 26, 3); dot(g, 34, 26, 3);
+  } });
+  hide(g, ell(0, 96, 22), D.goldDk, { edge: 0, knife: 0, tex: .5, carve: g => coin(g, 0, 96, 9) });   // 锣脐
+}
+function artCloud(g, s) {   // 挂线的如意云片：几个圆的并集。皮边只能沿外轮廓走（直接描每个圆，并集里面会多出一圈圈弧线）：
+  const C = [[-60, 6, 34], [-18, -16, 42], [30, -8, 38], [70, 10, 28], [6, 18, 36]];   // 放大一圈的并集垫深色 → 挖掉放大半圈的 → 留出的细缝就是刀口线 → 再填染色
+  const U = d => { const p = new Path2D(); for (const [x, y, r] of C) { p.moveTo(x * s + r * s + d, y * s); p.arc(x * s, y * s, r * s + d, 0, TAU); } return p; };
+  g.fillStyle = D.greenDk; g.fill(U(5)); g.globalCompositeOperation = 'destination-out'; g.fill(U(2.2)); g.globalCompositeOperation = 'source-over';
+  hide(g, U(0), D.sage, { edge: 0, knife: 0, carve: g => { swirl(g, -18 * s, -16 * s, 22 * s, 1, 3); swirl(g, 30 * s, -6 * s, 18 * s, -1, 3); swirl(g, -60 * s, 8 * s, 14 * s, -1, 2.6); cloud(g, 14 * s, 26 * s, .9 * s, 2.6); } });
+}
+function artTassel(g) {   // 挂线的彩穗：结 + 穗子
+  const knot = new Path2D(); knot.moveTo(0, 0); knot.lineTo(22, 24); knot.lineTo(0, 48); knot.lineTo(-22, 24); knot.closePath();
+  hide(g, knot, D.gold, { edge: 2.5, knife: 1.6, edgeCol: D.goldDk, carve: g => coin(g, 0, 24, 7) });
+  const ts = new Path2D(); for (let i = -3; i <= 3; i++) ts.roundRect(i * 5.5 - 2, 48, 4, 80 - Math.abs(i) * 7, 2);
+  hide(g, ts, D.red, { edge: 1.2, knife: 0, edgeCol: D.redDk });
+}
+function artTable(g, w, h, col) {   // 一层刻花桌：桌面、回纹牙板、两条马蹄腿、横枨；铆钉在桌脚的中点
+  const legs = new Path2D();
+  for (const s of [-1, 1]) { const x = s * (w / 2 - 34); legs.moveTo(x - 13, -h + 30); legs.lineTo(x + 13, -h + 30); legs.lineTo(x + 11, -18); legs.quadraticCurveTo(x + s * 26, -10, x + s * 22, 0); legs.lineTo(x - 13, 0); legs.closePath(); }
+  legs.rect(-w / 2 + 40, -46, w - 80, 12);
+  hide(g, legs, D.woodDk, { edge: 0, knife: 0, carve: g => { for (let x = -w / 2 + 70; x <= w / 2 - 70; x += 30) dot(g, x, -40, 2.4); } });
+  hide(g, rect(-w / 2 + 18, -h + 22, w - 36, 44), col, { edge: 3, knife: 2, carve: g => { fret(g, -w / 2 + 40, -h + 32, w - 80, 22, 3); } });
+  const top = new Path2D(); top.moveTo(-w / 2 - 12, -h + 24); top.quadraticCurveTo(-w / 2 - 20, -h + 10, -w / 2 - 8, -h); top.lineTo(w / 2 + 8, -h); top.quadraticCurveTo(w / 2 + 20, -h + 10, w / 2 + 12, -h + 24); top.closePath();
+  hide(g, top, D.wood, { edge: 3, knife: 1.8, edgeCol: D.woodDk, carve: g => { for (let x = -w / 2 + 14; x <= w / 2 - 26; x += 24) slot(g, x, -h + 10, 12, 3.2); } });
+  for (const s of [-1, 1]) hide(g, poly([[s * (w / 2 - 18), -h + 66], [s * (w / 2 - 58), -h + 66], [s * (w / 2 - 18), -h + 104]]), D.woodDk, { edge: 0, knife: 0, carve: g => swirl(g, s * (w / 2 - 30), -h + 78, 7, -s, 2) });
+}
+function artGround(g) {   // 地条：浅皮刻回纹，下面一条深色地条刻钱孔和菱形
+  hide(g, rect(-20, GY - 4, W + 40, 36), D.raw, { edge: 3, knife: 2, carve: g => fret(g, 10, GY + 4, W - 20, 18, 3) });
+  hide(g, rect(-20, GY + 30, W + 40, 46), D.ink, { edge: 3, knife: 2, carve: g => {
+    for (let x = 24; x < W; x += 56) { coin(g, x, GY + 53, 8); tri(g, x + 22, GY + 53, x + 28, GY + 46, x + 34, GY + 53); tri(g, x + 22, GY + 53, x + 34, GY + 53, x + 28, GY + 60); }
+  } });
+}
+let CHARX = [];
+function artPlaque(g, w, h) {   // 歌词牌：深色皮，字刻空
+  hide(g, plaquePath(w, h, 16), D.ink, { edge: 3.5, knife: 2.4, edgeCol: D.inkDk, carve: g => {
+    g.lineWidth = 2.2; g.stroke(plaquePath(w - 34, h - 30, 10));
+    for (const s of [-1, 1]) { cloud(g, s * (w / 2 - 44), -2, .9, 2.6); dot(g, s * (w / 2 - 44), 18, 2.6); }
+    for (let x = -w / 2 + 84; x <= w / 2 - 84; x += 24) { dot(g, x, -h / 2 + 9, 2); dot(g, x, h / 2 - 9, 2); }
+    g.font = `900 60px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < LYRIC.length; i++) g.fillText(LYRIC[i], CHARX[i], 3);
+  } });
+}
+function artLetters(g) {   // 只有字的形状：歌词牌后面的小灯只从字里透出来
+  g.fillStyle = '#fff'; g.font = `900 60px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = 0; i < LYRIC.length; i++) g.fillText(LYRIC[i], CHARX[i], 3);
+}
+
+// ======================= 搭场景（按画布的物理分辨率刻一次）=======================
+const S = {};
+let TBG, FRAME, BACK, BM, OUTC, OUT, TC, T, RC, R, RC2, R2, SA, SB, GLC;
+const RQ = .25, SQ = 1 / 3;
+function build(k) {
+  K = k; MOT = MOT || makeMot();
+  const PW = Math.round(W * K), PH = Math.round(H * K);
+  // —— 布：经纬线、粗纱、几处不匀；地条钉在幕上，一起烤进去 ——
+  TBG = mk(PW, PH); const b = TBG.getContext('2d');
+  b.fillStyle = '#fff'; b.fillRect(0, 0, PW, PH);
+  { const r = MV.rng('cloth');
+    b.globalCompositeOperation = 'multiply';
+    for (let y = 0; y < PH; y += 2) { b.fillStyle = `rgba(130,100,70,${(.03 + r() * .05).toFixed(3)})`; b.fillRect(0, y, PW, 1); }
+    for (let x = 0; x < PW; x += 2) { b.fillStyle = `rgba(130,100,70,${(.02 + r() * .012).toFixed(3)})`; b.fillRect(x, 0, 1, PH); }
+    for (let i = 0; i < 2600; i++) { b.fillStyle = `rgba(120,90,60,${(.04 + r() * .08).toFixed(3)})`; b.fillRect(r() * PW, r() * PH, (6 + r() * 30) * K, 1.2 * K); }
+    for (let i = 0; i < 26; i++) { const x = r() * PW, y = r() * PH, rad = (80 + r() * 260) * K, gr = b.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(140,105,70,${(.015 + r() * .02).toFixed(3)})`); gr.addColorStop(1, 'rgba(140,105,70,0)'); b.fillStyle = gr; b.fillRect(x - rad, y - rad, rad * 2, rad * 2); } }
+  b.setTransform(K, 0, 0, K, 0, 0);
+  const gp = piece('ground', [-20, GY - 10, W + 20, GY + 80], artGround); here(b, gp);
+  b.setTransform(1, 0, 0, 1, 0, 0); b.globalCompositeOperation = 'source-over';
+  // —— 会动的皮片 ——
+  S.body = piece('body', [-202, -90, 186, 92], artBody);
+  S.tail = piece('tail', [-100, -132, 14, 18], artTail);
+  S.legN = piece('legN', [-40, -26, 48, 132], g => artLeg(g, D.red));
+  S.legF = piece('legF', [-40, -26, 48, 132], g => artLeg(g, D.redFar));
+  S.head = piece('head', [-40, -176, 212, 40], artHead);
+  S.jaw = piece('jaw', [-12, -10, 120, 78], artJaw);
+  S.eye = { open: piece('eyeO', [-22, -22, 22, 22], g => artEye(g, false)), shut: piece('eyeS', [-22, -22, 22, 22], g => artEye(g, true)) };
+  S.ball = piece('ball', [-50, -50, 50, 102], artBall);
+  S.drum = piece('drum', [-124, -310, 138, 4], artDrum);
+  S.stick = piece('stick', [-8, -14, 164, 14], artStick);
+  S.gongFrame = piece('gongFrame', [-180, -408, 180, 4], artGongFrame);
+  S.gong = piece('gong', [-88, -4, 88, 182], artGong);
+  S.cloud = [piece('cloudA', [-170, -110, 170, 100], g => artCloud(g, 1.5)), piece('cloudB', [-130, -86, 130, 76], g => artCloud(g, 1.15))];
+  S.tassel = piece('tassel', [-40, -6, 40, 200], g => { g.scale(1.5, 1.5); artTassel(g); });
+  S.table1 = piece('table1', [-300, -H1 - 4, 300, 4], g => artTable(g, 560, H1, D.red));
+  S.table2 = piece('table2', [-210, -H2 - 4, 210, 4], g => artTable(g, 380, H2, D.green));
+  { // 歌词牌：先量每个字的位置
+    const m = mk(8, 8).getContext('2d'); m.font = `900 60px ${FONT}`;
+    const ws = [...LYRIC].map(ch => m.measureText(ch).width), tw = ws.reduce((a, c) => a + c, 0) + 6 * (LYRIC.length - 1);
+    let x = -tw / 2; CHARX = ws.map(w => { const c = x + w / 2; x += w + 6; return c; });
+    S.plW = Math.round(tw + 176); S.plH = 96;
+    S.plaque = piece('plaque', [-S.plW / 2, -S.plH / 2, S.plW / 2, S.plH / 2], g => artPlaque(g, S.plW, S.plH));
+    S.letters = piece('letters', [-S.plW / 2, -S.plH / 2, S.plW / 2, S.plH / 2], artLetters);
+  }
+  BACK = makeBack(); FRAME = makeFrame();
+  OUTC = mk(PW, PH); OUT = OUTC.getContext('2d');
+  TC = mk(PW, PH); T = TC.getContext('2d');
+  RC = mk(PW * RQ, PH * RQ); R = RC.getContext('2d'); RC2 = mk(PW * RQ, PH * RQ); R2 = RC2.getContext('2d');
+  SA = mk(64, 64); SB = mk(64, 64);
+  GLC = mk(S.plaque.w * K, S.plaque.h * K);
+}
+// 幕后的油灯：亮点在幕中间偏上，四角暗。四周多留 BM，灯晃过去时边上不露底
+function makeBack() {
+  BM = 300;
+  const c = mk((W + 2 * BM) * K, (H + 2 * BM) * K), g = c.getContext('2d');
+  g.setTransform(K, 0, 0, K, BM * K, BM * K);
+  let gr = g.createRadialGradient(940, 380, 0, 940, 440, 1180);
+  gr.addColorStop(0, '#E6BF82'); gr.addColorStop(.2, '#D7A766'); gr.addColorStop(.48, '#A97540'); gr.addColorStop(.76, '#6A4220'); gr.addColorStop(1, '#3A220F');
+  g.fillStyle = gr; g.fillRect(-BM, -BM, W + 2 * BM, H + 2 * BM);
+  gr = g.createRadialGradient(930, 350, 0, 930, 350, 320); gr.addColorStop(0, 'rgba(255,226,170,.22)'); gr.addColorStop(1, 'rgba(255,226,170,0)');
+  g.globalCompositeOperation = 'lighter'; g.fillStyle = gr; g.fillRect(-BM, -BM, W + 2 * BM, H + 2 * BM);
+  g.globalCompositeOperation = 'multiply'; g.save(); g.translate(960, 520); g.scale(1, .62);
+  gr = g.createRadialGradient(0, 0, 700, 0, 0, 1180); gr.addColorStop(0, '#fff'); gr.addColorStop(1, '#7A6050');
+  g.fillStyle = gr; g.fillRect(-1600, -1600, 3200, 3200); g.restore();
+  return c;
+}
+// 台框：幕前的木框，不透光，不动
+function makeFrame() {
+  const c = mk(W * K, H * K), g = c.getContext('2d'); g.setTransform(K, 0, 0, K, 0, 0);
+  const p = new Path2D(); p.rect(-10, -10, W + 20, H + 20); p.rect(X0, Y0, X1 - X0, Y1 - Y0);
+  g.fillStyle = '#2C1A0F'; g.fill(p, 'evenodd');
+  g.lineCap = 'round';
+  for (let x = 90; x < W - 60; x += 150) {   // 横楣上一排浅浮雕的如意云
+    for (const [col, off] of [['#170C06', 1.5], ['#553520', 0]]) { g.strokeStyle = col; g.save(); g.translate(off, off); cloud(g, x, 22, 1, 3); g.restore(); }
+    g.fillStyle = '#5A381F'; g.beginPath(); g.arc(x + 75, 24, 3.2, 0, TAU); g.fill();
+  }
+  g.strokeStyle = '#4A2E1A'; g.lineWidth = 2; g.strokeRect(6, 6, W - 12, H - 12);
+  g.strokeStyle = '#7B4E2C'; g.lineWidth = 4; g.strokeRect(X0 - 4, Y0 - 4, X1 - X0 + 8, Y1 - Y0 + 8);
+  g.strokeStyle = '#140A05'; g.lineWidth = 2; g.strokeRect(X0 - 1, Y0 - 1, X1 - X0 + 2, Y1 - Y0 + 2);
+  for (const s of [-1, 1]) {   // 上面两角的雀替
+    const x = s < 0 ? X0 : X1, q = new Path2D();
+    q.moveTo(x, Y0); q.lineTo(x - s * 96, Y0); q.quadraticCurveTo(x - s * 70, Y0 + 10, x - s * 54, Y0 + 26); q.quadraticCurveTo(x - s * 26, Y0 + 30, x - s * 18, Y0 + 58); q.quadraticCurveTo(x - s * 6, Y0 + 54, x, Y0 + 66); q.closePath();
+    g.fillStyle = '#2C1A0F'; g.fill(q); g.strokeStyle = '#6E4526'; g.lineWidth = 2; g.stroke(q);
+    g.strokeStyle = '#5E3B21'; swirl(g, x - s * 30, Y0 + 16, 8, -s, 2.2);
+  }
+  return c;
+}
+
+// ======================= 动作（全按拍子排）=======================
+// 跳：x 匀速，y 是抛物线
+function arc(t, t0, t1, a, b, hgt) { const u = seg(t, t0, t1); return [lerp(a[0], b[0], u), lerp(a[1], b[1], u) - 4 * hgt * u * (1 - u), u]; }
+const T_CR1 = bt(3), T_UP1 = bt(3.3), T_HIT = bt(4), T_DN1 = bt(4.6), T_CR2 = bt(6.6), T_UP2 = bt(7);
+// 每拍点一下头：锣鼓点上猛地一甩再回来，重拍（第 0、4、8 拍）甩得最大
+const TOSS = [[0, .34], [1, .14], [2, .07], [5, .2], [6, .16], [8, .4], [9, .14], [10, .22], [11, .14]];
+function kick(dt) { return dt < 0 ? 0 : dt < .07 ? EZ.out(dt / .07) : Math.exp(-(dt - .07) / .14) * Math.cos((dt - .07) * 9); }
+function toss(t) { let s = 0; for (const [n, a] of TOSS) s += a * kick(t - bt(n)); return s; }
+// 站着时每拍往下一蹲（重拍蹲得深）
+function bob(t) {
+  const n = Math.floor(MV.beat(t) + 1e-6), dt = t - bt(n);
+  if ([3, 4, 7, 8].includes(n)) return 0;
+  return (n % 4 === 0 ? 14 : 8) * Math.sin(Math.PI * clamp(dt / .26));
+}
+// 身子（不含手抖）：x、y、转角、离地多高能落脚（地面高度）、腿收起多少
+function bodyAt(t) {
+  if (t < T_UP1) {   // 开场站着，第 3 拍起往下蹲蓄力
+    return { x: XA, y: REST + bob(t) + 26 * EZ.inOut(seg(t, T_CR1, T_UP1)), rot: .05 * EZ.inOut(seg(t, T_CR1, T_UP1)), gy: GY, air: 0 };
+  }
+  if (t < T_DN1) {   // 扑：第 4 拍（重拍）够到绣球
+    const [x, y, u] = arc(t, T_UP1, T_DN1, [XA, REST + 26], [XB, REST + 6], 130);
+    return { x, y, rot: lerp(-.2, .1, u), gy: GY, air: Math.sin(Math.PI * u) };
+  }
+  if (t < T_UP2) {   // 落地压一下，站着点头，第 6.6 拍起再蹲
+    const land = 30 * Math.sin(Math.PI * seg(t, T_DN1, T_DN1 + .2)) - 6 * Math.sin(Math.PI * seg(t, T_DN1 + .2, T_DN1 + .34));
+    return { x: XB, y: REST + 6 * (1 - seg(t, T_DN1, T_DN1 + .2)) + land + bob(t) + 28 * EZ.inOut(seg(t, T_CR2, T_UP2)), rot: .06 * EZ.inOut(seg(t, T_CR2, T_UP2)), gy: GY, air: 0 };
+  }
+  if (t < T_LAND) {  // 跃上高台：灯暗的时候正在半空
+    const [x, y, u] = arc(t, T_UP2, T_LAND, [XB, REST + 28], [XC, REST2], 120);
+    return { x, y, rot: lerp(-.26, .08, u), gy: TOP2, air: Math.sin(Math.PI * u) };
+  }
+  const land = 32 * Math.sin(Math.PI * seg(t, T_LAND, T_LAND + .24)) - 7 * Math.sin(Math.PI * seg(t, T_LAND + .24, T_LAND + .4));
+  return { x: XC, y: REST2 + land + bob(t), rot: .05 * Math.sin(Math.PI * seg(t, T_LAND, T_LAND + .24)), gy: TOP2, air: 0 };
+}
+// 尾巴的惯性：身子的加速度推一个弹簧，每帧从 0 秒积分到 t（步长 1/240 秒），画面才只由 t 决定
+function tailLag(t) {
+  const h = 1 / 240, n = Math.floor(t / h + 1e-6);
+  let L = 0, Lv = 0, prev = bodyAt(-h), cur = bodyAt(0);
+  for (let i = 0; i < n; i++) {
+    const nx = bodyAt((i + 1) * h), ay = (nx.y - 2 * cur.y + prev.y) / (h * h), ar = (nx.rot - 2 * cur.rot + prev.rot) / (h * h);
+    Lv += (-160 * L - 5.5 * Lv + ay * 5e-4 - ar * .5) * h; L += Lv * h;
+    prev = cur; cur = nx;
+  }
+  return clamp(L, -.6, .6);
+}
+function pose(t) {
+  const B = bodyAt(t), tr = (t > T_LAND + .04 && t < T_LAND + .3) ? .2 : 1;   // 落上高台亮相时手稳住
+  const P = {
+    x: B.x + tr * (1.6 * nz('hx', t * 5) + .6 * nz('hx2', t * 13)), y: B.y + tr * (1.3 * nz('hy', t * 6) + .5 * nz('hy2', t * 15)),
+    rot: B.rot + tr * .008 * nz('hr', t * 4), gy: B.gy, air: B.air,
+  };
+  const tk = toss(t), bite = Math.exp(-(((t - T_HIT) / .1) ** 2));
+  P.head = -.05 - tk + .22 * bite + tr * .012 * nz('hh', t * 4.5);
+  // 嘴：甩头时张开；扑的时候张大，第 4 拍咬下去
+  const gape = .55 * EZ.inOut(seg(t, T_UP1 + .05, T_HIT - .06)) * (1 - EZ.out(seg(t, T_HIT - .04, T_HIT + .02)));
+  P.jaw = .1 + Math.max(0, tk) * 1.3 + gape + .04 * EZ.smooth(seg(t, T_HIT + .02, T_DN1));
+  P.eye = (t >= bt(2) && t < bt(2) + .12) || (t >= bt(10.5) && t < bt(10.5) + .12) ? 'shut' : 'open';
+  P.tail = .2 + .1 * Math.sin(TAU * t / (2 * 0.5)) + tailLag(t);
+  // 腿：落脚的地方够得着就两只脚踩住（髋到地面的距离定角度），在空中收起来；扑的时候前爪往前抓
+  P.strike = Math.exp(-(((t - T_HIT) / .12) ** 2));
+  return P;
+}
+
+// ======================= 一帧 =======================
+// 离幕有一段距离的皮片：影子更大、更虚、更淡。小画布上糊开再放大回来
+function putSoft(ctx, P, x, y, rot, s, blur, alpha) {
+  if (alpha <= .01) return;
+  if (blur < .6) { ctx.globalAlpha = alpha; put(ctx, P, x, y, rot, s); ctx.globalAlpha = 1; return; }
+  const rr = Math.max(Math.hypot(P.x, P.y), Math.hypot(P.x + P.w, P.y), Math.hypot(P.x, P.y + P.h), Math.hypot(P.x + P.w, P.y + P.h));
+  const half = rr * s + blur * 2.5 + 4, px = Math.ceil(2 * half * K * SQ);
+  if (SA.width < px) { SA = mk(px, px); SB = mk(px, px); }
+  const a = SA.getContext('2d'), bb = SB.getContext('2d');
+  a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, px, px); a.setTransform(K * SQ, 0, 0, K * SQ, px / 2, px / 2); put(a, P, 0, 0, rot, s);
+  bb.setTransform(1, 0, 0, 1, 0, 0); bb.clearRect(0, 0, px, px); bb.filter = `blur(${(blur * K * SQ).toFixed(2)}px)`; bb.drawImage(SA, 0, 0, px, px, 0, 0, px, px); bb.filter = 'none';
+  const lw = px / (K * SQ);
+  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(SB, 0, 0, px, px, x - lw / 2, y - lw / 2, lw, lw); ctx.restore();
+}
+// 挂线：细、清楚、淡，直接画在透光图上
+function thread(x1, y1, x2, y2, a = .5) { T.strokeStyle = `rgba(60,40,24,${(a * .6).toFixed(3)})`; T.lineWidth = 1.3; T.beginPath(); T.moveTo(x1, y1); T.lineTo(x2, y2); T.stroke(); }
+// 操纵杆：手那头离幕远，画在 1/4 大小的画布上糊开；靠近铆点的一段清楚
+function rod(x1, y1, x2, y2, w = 6, a = 1) {
+  R.strokeStyle = `rgba(38,24,14,${(.62 * a).toFixed(3)})`; R.lineWidth = w; R.beginPath(); R.moveTo(x1, y1); R.lineTo(x2, y2); R.stroke();
+  const l = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / l, uy = (y2 - y1) / l, g = T.createLinearGradient(x1, y1, x1 + ux * 70, y1 + uy * 70);
+  g.addColorStop(0, `rgba(40,26,16,${(.85 * a).toFixed(3)})`); g.addColorStop(1, 'rgba(40,26,16,0)');
+  T.strokeStyle = g; T.lineWidth = 3.4; T.lineCap = 'round'; T.beginPath(); T.moveTo(x1, y1); T.lineTo(x1 + ux * 70, y1 + uy * 70); T.stroke();
+  T.fillStyle = `rgba(40,26,16,${(.9 * a).toFixed(3)})`; T.beginPath(); T.arc(x1, y1, 5, 0, TAU); T.fill();
+}
+// 线铆：一粒深色的线结，中间一点亮。画在当前变换的原点
+function rivet(r = 4.6) { const p = new Path2D(); p.arc(0, 0, r, 0, TAU); p.arc(0, 0, r * .35, 0, TAU); T.fillStyle = '#5B3A26'; T.fill(p, 'evenodd'); }
+const at = (x, y) => { const p = T.getTransform().transformPoint(new DOMPoint(x, y)); return [p.x / K, p.y / K]; };   // 当前变换下的一点 → 逻辑坐标
+
+// 两套布景：第一幕锣鼓架、挂云；第二幕高台、彩穗。换幕时旧的抽离幕布（变大、变虚、变淡），新的从幕外按上来
+const far1 = t => EZ.in(seg(t, bt(7.05), T_DARK + .02));
+const far2 = t => 1 - EZ.out(seg(t, T_DARK - .02, T_LAND - .04));
+function setPiece(P, x, y, rot, f) { putSoft(T, P, x, y, rot, 1 + .45 * f, 16 * f, 1 - f); }
+function drawSet1(t, f) {
+  for (const [i, [x, L]] of [[540, 200], [1210, 165]].entries()) {   // 挂线的云：线挂在幕顶，轻轻摆
+    const a = .03 * Math.sin(t * 1.1 + i * 2), cx = x + Math.sin(a) * L, cy = Math.cos(a) * L;
+    thread(x, 0, x + Math.sin(a) * (L - 56), Math.cos(a) * (L - 56), .45 * (1 - f));
+    setPiece(S.cloud[i], cx, cy, a, f);
+  }
+  setPiece(S.drum, 300, GY, 0, f);
+  const ph = MV.beatPhase(t), lift = ph < .2 ? EZ.out(ph / .2) : ph > .72 ? 1 - EZ.in((ph - .72) / .28) : 1;   // 鼓槌：拍间抬起，每拍落在鼓面上
+  setPiece(S.stick, 428, GY - 300, 2.66 + .54 * lift, f);
+  let ga = .02 * Math.sin(TAU * t / 1.6);
+  for (const n of [0, 4]) { const dt = t - bt(n); if (dt >= 0) ga += .16 * Math.exp(-dt / .7) * Math.sin(TAU * dt / .8); }   // 锣：重拍上被敲得一晃
+  setPiece(S.gongFrame, 1660, GY, 0, f);
+  const gx = 1660, gy = GY - 352, c = Math.cos(ga), s = Math.sin(ga);
+  for (const sx of [-1, 1]) thread(gx + sx * 40, gy - 8, gx + sx * 34 * c - 26 * s, gy + sx * 34 * s + 26 * c, .55 * (1 - f));
+  setPiece(S.gong, gx, gy, ga, f);
+}
+function drawSet2(t, f) {
+  for (const [i, x, L] of [[0, 330, 170], [1, 760, 120], [2, 1730, 190]]) {
+    let a = .05 * Math.sin(t * 1.7 + i * 1.9);
+    const dt = t - T_LAND; if (dt >= 0) a += .07 * Math.exp(-dt / .5) * Math.sin(TAU * dt / .7 + i);   // 落台那一下震得晃
+    const cx = x + Math.sin(a) * L, cy = Math.cos(a) * L;
+    thread(x, 0, cx, cy, .45 * (1 - f));
+    setPiece(S.tassel, cx, cy, a, f);
+  }
+  setPiece(S.table1, PX, GY, 0, f);
+  setPiece(S.table2, PX, GY - H1, 0, f);
+}
+// 绣球：一根杆举着。第 4 拍被狮子扑得飞起，灯暗时挪到高台的台沿上，第 8 拍狮子落台，它被震得弹起来
+function ballAt(t) {
+  let [x, y] = MV.keys(t, [[0, [1240, 572]], [T_HIT, [1240, 572]], [T_HIT + .35, [1390, 430], 'out'], [T_HIT + .8, [1400, 560], 'inOut'], [bt(7.1), [1400, 560]], [T_LAND - .05, BALL2, 'inOut']]);
+  let rot = .3 * EZ.out(seg(t, T_HIT, T_HIT + .8));
+  if (t < T_HIT) y -= 10 * Math.sin(Math.PI * clamp(MV.beatPhase(t) / .3));
+  if (t >= T_LAND) {   // 弹三下，最高那下第 9 拍落回
+    const hops = [[T_LAND, bt(9), 190], [bt(9), bt(9.5), 46], [bt(9.5), bt(9.75), 12]];
+    for (const [a, b, h] of hops) if (t >= a && t < b) { const u = seg(t, a, b); y -= 4 * h * u * (1 - u); }
+    rot += .9 * EZ.out(seg(t, T_LAND, bt(9.75)));
+  }
+  return [x + 1.2 * nz('bx', t * 4), y + 1.2 * nz('by', t * 5), rot];
+}
+
+function drawLion(t, P) {
+  const rods = [];
+  T.save(); T.translate(P.x, P.y); T.rotate(P.rot);
+  const LEGS = [[118, true], [-128, false]];
+  // 腿：髋到落脚面的距离定角度，两只脚踩住；空中收起（前腿往前、后腿往后），扑的时候前爪往前抓
+  const legAng = (hx, front, farLeg) => {
+    const [hxw, hyw] = at(hx, HIP);
+    const reach = (P.gy - hyw) / LEG, ik = reach >= 1 ? 0 : Math.acos(clamp(reach, .35, 1));
+    const tuck = front ? -(.85 * P.air + 1.25 * P.strike) : .75 * P.air;
+    const ground = (front ? -1 : 1) * ik * (farLeg ? .85 : 1);
+    return lerp(ground, tuck, clamp(P.air * 1.6)) - P.rot + (farLeg ? (front ? .08 : -.08) : 0);
+  };
+  const angF = LEGS.map(([hx, front]) => legAng(hx + 10, front, true)), angN = LEGS.map(([hx, front]) => legAng(hx, front, false));   // 先在身子的坐标里算好，再挪到髋上
+  LEGS.forEach(([hx], i) => { T.save(); T.translate(hx + 10, HIP - 4); T.rotate(angF[i]); here(T, S.legF); T.restore(); });
+  T.save(); T.translate(-178, -32); T.rotate(P.tail); here(T, S.tail); rivet(4.2); T.restore();
+  here(T, S.body);
+  rods.push([...at(0, 36), P.x + 380, 1340, 6.5]);
+  for (const [i, [hx, front]] of LEGS.entries()) {
+    T.save(); T.translate(hx, HIP); T.rotate(angN[i]); here(T, S.legN); rivet(4.4);
+    if (front) rods.push([...at(4, 112), P.x + 760, 1340, 5]);
+    T.restore();
+  }
+  T.save(); T.translate(150, -36); T.rotate(P.head); here(T, S.head);
+  T.save(); T.translate(134, -60); here(T, S.eye[P.eye]); T.restore();
+  T.save(); T.translate(70, 22); T.rotate(P.jaw); here(T, S.jaw); T.restore();
+  T.save(); T.translate(70, 22); rivet(4); T.restore();
+  rivet(5);
+  rods.push([...at(20, -6), P.x + 560, 1340, 5.5]);
+  T.restore();
+  T.restore();
+  return rods;
+}
+
+function lamp(t) {   // 油灯：火苗一直跳；换幕时灯一晃、暗下去，第 8 拍又亮起来、冲一下
+  const u = seg(t, bt(6.8), T_LAND), sway = Math.sin(TAU * u) * Math.sin(Math.PI * u);
+  const down = t < T_DARK ? EZ.inOut(seg(t, bt(6.85), T_DARK - .03)) : 1 - EZ.in(seg(t, T_DARK + .03, T_LAND));
+  const surge = t >= T_LAND ? .28 * Math.exp(-(t - T_LAND) / .16) : 0;
+  const fl = 1 + .035 * nz('fl', t * 6) + .018 * nz('fl2', t * 15) + .1 * Math.sin(Math.PI * u) * nz('fl3', t * 22);
+  return { b: (1 - .76 * down) * fl * (1 + surge), fx: 7 * nz('fx', t * 2.5) - 230 * sway, fy: 5 * nz('fy', t * 2.5) + 40 * Math.abs(sway) };
+}
+function render(t) {
+  const P = pose(t);
+  // ---- 1 透光图：白底 × 每片皮 ----
+  T.setTransform(1, 0, 0, 1, 0, 0); T.globalCompositeOperation = 'copy'; T.drawImage(TBG, 0, 0);
+  T.setTransform(K, 0, 0, K, 0, 0); T.globalCompositeOperation = 'multiply'; T.lineCap = 'round';
+  R.setTransform(1, 0, 0, 1, 0, 0); R.clearRect(0, 0, RC.width, RC.height); R.setTransform(K * RQ, 0, 0, K * RQ, 0, 0); R.lineCap = 'round';
+  const f1 = far1(t), f2 = far2(t);
+  if (f1 < 1) drawSet1(t, f1);
+  if (f2 < 1) drawSet2(t, f2);
+  const [bx, by, br] = ballAt(t);
+  put(T, S.ball, bx, by, br); T.save(); T.translate(bx, by); rivet(3.6); T.restore();
+  rod(bx - 44 * Math.sin(br), by + 44 * Math.cos(br), bx + 190, 1340, 5);
+  for (const r of drawLion(t, P)) rod(...r);
+  // 杆子：糊开、放大、乘上去
+  R2.setTransform(1, 0, 0, 1, 0, 0); R2.clearRect(0, 0, RC2.width, RC2.height); R2.filter = `blur(${(6.4 * K * RQ).toFixed(2)}px)`; R2.drawImage(RC, 0, 0); R2.filter = 'none';
+  T.setTransform(1, 0, 0, 1, 0, 0); T.drawImage(RC2, 0, 0, RC2.width, RC2.height, 0, 0, TC.width, TC.height);
+  // ---- 2 灯光 × 透光，3 台框 ----
+  const L = lamp(t);
+  OUT.setTransform(1, 0, 0, 1, 0, 0); OUT.globalCompositeOperation = 'copy'; OUT.globalAlpha = 1;
+  OUT.drawImage(BACK, (-BM + L.fx) * K, (-BM + L.fy) * K);
+  if (L.b > 1) { OUT.globalCompositeOperation = 'lighter'; OUT.globalAlpha = L.b - 1; OUT.drawImage(BACK, (-BM + L.fx) * K, (-BM + L.fy) * K); OUT.globalAlpha = 1; }
+  OUT.globalCompositeOperation = 'multiply'; OUT.drawImage(TC, 0, 0);
+  OUT.globalCompositeOperation = 'source-over'; OUT.drawImage(FRAME, 0, 0);
+  if (L.b < 1) { OUT.fillStyle = `rgba(0,0,0,${(1 - L.b).toFixed(4)})`; OUT.fillRect(0, 0, OUTC.width, OUTC.height); }
+}
+
+// ======================= 歌词牌（overlay：最上层，不跟镜头动）=======================
+// 牌子是一片深色皮，从幕的左边沿着幕滑进来（back 缓动：冲过一点再退回），第 2 拍停稳；乘到画面上（和幕上的皮一样叠暗），字是刻空的透出布光，
+// 再按 MV.lyricAt 一个字一个字从牌后亮起一盏小灯（光只从字里透出来，跟着油灯一起明暗）
+function plaqueAt(t) {
+  if (t < bt(1.1)) return null;
+  const k = seg(t, bt(1.1), bt(2)), x0 = X0 - S.plW / 2 - 30, x1 = X0 + 60 + S.plW / 2;
+  return { x: lerp(x0, x1, EZ.back(k, 1.2)) + 1.1 * nz('plx', t * 4), y: 990 + .8 * nz('ply', t * 5), rot: .004 * nz('plr', t * 3) };
+}
+function overlay(g, t) {
+  const pl = plaqueAt(t); if (!pl) return;
+  g.save(); g.beginPath(); g.rect(X0, Y0, X1 - X0, Y1 - Y0); g.clip();
+  g.globalCompositeOperation = 'multiply';
+  g.save(); g.filter = `blur(${(2.2 * K).toFixed(2)}px)`; g.strokeStyle = 'rgba(38,24,14,.6)'; g.lineWidth = 6; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(pl.x - S.plW / 2 + 90, pl.y + 30); g.lineTo(pl.x - S.plW / 2 - 140, 1340); g.stroke(); g.restore();
+  put(g, S.plaque, pl.x, pl.y, pl.rot);
+  const L = MV.lyricAt(t, { per: .07, pop: .14, tail: 1 });
+  if (L) {
+    const c = GLC.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'copy'; c.fillStyle = 'rgba(0,0,0,0)'; c.fillRect(0, 0, GLC.width, GLC.height);
+    c.globalCompositeOperation = 'lighter'; c.setTransform(K, 0, 0, K, -S.letters.x * K, -S.letters.y * K);
+    let any = false;
+    for (const ch of L.chars) {
+      const a = (.6 * ch.u + .9 * Math.exp(-(((ch.u - .55) / .3) ** 2))) * clamp(lamp(t).b, 0, 1.3);   // 字后的小灯跟着油灯一起明暗
+      if (a < .01 || CHARX[ch.k] === undefined) continue;
+      any = true; const x = CHARX[ch.k], gr = c.createRadialGradient(x, 3, 0, x, 3, 60);
+      gr.addColorStop(0, `rgba(255,226,160,${a})`); gr.addColorStop(.5, `rgba(255,200,120,${a * .6})`); gr.addColorStop(1, 'rgba(255,190,110,0)');
+      c.fillStyle = gr; c.fillRect(x - 60, -57, 120, 120);
+    }
+    if (any) {
+      c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'destination-in'; c.drawImage(S.letters.c, 0, 0);
+      g.globalCompositeOperation = 'lighter';
+      g.save(); g.translate(pl.x, pl.y); g.rotate(pl.rot); g.drawImage(GLC, S.letters.x, S.letters.y, S.letters.w, S.letters.h); g.restore();
+    }
+  }
+  g.restore();
+}
+
+function drawFrame(g, t) {
+  const k = g.getTransform().a;
+  if (Math.abs(k - K) > 1e-6) build(k);   // 画布大小变了（预览时拉窗口）才重刻
+  render(t);
+  g.drawImage(OUTC, 0, 0, W, H);
+}
+MV.page({ W, H, fps: FPS, duration: DUR, draw: drawFrame, overlay,
+  ready: async () => {
+    await MV.font('900 60px "Noto Serif SC"', LYRIC);   // 没下到：出片时报错停下，预览时写在播放条上
+    build(Math.min((innerWidth || W) / W, (innerHeight || H) / H));
+  } });
+</script></body></html>

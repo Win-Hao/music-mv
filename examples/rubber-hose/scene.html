@@ -1,0 +1,1022 @@
+<!doctype html>
+<!--
+  1930s 橡皮管卡通（rubber hose cartoon）· 老厨房里，咖啡壶和两只咖啡杯跟着摇摆乐跳舞（BPM 132，12 拍 ≈ 5.45 秒）
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。
+  一部黑白老动画短片放到一半：灰色水彩画的老厨房里，橱柜、窗、吊灯、炉子、灶台全跟着拍子一蹲一伸；咖啡壶站在炉子上跳查尔斯顿
+  （壶嘴是鼻子，壶把是一只叉腰的胳膊），墙上挂的平底锅当鼓，汤勺每拍荡过去敲它一下；光圈收到壶脸上，壶冲镜头眨眼，
+  光圈收成针孔再张开，换到桌面近景：两只杯子手拉手转圈，每拍冒出一团蒸汽、变成一个音符飘上去。唱歌片的字卡第 1 拍落下，小白球按摇摆八分跳字。
+
+  关键画法（Canvas 2D + kit.js，不靠别的库）：
+  1. 工具和分层：MV.page 画两层。draw = 胶片里的画面（两个镜头 + 光圈），overlay = 字卡 + 胶片损伤 + 片门。
+     画面从下往上：背景（水彩，开页面烤一张）→ 道具（每样烤一张，整体跟着拍子变形）→ 角色（每张现画，墨线在抖）→ 胶片（最后整帧叠）。
+  2. 纸和纹理：背景、道具都是灰色水彩：同一形状推几层不齐的毛边半透明叠上去（wash），边上一道深一点的水痕；木纹、瓷砖缝、窗帘褶用干笔（dry）；
+     烤图时用 source-atop 叠一层纸纹（斑块 + 颗粒），纸纹一个像素对一个物理像素。道具的墨线手描、抖一点但固定（inkStatic），画本身不抖。
+     格子桌布 = 横条、竖条两遍半透明的灰湿画，交叉处自然叠深，竖条朝消失点收，就是透视。
+  3. 颜色：只有灰阶（gr()）。红、橘红在老胶片里是深灰，所以咖啡壶是深灰身子 + 白脸盘（像老卡通的黑身子白脸），两只杯子一白一灰（白杯一道深箍、灰杯白点），
+     认它们靠造型，不靠颜色。
+  4. 光：灰阶里光就是更白。吊灯 = 一圈圈边缘清楚的白光晕 + 墨线画的光芒（只画灯罩下面半圈，每拍转半格，像在闪）+ 一道淡白光锥 + 炉面上一块更白的光池；
+     桌面近景的灯在画外，只留光锥和桌布上的光池。墙上灯下那片更白烤在背景里。
+  5. 角色是赛璐珞：平涂 + 等宽墨线（cel()，6 px，缩放时线宽不变），线一张一换抖动种子（boil），填色跟着线走、不闪。
+     胳膊、腿是橡皮管：等粗的黑线顺着二次曲线弯，没有关节（hose()）；白手套（glove()：喇叭口袖口 + 手掌，攥拳时背上三道线，张开时四根手指）；
+     派形眼：白眼眶里一颗切掉右上角的黑椭圆（pie()）。咖啡壶：壶嘴从脸盘正中长出来当鼻子（tube() 一根渐细的管子），壶把是一只叉在腰上的胳膊，
+     眨眼那拍松开、举到脸边挥一下。杯子按圆柱画（drawCup()）：眼睛、嘴、白点都按「绕着杯身转了多少度」算横向位置，转到背面就藏起来，杯把在脸的背面，
+     所以转圈时看得出在转。两只杯子转圈按前后排序画：后面那只 → 前面那只 → 攥在一起的手套；杯身挡住圆心时，拉着的胳膊藏在后面。
+  6. 动起来的手感：老动画的曝光表按「一拍几格」排。这里一拍 12 格胶片（132 BPM 时一秒 26.4 格，跟 24 格差不多），
+     角色一拍 6 张（一张停两格）；拍点和摇摆的后半拍（三连音第 3 个，2/3 拍处）都正好落在整张上。
+     万物有灵、同相伸缩：所有道具共用一个拍子函数 pulseAt()：拍上压到最扁，摇摆的后半拍伸到最长，再用 1/3 拍落回拍上（长—短），
+     左右轮流歪（leanAt()），幅度 4.5%，第二个镜头加到 6%。站在道具上的角色跟着道具顶面一起蹲（danced() 算顶面在哪）。
+     大动作先压后弹：壶拍上压扁、后半拍伸长踢腿、盖子跳起来拍上落回；汤勺按摇摆荡出去（2/3 拍到最远），用 1/3 拍荡回来在拍上敲锅，
+     锅被敲得绕钉子晃、冒三道墨线和两道震纹。镜头一个镜头只做一种慢推（厨房 1 → 1.1 推向壶脸，桌面 1 → 1.04），不晃不拉回。
+  7. 胶片放映（overlay 最后叠）：4:3 圆角片门（左右黑边）、每格整帧晃 1–3 px（偶尔跳一下，draw 和 overlay 用同一格的晃动）、明暗闪 ±5%、颗粒、灰尘和毛发、
+     竖划痕（一道连着几格慢慢漂）、暗角，全部用格号 F 做种子（'weave' + F、'film' + F），是确定的。
+  8. 转场 = 老卡通的光圈（iris），画在胶片里：光圈是胶片黑（和墨线同一个 #141414，不是片门外的纯黑），跟着片子晃、落灰。
+     第 3 拍起步、第 4 拍收到壶脸上（半径按对数插值 + smooth，一秒 12 张时也是一格一格匀着收），落位时紧一下，收住后跟着拍子一缩一胀；
+     第 5 拍壶冲镜头眨眼；5.5 拍再收（ease.in 越收越快），第 6 拍收成针孔（半径 16，整帧平均亮度约 18，高于黑帧线 8），
+     针孔里换成第二个镜头，再 ease.out 张开，第 7 拍张开到底。收和张在针孔两边速度接得上。
+     镜头表 SHOTS 两个镜头在第 3–7 拍重叠，transition() 里针孔之前画 A、之后画 B，再盖光圈。光圈中心就是镜头慢推的中心（壶脸），所以收的时候壶脸不动。
+  9. 歌词 = 唱歌片字卡：window.LYRICS 给这句的起止，MV.lyricAt 判断该不该显示；深色底板、凹角、白色双线边框、两端小菱形，白字老式美术字（站酷庆科黄油体 64 px）。
+     字卡在 overlay 里（不跟镜头推、不被光圈盖），但跟着胶片晃、闪、落灰；第 1 拍「啪」地落下（放大 → 回弹）。字卡上只有歌词，不加片名。
+     小白球按 HOPS 表（第几拍落在第几个字）跳：拍上和 2/3 拍处落，长的一跳高、短的一跳低，摇摆一眼看得出；落到的字从灰变白、闪大两格；逗号不落，跟前一个字一起亮。
+
+  时间线（拍，从 0 数；1 拍 = 0.4545 秒）：
+    0–3   厨房全景：壶在炉子上跳查尔斯顿，两只杯子在灶台上摇，汤勺每拍敲锅；第 1 拍字卡落下，小球从左边的小菱形起跳，第 2 拍落在第 1 个字上
+    3→4   光圈收到壶脸上（第 4 拍落位），杯子两手叉腰
+    5     壶冲镜头眨眼：右眼闭成弯线、眼角冒一颗四角星、壶把松开举到脸边挥手
+    5.5→6 光圈收成针孔，第 6 拍换镜头
+    6→7   光圈从针孔张开到桌面近景（第 7 拍张开到底，杯子正好转到并排；小球落在「圈」上）
+    7–12  两只杯子手拉手转圈（一小节一圈），每拍一只杯子冒一团蒸汽，半拍里变成音符飘上去，飘三拍后碎成小泡；小球第 8 拍落到最后一个字，之后每拍原地轻跳
+  window.PLAN = [第 4 拍, 第 7 拍] = [1.818, 3.182] 秒。
+
+  画面只由 t 决定：随机数全用 MV.rng / MV.hash 加「元素名 + 序号」做种子，不用 Math.random()、Date，不存上一帧。
+  画布跟窗口大小走（kit 按 1920×1080 等比缩放），--width 1280 --height 720 也是完整画面。
+  速度（这台 4 核、无独显的电脑）：开页面下字体、烤背景和道具约 5 秒；1920×1080 画一帧约 0.03 秒（不算 PNG 编码；第一帧热身约 0.4 秒）。
+    render_frames 连存图：1920×1080 PNG 约 0.15–0.35 秒一张，1280×720 PNG 约 0.06 秒，960×540 JPG 约 0.02 秒。
+  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 65 帧 →
+    ffmpeg -framerate 12 -i %06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=24:stats_mode=diff[p];[b][p]paletteuse=dither=none" -loop 0，
+    约 4.36 MB（一帧约 67 KB）。胶片每格都在晃、闪、落灰，整帧都在变，GIF 没法只存变了的地方，只能靠减色：
+    这组帧 28 色不抖动 4.70 MB（32 色约 5.1 MB），24 色加抖动也超（bayer 4.55 MB、sierra 4.54 MB）；灰阶 24 色和 28 色放大看分不出，颗粒把色带盖住了。
+  外部资源：站酷庆科黄油体 ZCOOL QingKe HuangYou（OFL-1.1），fontsource 的包，从 jsDelivr 加载；kit.js 是本项目的。
+
+  坑：
+  - 纸纹用 source-atop 烤进道具以后又改成 multiply 叠，会把道具图四周的透明处也涂上，出现一个个灰方块；纸纹图块放大以后有接缝竖线，所以一个像素对一个物理像素
+  - 小白球的弧线太高会飞出字卡：最高一跳 40 px，字卡高 176
+  - 132 BPM 在 24 格下一拍 10.9 格，按秒数取格，拍点会在两格之间来回差一格；所以格号按拍子算（F = 拍数 × 12）
+  - 光圈收到全黑会被当成黑帧（整帧平均亮度 < 8），也看不出接的是什么：收到针孔就换镜头，光圈用胶片黑不用纯黑
+  - 光圈从「刚好盖住片门」的半径起收，别从更大的圆起收：圆在片门外缩的那几格什么都看不见，收的动作全挤在后半拍
+  - 柜子玻璃里两个叠着的圆盘、旋钮里一道竖线，缩小以后像字母（CO、Φ）：盘子平放成一摞，旋钮指针斜着画
+  - 汤勺、锅、杯子挤在一面墙上，抬手时会穿到勺子里：杯子的手只举到肩高，勺子荡到最远也在杯口上方
+-->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/zcool-qingke-huangyou@5.3.0/index.css">
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; overflow: hidden; background: #000; }</style>
+</head><body><script>
+'use strict';
+// ───────────────────────── 拍子和时间线：所有时刻都按拍数写 ─────────────────────────
+const W = 1920, H = 1080, FPS = 30, BPM = 132;
+MV.tempo(BPM, 0);                                    // 第 0 拍在 0 秒
+const { clamp, lerp, seg, ease } = MV;
+const BT = MV.beatTime;                              // 第 n 拍在几秒
+const FR = 12, DR = 6;                               // 曝光表：胶片一拍 12 格，角色一拍 6 张（一张停两格）
+const NB = 12, DUR = BT(NB);                         // 片长 12 拍
+const B_CARD = 1, B_IRIS = 3, B_FACE = 4, B_WINK = 5, B_PINCH = 5.5, B_CUT = 6, B_OPEN = 7;
+window.PLAN = [BT(B_FACE), BT(B_OPEN)].map((t) => +t.toFixed(3));   // 光圈收到脸上、张开到第二个镜头
+const LYRIC = '趁咖啡还热，转个圈吧';
+window.LYRICS = [[BT(B_CARD), DUR, LYRIC]];
+// 小白球：[第几拍落地, 落在第几个字]（-1 = 字卡左端的小菱形）。拍上 + 2/3 拍处落，是摇摆八分的长—短
+const HOPS = [[1, -1], [2, 0], [2 + 2 / 3, 1], [3, 2], [3 + 2 / 3, 3], [4, 4], [5, 4], [6, 6], [6 + 2 / 3, 7], [7, 8], [8, 9], [9, 9], [10, 9], [11, 9], [12, 9]];
+const FONT_NAME = 'ZCOOL QingKe HuangYou';
+const FONT = `"${FONT_NAME}","Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif`;
+const GX0 = 240, GX1 = 1680;                         // 4:3 片门（1440×1080）
+const INK = '#141414', TAU = Math.PI * 2;
+
+// 这一帧在曝光表上的位置：F 胶片格号、BF 格对应的拍数；Q 角色第几张、BQ 那张对应的拍数
+let F = 0, BF = 0, Q = 0, BQ = 0, PV = 0, LEAN = 0, AMP = 0;
+const swing = (ph) => (ph < 2 / 3 ? ph * 0.75 : 0.5 + (ph - 2 / 3) * 1.5);   // 拍内相位 → 摇摆相位：2/3 拍处走到一半
+// 拍上压扁（+1），摇摆的后半拍伸到最长（-1），尖一点，像弹簧
+function pulseAt(b) { const n = Math.floor(b), c = Math.cos(TAU * swing(b - n)); return Math.sign(c) * Math.pow(Math.abs(c), 0.6); }
+function leanAt(b) { const n = Math.floor(b); return Math.sin(Math.PI * (n + swing(b - n))); }   // 左右轮流歪，后半拍歪到最多
+function clock(t) {
+  const b = MV.beat(t) + 1e-6;
+  F = Math.floor(b * FR); BF = F / FR; Q = Math.floor(b * DR); BQ = Q / DR;
+  PV = pulseAt(BF); LEAN = leanAt(BF); AMP = BF < B_CUT ? 0.045 : 0.06;
+}
+
+// ───────────────────────── 小工具 ─────────────────────────
+const gr = (v, a = 1) => { v = Math.round(clamp(v, 0, 255)); return `rgba(${v},${v},${v},${a})`; };
+const rnd = (key) => MV.rng(key)();
+function canvas(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
+function ellPts(cx, cy, rx, ry, n = 36, rot = 0) {
+  const c = Math.cos(rot), s = Math.sin(rot), out = [];
+  for (let i = 0; i < n; i++) { const a = (i / n) * TAU, X = Math.cos(a) * rx, Y = Math.sin(a) * ry; out.push([cx + X * c - Y * s, cy + X * s + Y * c]); }
+  return out;
+}
+function quadPts(a, c, b, n = 14) {
+  const out = [];
+  for (let i = 0; i <= n; i++) { const u = i / n, v = 1 - u; out.push([v * v * a[0] + 2 * v * u * c[0] + u * u * b[0], v * v * a[1] + 2 * v * u * c[1] + u * u * b[1]]); }
+  return out;
+}
+const rectPts = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+function rrPts(x0, y0, x1, y1, r, n = 5) {
+  const out = [];
+  for (const [cx, cy, a0] of [[x1 - r, y0 + r, -Math.PI / 2], [x1 - r, y1 - r, 0], [x0 + r, y1 - r, Math.PI / 2], [x0 + r, y0 + r, Math.PI]]) {
+    for (let i = 0; i <= n; i++) { const a = a0 + (i / n) * (Math.PI / 2); out.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+  }
+  return out;
+}
+function densify(pts, step, closed = true) {
+  const out = [], n = pts.length, m = closed ? n : n - 1;
+  for (let i = 0; i < m; i++) {
+    const a = pts[i], b = pts[(i + 1) % n], k = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let j = 0; j < k; j++) out.push([lerp(a[0], b[0], j / k), lerp(a[1], b[1], j / k)]);
+  }
+  if (!closed) out.push(pts[n - 1]);
+  return out;
+}
+function pathOf(pts, closed = true) {
+  const p = new Path2D(); p.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) p.lineTo(pts[i][0], pts[i][1]);
+  if (closed) p.closePath();
+  return p;
+}
+// 沿法线推：按弧长的两组正弦 + 一点碎抖。墨线的手抖、水彩的毛边都用它
+function jitter(pts, amp, seed, closed = true, rough = 0) {
+  const r = MV.rng(seed), p1 = r() * TAU, p2 = r() * TAU, w1 = 40 + r() * 50, w2 = 11 + r() * 9, n = pts.length, out = [];
+  let s = 0;
+  for (let i = 0; i < n; i++) {
+    if (i) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    const a = pts[closed ? (i - 1 + n) % n : Math.max(0, i - 1)], b = pts[closed ? (i + 1) % n : Math.min(n - 1, i + 1)];
+    const nx = a[1] - b[1], ny = b[0] - a[0], L = Math.hypot(nx, ny) || 1;
+    const d = amp * (0.7 * Math.sin(s / w1 + p1) + 0.4 * Math.sin(s / w2 + p2) + rough * (r() - 0.5));
+    out.push([pts[i][0] + (nx / L) * d, pts[i][1] + (ny / L) * d]);
+  }
+  return out;
+}
+// 一根渐细的管子（壶嘴）：沿二次曲线两边各推出半个宽度
+function tube(a, c, b, w0, w1, n = 14) {
+  const P = quadPts(a, c, b, n), L = [], R = [];
+  for (let i = 0; i <= n; i++) {
+    const p = P[i], q = P[Math.min(n, i + 1)], o = P[Math.max(0, i - 1)], tx = q[0] - o[0], ty = q[1] - o[1], l = Math.hypot(tx, ty) || 1, w = lerp(w0, w1, i / n) / 2;
+    L.push([p[0] - (ty / l) * w, p[1] + (tx / l) * w]); R.push([p[0] + (ty / l) * w, p[1] - (tx / l) * w]);
+  }
+  return [...L, ...R.reverse()];
+}
+function cloudPts(x0, x1, y, h, seed) {
+  const r = MV.rng(seed), pts = [[x1, y + h * 0.25], [x0, y + h * 0.25]];
+  let xx = x0;
+  while (xx < x1 - 10) {
+    const bw = Math.min(x1 - xx, 26 + r() * 30), bh = h * (0.45 + r() * 0.55), cx = xx + bw / 2;
+    for (let k = 0; k <= 6; k++) { const a = Math.PI + (k / 6) * Math.PI; pts.push([cx + (Math.cos(a) * bw) / 2, y + Math.sin(a) * bh]); }
+    xx += bw;
+  }
+  return pts;
+}
+function moundPts(xs, ys) {
+  const out = [];
+  for (let i = 0; i < xs.length - 1; i++) for (let k = 0; k < 8; k++) { const u = k / 8, e = (1 - Math.cos(u * Math.PI)) / 2; out.push([lerp(xs[i], xs[i + 1], u), lerp(ys[i], ys[i + 1], e)]); }
+  out.push([xs[xs.length - 1], ys[ys.length - 1]]);
+  return out;
+}
+
+// ───────────────────────── 水彩、墨线、纸（背景和道具用，烤一次不抖） ─────────────────────────
+let K = 1, BK = 1.1;                                 // 逻辑 px → 物理 px；烤图多留一成给镜头推近
+// 一块湿画：同一形状推几层不同的毛边，半透明叠上去（叠得少的边缘浅）；最后沿边描一道深一点的水痕
+function wash(x, pts, tone, o = {}) {
+  const { seed = 'w', amp = 5, layers = 3, alpha = 0.5, edge = 0.3, step = 12, closed = true } = o;
+  const base = densify(pts, step, closed);
+  for (let l = 0; l < layers; l++) { x.fillStyle = gr(tone, alpha); x.fill(pathOf(jitter(base, amp, seed + 'L' + l, closed, 0.5))); }
+  if (edge > 0) { x.strokeStyle = gr(tone - 34, edge); x.lineWidth = 2.2; x.lineJoin = 'round'; x.stroke(pathOf(jitter(base, amp * 0.8, seed + 'E', closed, 0.4))); }
+}
+// 干笔：几根鬃毛并排扫过，中间断断续续
+function dry(x, x0, y0, x1, y1, w, tone, alpha, seed) {
+  const r = MV.rng(seed), L = Math.hypot(x1 - x0, y1 - y0) || 1, ux = (x1 - x0) / L, uy = (y1 - y0) / L, n = 5;
+  x.strokeStyle = gr(tone, alpha); x.lineCap = 'round';
+  for (let b = 0; b < n; b++) {
+    const off = ((b - (n - 1) / 2) * w) / n; x.lineWidth = 0.8 + r() * 1.4;
+    let s = r() * 10; x.beginPath();
+    while (s < L) {
+      const len = 8 + r() * 40, gap = 3 + r() * 16, e = Math.min(L, s + len);
+      x.moveTo(x0 + ux * s - uy * off, y0 + uy * s + ux * off); x.lineTo(x0 + ux * e - uy * off + (r() - 0.5), y0 + uy * e + ux * off + (r() - 0.5));
+      s = e + gap;
+    }
+    x.stroke();
+  }
+}
+// 手描墨线（道具用：抖一点但固定，不 boil）
+function inkStatic(x, pts, fill, seed, lw = 4.5, closed = true) {
+  const p = pathOf(jitter(densify(pts, 9, closed), 0.9, seed, closed), closed);
+  if (fill) { x.fillStyle = fill; x.fill(p); }
+  x.strokeStyle = INK; x.lineWidth = lw; x.lineJoin = 'round'; x.lineCap = 'round'; x.stroke(p);
+  return p;
+}
+// 先填色、在里面上水彩，再描墨线
+function inkWash(x, pts, tone, seed, paint, lw = 4.5) {
+  const p = pathOf(pts);
+  x.save(); x.fillStyle = gr(tone); x.fill(p); x.clip(p); paint(x); x.restore();
+  inkStatic(x, pts, null, seed, lw);
+}
+let PAPER = null;
+function makePaper() {                       // 纸纹：透明底上的黑色斑块 + 颗粒（灰阶里叠黑 = multiply）
+  const s = 384, c = canvas(s, s), x = c.getContext('2d'), r = MV.rng('paper');
+  for (let i = 0; i < 60; i++) {
+    const px = r() * s, py = r() * s, rad = 20 + r() * 70, g = x.createRadialGradient(px, py, 0, px, py, rad);
+    g.addColorStop(0, gr(0, 0.05)); g.addColorStop(1, gr(0, 0)); x.fillStyle = g;
+    for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) x.fillRect(px - rad + dx, py - rad + dy, rad * 2, rad * 2);
+  }
+  for (let i = 0; i < 5000; i++) { x.fillStyle = gr(0, 0.04 + r() * 0.09); x.fillRect(r() * s, r() * s, 1 + r() * 1.5, 1 + r()); }
+  return c;
+}
+// 叠纸纹；烤道具时用 source-atop，只落在画过的地方。纸纹一个像素对一个物理像素，不缩放（缩放会在图块接缝处出竖线）
+function paperOver(x, x0, y0, w, h, alpha) {
+  const p = x.createPattern(PAPER, 'repeat'), m = x.getTransform();
+  p.setTransform(new DOMMatrix([1 / m.a, 0, 0, 1 / m.d, 0, 0]));
+  x.save(); x.globalAlpha = alpha; x.fillStyle = p; x.fillRect(x0, y0, w, h); x.restore();
+}
+// 烤一张图：bbox 是相对锚点的逻辑坐标
+function sprite(x0, y0, x1, y1, art) {
+  const w = x1 - x0, h = y1 - y0, c = canvas(w * BK, h * BK), g = c.getContext('2d');
+  g.setTransform(c.width / w, 0, 0, c.height / h, (-x0 * c.width) / w, (-y0 * c.height) / h); art(g);
+  g.setTransform(c.width / w, 0, 0, c.height / h, (-x0 * c.width) / w, (-y0 * c.height) / h);
+  g.globalCompositeOperation = 'source-atop'; paperOver(g, x0, y0, w, h, 0.8);
+  return { c, x0, y0, w, h };
+}
+const blit = (x, s) => x.drawImage(s.c, s.x0, s.y0, s.w, s.h);
+
+// ───────────────────────── 背景 1：老厨房的墙和地，画一次 ─────────────────────────
+const NAIL = [380, 410], HOOK = [540, 405];          // 锅挂的钉子、勺子挂的钩子
+function wallpaper(x, X0, X1, Y0, Y1, step, band, key) {   // 竖条墙纸：深的那条是半透明湿画，宽条中间一串小圆点
+  wash(x, rectPts(X0 - 20, Y0 - 20, X1 + 20, Y1), 202, { seed: key + 'wall', amp: 12, layers: 2, alpha: 0.5, edge: 0, step: 24 });
+  for (let i = 0, sx = X0 + 10; sx < X1; sx += step, i++) {
+    wash(x, rectPts(sx, Y0 - 20, sx + band, Y1), 184, { seed: key + 'st' + i, amp: 2.2, layers: 2, alpha: 0.3, edge: 0.14, step: 16 });
+    for (let y = Y0 + 40 + (i % 2) * step * 0.6; y < Y1 - 20; y += step * 1.2) {
+      wash(x, ellPts(sx + band + (step - band) / 2, y, band * 0.17, band * 0.21, 12), 160, { seed: key + 'dt' + i + '_' + Math.round(y), amp: 1, layers: 1, alpha: 0.55, edge: 0, step: 4 });
+    }
+  }
+}
+function bakeKitchen() {
+  const X0 = GX0 - 80, X1 = GX1 + 80, Y0 = -80, Y1 = H + 80;
+  return sprite(X0, Y0, X1, Y1, (x) => {
+    const r = MV.rng('kitchen');
+    x.fillStyle = gr(206); x.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+    wallpaper(x, X0, X1, Y0, 640, 76, 30, 'k');
+    // 天花板下的线脚
+    wash(x, rectPts(X0 - 20, Y0 - 20, X1 + 20, 18), 132, { seed: 'cor', amp: 3, layers: 2, alpha: 0.7, edge: 0.3, step: 16 });
+    wash(x, rectPts(X0 - 20, 18, X1 + 20, 30), 176, { seed: 'cor2', amp: 2, layers: 2, alpha: 0.6, edge: 0.25, step: 16 });
+    // 吊灯照在墙上：灯下一大片更白
+    { const g = x.createRadialGradient(960, 150, 60, 960, 150, 620); g.addColorStop(0, gr(255, 0.34)); g.addColorStop(1, gr(255, 0)); x.fillStyle = g; x.fillRect(X0, Y0, X1 - X0, 900); }
+    // 瓷砖墙裙：浅底、干笔勾的砖缝，一行错半块
+    wash(x, rectPts(X0 - 20, 600, X1 + 20, 820), 224, { seed: 'tile', amp: 3, layers: 2, alpha: 0.85, edge: 0.3, step: 20 });
+    for (let j = 0, y = 600; y < 810; y += 34, j++) {
+      dry(x, X0, y, X1, y + (r() - 0.5) * 2, 3, 150, 0.45, 'tg' + j);
+      for (let xx = X0 + (j % 2) * 34; xx < X1; xx += 68) dry(x, xx, y + 2, xx + (r() - 0.5) * 2, y + 32, 2, 150, 0.4, 'tv' + j + '_' + xx);
+    }
+    // 柜子底下、炉子背后、灶台背后的影子
+    for (const [i, [a, b]] of [[234, 606], [1314, 1686]].entries()) wash(x, rectPts(a + 10, 384, b - 10, 420), 150, { seed: 'cabsh' + i, amp: 8, layers: 2, alpha: 0.25, edge: 0 });
+    wash(x, rectPts(712, 560, 1208, 800), 150, { seed: 'stsh', amp: 14, layers: 2, alpha: 0.22, edge: 0 });
+    wash(x, rectPts(X0 - 20, 770, X1 + 20, 800), 140, { seed: 'cntsh', amp: 6, layers: 2, alpha: 0.3, edge: 0 });
+    // 钉子、钩子
+    x.fillStyle = gr(40); x.beginPath(); x.arc(NAIL[0], NAIL[1], 5, 0, TAU); x.fill();
+    x.strokeStyle = gr(40); x.lineWidth = 5; x.lineCap = 'round'; x.beginPath(); x.moveTo(HOOK[0] - 6, HOOK[1] - 12); x.lineTo(HOOK[0], HOOK[1]); x.stroke();
+    // 地面：黑白格（透视），踢脚线
+    wash(x, rectPts(X0 - 20, 986, X1 + 20, Y1 + 20), 200, { seed: 'floor', amp: 4, layers: 2, alpha: 0.9, edge: 0.2, step: 20 });
+    const VP = [960, 330], rows = [990, 1016, 1052, 1100, 1170];
+    const at = (xb, y) => VP[0] + ((xb - VP[0]) * (y - VP[1])) / (1170 - VP[1]);
+    for (let j = 0; j < rows.length - 1; j++) for (let k = -10; k < 10; k++) {
+      if ((j + k + 20) % 2) continue;
+      const a = 960 + k * 150, b = a + 150, y0 = rows[j], y1 = rows[j + 1];
+      wash(x, [[at(a, y0), y0], [at(b, y0), y0], [at(b, y1), y1], [at(a, y1), y1]], 70, { seed: 'ck' + j + '_' + k, amp: 1.5, layers: 2, alpha: 0.7, edge: 0.2, step: 10 });
+    }
+    wash(x, rectPts(X0 - 20, 980, X1 + 20, 992), 90, { seed: 'base', amp: 2, layers: 2, alpha: 0.7, edge: 0.3 });
+    paperOver(x, X0, Y0, X1 - X0, Y1 - Y0, 0.6);
+  });
+}
+
+// ───────────────────────── 道具：每样烤一张，跟着拍子整体变形 ─────────────────────────
+function artCabinet(x, k) {                   // 吊柜：两扇门，上半玻璃（看得见里面的盘子、碗、罐子），下半木板
+  const r = MV.rng(k);
+  inkWash(x, rectPts(-160, -300, 160, 0), 160, k + 'bl', (x) => {
+    wash(x, rectPts(-170, -310, 170, 10), 146, { seed: k + 'b', amp: 6, layers: 2, alpha: 0.5, edge: 0 });
+    for (let xx = -152; xx < 152; xx += 8) dry(x, xx + r() * 3, -298, xx + r() * 3, -2, 2.5, 100, 0.26, k + 'g' + xx);
+    wash(x, rectPts(110, -310, 170, 10), 112, { seed: k + 's', amp: 6, layers: 2, alpha: 0.35, edge: 0.2 });
+  });
+  inkStatic(x, rectPts(-176, -324, 176, -300), gr(122), k + 'crown');
+  inkStatic(x, [[-186, -324], [-176, -340], [176, -340], [186, -324]], gr(178), k + 'cap', 4);
+  inkStatic(x, rectPts(-170, -6, 170, 8), gr(112), k + 'base', 4);
+  for (const s of [-1, 1]) {
+    const a = s < 0 ? -148 : 8, b = s < 0 ? -8 : 148;
+    inkStatic(x, rectPts(a, -288, b, -14), gr(172), k + 'door' + s);
+    const G = [a + 16, -272, b - 16, -132], cx = (G[0] + G[2]) / 2;
+    inkWash(x, rectPts(...G), 224, k + 'gl' + s, (x) => {
+      wash(x, rectPts(G[0] - 6, G[1] - 6, G[2] + 6, G[1] + 50), 196, { seed: k + 'gi' + s, amp: 5, layers: 2, alpha: 0.5, edge: 0 });
+      // 柜里隔着玻璃只是软的水彩影子：下层一摞平放的盘子、一只碗，上层一个罐子。别画立着的圆盘：两个叠着的圆像字母
+      x.fillStyle = gr(128, 0.85); x.fillRect(G[0], -160, G[2] - G[0], 6); x.fillRect(G[0], -222, G[2] - G[0], 5);
+      for (let i = 0; i < 4; i++) wash(x, ellPts(G[0] + 30, -167 - i * 8, 24, 5.5, 18), 240, { seed: k + 'pl' + s + i, amp: 0.8, layers: 2, alpha: 0.9, edge: 0.6, step: 5 });
+      const bowl = []; for (let i = 0; i <= 12; i++) { const a = (i / 12) * Math.PI; bowl.push([G[2] - 30 + Math.cos(a) * 22, -178 + Math.sin(a) * 18]); }
+      wash(x, bowl, 236, { seed: k + 'bw' + s, amp: 0.8, layers: 2, alpha: 0.9, edge: 0.6, step: 5 });
+      wash(x, rrPts(cx - 12, -258, cx + 12, -222, 6), 214, { seed: k + 'jar' + s, amp: 0.8, layers: 2, alpha: 0.85, edge: 0.5, step: 5 });
+      x.strokeStyle = gr(255, 0.6); x.lineCap = 'round';
+      x.lineWidth = 9; x.beginPath(); x.moveTo(G[0] + 14, -142); x.lineTo(G[0] + 52, -262); x.stroke();
+      x.lineWidth = 4; x.beginPath(); x.moveTo(G[0] + 34, -142); x.lineTo(G[0] + 66, -244); x.stroke();
+    }, 3.6);
+    inkStatic(x, rectPts(a + 18, -110, b - 18, -32), gr(158), k + 'pn' + s, 3.4);
+    inkStatic(x, ellPts(s < 0 ? b - 16 : a + 16, -120, 8, 8, 12), gr(236), k + 'kn' + s, 3.4);
+  }
+}
+function artWindow(x) {                       // 窗：白漆框、十字窗棂，窗外浅天、云、远山、一棵树；两边窗帘、顶上波浪帘头
+  inkStatic(x, rectPts(-150, -272, 150, -14), gr(236), 'wfr');
+  inkWash(x, rectPts(-130, -254, 130, -32), 238, 'wgl', (x) => {
+    wash(x, rectPts(-150, -270, 150, -186), 220, { seed: 'wsky', amp: 10, layers: 2, alpha: 0.55, edge: 0.15, step: 16 });
+    wash(x, cloudPts(-112, 20, -176, 24, 'wcl'), 250, { seed: 'wcloud', amp: 2, layers: 3, alpha: 0.85, edge: 0.4, step: 8 });
+    wash(x, rectPts(-112, -176, 20, -166), 200, { seed: 'wclsh', amp: 2, layers: 2, alpha: 0.4, edge: 0 });
+    wash(x, [[-150, -20], ...moundPts([-150, -40, 60, 150], [-74, -92, -70, -84]), [150, -20]], 176, { seed: 'whill', amp: 4, layers: 2, alpha: 0.75, edge: 0.3 });
+    dry(x, 64, -96, 66, -28, 9, 70, 0.7, 'wtrunk');
+    wash(x, ellPts(66, -122, 46, 40, 26), 128, { seed: 'wtree', amp: 7, layers: 3, alpha: 0.6, edge: 0.35 });
+    wash(x, ellPts(30, -104, 30, 26, 20), 140, { seed: 'wtree2', amp: 6, layers: 2, alpha: 0.55, edge: 0.3 });
+  }, 4);
+  inkStatic(x, rectPts(-7, -254, 7, -32), gr(236), 'wmv', 3.6);
+  inkStatic(x, rectPts(-130, -150, 130, -136), gr(236), 'wmh', 3.6);
+  x.strokeStyle = gr(255, 0.7); x.lineCap = 'round'; x.lineWidth = 8; x.beginPath(); x.moveTo(-112, -168); x.lineTo(-84, -236); x.stroke();
+  inkStatic(x, [[-176, -16], [176, -16], [168, 6], [-168, 6]], gr(226), 'wsill', 4);
+  for (const s of [-1, 1]) {
+    const pts = [[s * 186, -300], [s * 112, -300], ...quadPts([s * 112, -300], [s * 96, -200], [s * 138, -150], 8).slice(1), ...quadPts([s * 138, -150], [s * 112, -90], [s * 150, -24], 8).slice(1), [s * 190, -24]];
+    inkWash(x, pts, 244, 'wcur' + s, (x) => {
+      wash(x, rectPts(s * 150 - 36, -310, s * 150 + 46, 0), 210, { seed: 'wcs' + s, amp: 6, layers: 2, alpha: 0.45, edge: 0 });
+      for (let i = 0; i < 3; i++) dry(x, s * (128 + i * 18), -296, s * (140 + i * 16), -30, 4, 168, 0.5, 'wcf' + s + i);
+    }, 4);
+    inkStatic(x, [[s * 132, -160], [s * 196, -164], [s * 196, -142], [s * 136, -140]], gr(84), 'wtie' + s, 3.4);
+  }
+  const val = [[-198, -320], [198, -320], [198, -286]];
+  for (let i = 0; i <= 30; i++) { const u = i / 30; val.push([lerp(198, -198, u), -286 + 16 * Math.abs(Math.sin(u * 5 * Math.PI))]); }
+  inkWash(x, val, 214, 'wval', (x) => { for (let i = 0; i < 9; i++) dry(x, -190 + i * 46, -316, -186 + i * 46, -276, 3, 176, 0.45, 'wvf' + i); }, 4);
+}
+function artLamp(x) {                         // 吊灯：灯绳、小帽、深色圆顶灯罩（里面白）、灯泡。光晕和光芒每帧画
+  x.strokeStyle = INK; x.lineWidth = 5; x.lineCap = 'round';
+  x.stroke(pathOf(jitter(densify([[0, -30], [0, 98]], 8, false), 0.6, 'lcord', false), false));
+  inkStatic(x, ellPts(0, 104, 16, 10, 14), gr(60), 'lcap', 4);
+  const shade = [];
+  for (let i = 0; i <= 24; i++) { const a = Math.PI + (i / 24) * Math.PI; shade.push([Math.cos(a) * 96, 176 + Math.sin(a) * 68]); }
+  inkWash(x, shade, 66, 'lshade', (x) => wash(x, ellPts(-34, 142, 34, 18, 16), 126, { seed: 'lhl', amp: 3, layers: 2, alpha: 0.6, edge: 0 }));
+  inkStatic(x, ellPts(0, 176, 96, 14, 28), gr(238), 'lrim', 4);
+  inkStatic(x, ellPts(0, 188, 22, 20, 18), gr(252), 'lbulb', 4);
+}
+function artStove(x) {                        // 铸铁炉：炉面、炉身、带小圆窗的炉门、镀铬边、橡皮管一样的弯腿
+  for (const [lx, s] of [[-150, 1], [150, -1], [-196, -1], [196, 1]]) {
+    x.strokeStyle = INK; x.lineWidth = 15; x.lineCap = 'round';
+    x.stroke(pathOf(jitter(quadPts([lx, -50], [lx + s * 22, -26], [lx + s * 8, -8], 10), 0.8, 'stl' + lx, false), false));
+    inkStatic(x, ellPts(lx + s * 12, -6, 16, 8, 14), INK, 'stf' + lx, 2);
+  }
+  const r = MV.rng('stove');
+  inkWash(x, rectPts(-220, -206, 220, -46), 104, 'stb', (x) => {
+    wash(x, rectPts(-230, -216, 230, -40), 96, { seed: 'stw', amp: 6, layers: 2, alpha: 0.5, edge: 0 });
+    for (let i = 0; i < 9; i++) dry(x, -218, -196 + i * 17, 218, -194 + i * 17 + (r() - 0.5) * 3, 4, 70, 0.3, 'std' + i);
+    wash(x, rectPts(140, -216, 230, -40), 70, { seed: 'sts', amp: 6, layers: 2, alpha: 0.35, edge: 0.2 });
+  });
+  inkStatic(x, rectPts(-228, -62, 228, -46), gr(222), 'stchr', 3.6);
+  inkStatic(x, rrPts(-130, -190, 130, -76, 18), gr(78), 'stdoor');
+  inkStatic(x, rectPts(-96, -184, 96, -172), gr(236), 'sthdl', 3.4);
+  inkWash(x, ellPts(0, -124, 64, 28, 30), 44, 'stwin', (x) => { x.strokeStyle = gr(200, 0.8); x.lineWidth = 6; x.lineCap = 'round'; x.beginPath(); x.ellipse(0, -124, 48, 18, 0, Math.PI * 1.1, Math.PI * 1.45); x.stroke(); }, 4);
+  for (const s of [-1, 1]) {
+    inkStatic(x, ellPts(s * 180, -150, 14, 14, 14), gr(230), 'stk' + s, 3.6);
+    x.strokeStyle = INK; x.lineWidth = 3.6; x.lineCap = 'round'; x.beginPath(); x.moveTo(s * 180, -150); x.lineTo(s * 180 + 8, -160); x.stroke();   // 旋钮的指针斜着：竖着一道像个字母
+    const sw = quadPts([s * 160, -96], [s * 210, -90], [s * 186, -120], 8);
+    x.stroke(pathOf(jitter(sw, 0.6, 'stsw' + s, false), false));
+  }
+  inkStatic(x, [[-238, -204], [238, -204], [228, -230], [-228, -230]], gr(64), 'sttop');
+  for (const s of [-1, 1]) { x.strokeStyle = gr(30, 0.9); x.lineWidth = 3; x.beginPath(); x.ellipse(s * 112, -217, 70, 7, 0, 0, TAU); x.stroke(); }
+}
+const STOVE_TOP = -214;                       // 炉面中间（壶站的地方），相对炉子的锚点（地上）
+function artCounter(x, k, w) {                // 灶台：白台面、木柜身两扇门、黑踢脚
+  const hw = w / 2, r = MV.rng(k);
+  inkStatic(x, rectPts(-hw + 8, -14, hw - 8, 0), gr(60), k + 'toe', 4);
+  inkWash(x, rectPts(-hw, -186, hw, -14), 176, k + 'body', (x) => {
+    wash(x, rectPts(-hw - 10, -196, hw + 10, -4), 164, { seed: k + 'bw', amp: 6, layers: 2, alpha: 0.5, edge: 0 });
+    for (let xx = -hw + 6; xx < hw; xx += 9) dry(x, xx + r() * 3, -182, xx + r() * 3, -18, 2.5, 110, 0.24, k + 'g' + Math.round(xx));
+    wash(x, rectPts(-hw - 10, -190, hw + 10, -160), 120, { seed: k + 'top', amp: 4, layers: 2, alpha: 0.35, edge: 0 });
+  });
+  for (const s of [-1, 1]) {
+    const a = s < 0 ? -hw + 18 : 8, b = s < 0 ? -8 : hw - 18;
+    inkStatic(x, rectPts(a, -168, b, -26), gr(184), k + 'door' + s, 4);
+    inkStatic(x, rectPts(a + 18, -150, b - 18, -44), gr(168), k + 'pn' + s, 3.2);
+    inkStatic(x, ellPts(s < 0 ? b - 18 : a + 18, -140, 8, 8, 12), gr(236), k + 'kn' + s, 3.4);
+  }
+  inkStatic(x, rectPts(-hw - 12, -206, hw + 12, -186), gr(234), k + 'slab');
+}
+const CNT_TOP = -206;
+function artShelf(x) {                        // 一块搁板、两个托架、三个没有字的罐子
+  for (const s of [-1, 1]) inkStatic(x, [[s * 100, 14], [s * 100, 62], [s * 66, 14]], gr(112), 'shb' + s, 4);
+  inkStatic(x, rectPts(-150, 0, 150, 14), gr(126), 'shbd', 4);
+  for (const [i, [cx, w, h]] of [[-88, 72, 120], [-4, 64, 98], [80, 56, 78]].entries()) {
+    inkWash(x, rrPts(cx - w / 2, -h, cx + w / 2, 0, 10), 232, 'can' + i, (x) => {
+      wash(x, rectPts(cx + w * 0.15, -h - 10, cx + w / 2 + 10, 10), 196, { seed: 'cans' + i, amp: 3, layers: 2, alpha: 0.5, edge: 0 });
+      wash(x, rectPts(cx - w / 2 - 4, -h * 0.58, cx + w / 2 + 4, -h * 0.4), 140, { seed: 'canb' + i, amp: 1.5, layers: 2, alpha: 0.6, edge: 0.2 });
+    }, 4);
+    const lid = []; for (let j = 0; j <= 12; j++) { const a = Math.PI + (j / 12) * Math.PI; lid.push([cx + Math.cos(a) * (w / 2 + 3), -h + Math.sin(a) * 14]); }
+    inkStatic(x, lid, gr(72), 'canl' + i, 4);
+    inkStatic(x, ellPts(cx, -h - 18, 7, 6, 10), gr(40), 'cank' + i, 3);
+  }
+}
+function artPan(x) {                          // 平底锅挂在钉子上，锅底朝外：外圈锅沿、车出来的一圈圈纹、左上一道高光
+  inkStatic(x, [[-9, -4], [9, -4], [12, 80], [-12, 80]], gr(58), 'phd', 4);
+  inkStatic(x, ellPts(0, 8, 6, 6, 10), gr(196), 'phole', 3);
+  inkStatic(x, ellPts(0, 172, 96, 96, 40), gr(76), 'prim');
+  inkStatic(x, ellPts(0, 172, 84, 84, 36), gr(54), 'pbot', 3.6);
+  x.strokeStyle = gr(96, 0.75); x.lineWidth = 3; for (const rr of [62, 42, 22]) { x.beginPath(); x.arc(0, 172, rr, 0, TAU); x.stroke(); }
+  x.strokeStyle = gr(232, 0.9); x.lineWidth = 10; x.lineCap = 'round'; x.beginPath(); x.arc(0, 172, 70, Math.PI * 1.05, Math.PI * 1.45); x.stroke();
+  x.fillStyle = gr(232, 0.9); x.beginPath(); x.arc(-30, 120, 5, 0, TAU); x.fill();
+}
+const PAN_C = 172, PAN_R = 96;
+function artLadle(x) {                        // 汤勺：挂环、细长柄、圆勺
+  x.strokeStyle = INK; x.lineWidth = 4; x.beginPath(); x.arc(0, 8, 8, 0, TAU); x.stroke();
+  inkStatic(x, [[-5, 15], [5, 15], [7, 128], [-7, 128]], gr(214), 'lhd', 4);
+  inkStatic(x, ellPts(0, 160, 34, 30, 24), gr(196), 'lbowl');
+  inkStatic(x, ellPts(0, 150, 24, 12, 18), gr(128), 'lin', 3);
+  x.strokeStyle = gr(250, 0.9); x.lineWidth = 5; x.lineCap = 'round'; x.beginPath(); x.arc(0, 160, 24, Math.PI * 0.62, Math.PI * 0.9); x.stroke();
+}
+const LADLE_L = 160, LADLE_R = 34;
+// 镜头 2 的道具
+function artRack(x) {                         // 墙上的盘架：一根木条，立着三个盘子
+  for (const [i, px] of [-124, 0, 124].entries()) {
+    inkStatic(x, ellPts(px, -66, 60, 60, 40), gr(242), 'rp' + i);
+    inkStatic(x, ellPts(px, -66, 40, 40, 30), gr(226), 'rpi' + i, 3);
+    x.strokeStyle = gr(150, 0.8); x.lineWidth = 4; x.setLineDash([2, 14]); x.beginPath(); x.arc(px, -66, 51, 0, TAU); x.stroke(); x.setLineDash([]);
+    x.strokeStyle = gr(255, 0.9); x.lineWidth = 7; x.lineCap = 'round'; x.beginPath(); x.arc(px, -66, 46, Math.PI * 1.1, Math.PI * 1.4); x.stroke();
+  }
+  inkStatic(x, rectPts(-206, -26, 206, 0), gr(130), 'rrail');
+  for (const s of [-1, 1]) inkStatic(x, [[s * 170, 0], [s * 170, 40], [s * 140, 0]], gr(112), 'rbr' + s, 4);
+}
+function artSugar(x) {                        // 糖罐：圆肚子、两只小耳朵、圆顶盖、小钮
+  for (const s of [-1, 1]) { x.strokeStyle = INK; x.lineWidth = 12; x.beginPath(); x.ellipse(s * 76, -56, 16, 20, 0, 0, TAU); x.stroke(); x.strokeStyle = gr(236); x.lineWidth = 5; x.stroke(); }
+  const body = [];
+  for (let i = 0; i <= 24; i++) { const a = -0.5 + (i / 24) * (Math.PI + 1); body.push([Math.cos(a) * 74, -52 + Math.sin(a) * 50]); }
+  inkWash(x, body, 238, 'sgb', (x) => {
+    wash(x, rectPts(20, -110, 90, 10), 200, { seed: 'sgs', amp: 4, layers: 2, alpha: 0.5, edge: 0 });
+    wash(x, rectPts(-80, -60, 80, -48), 120, { seed: 'sgband', amp: 1.5, layers: 2, alpha: 0.6, edge: 0.2 });
+  });
+  const lid = []; for (let i = 0; i <= 16; i++) { const a = Math.PI + (i / 16) * Math.PI; lid.push([Math.cos(a) * 64, -78 + Math.sin(a) * 34]); }
+  inkStatic(x, lid, gr(226), 'sgl', 4);
+  inkStatic(x, ellPts(0, -118, 12, 10, 12), gr(60), 'sgk', 3.6);
+  x.strokeStyle = gr(255, 0.9); x.lineWidth = 6; x.lineCap = 'round'; x.beginPath(); x.arc(0, -52, 56, Math.PI * 1.05, Math.PI * 1.3); x.stroke();
+}
+function artJug(x) {                          // 奶壶：梨形肚子、左边一个嘴、右边一个把
+  x.strokeStyle = INK; x.lineWidth = 13; x.lineCap = 'round';
+  x.stroke(pathOf(quadPts([40, -120], [104, -110], [52, -40], 10), false));
+  x.strokeStyle = gr(214); x.lineWidth = 5; x.stroke(pathOf(quadPts([40, -120], [104, -110], [52, -40], 10), false));
+  const body = [[-34, -150], [-62, -164], [-40, -136], ...quadPts([-40, -136], [-74, -70], [-50, -2], 8).slice(1), [50, -2], ...quadPts([50, -2], [76, -70], [34, -150], 8).slice(1)];
+  inkWash(x, body, 214, 'jug', (x) => {
+    wash(x, rectPts(10, -170, 90, 10), 176, { seed: 'jugs', amp: 4, layers: 2, alpha: 0.5, edge: 0 });
+    wash(x, rectPts(-80, -126, 90, -116), 120, { seed: 'jugb', amp: 1.5, layers: 2, alpha: 0.6, edge: 0.2 });
+  });
+  x.strokeStyle = gr(255, 0.85); x.lineWidth = 6; x.lineCap = 'round'; x.beginPath(); x.moveTo(-36, -100); x.quadraticCurveTo(-48, -60, -34, -24); x.stroke();
+}
+
+// ───────────────────────── 背景 2：桌面近景，画一次 ─────────────────────────
+function bakeTable() {
+  const X0 = GX0 - 80, X1 = GX1 + 80, Y0 = -80, Y1 = H + 80;
+  return sprite(X0, Y0, X1, Y1, (x) => {
+    x.fillStyle = gr(206); x.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+    wallpaper(x, X0, X1, Y0, 640, 116, 46, 't');   // 同一种墙纸，离得近，条子更宽
+    { const g = x.createRadialGradient(960, 40, 80, 960, 40, 760); g.addColorStop(0, gr(255, 0.34)); g.addColorStop(1, gr(255, 0)); x.fillStyle = g; x.fillRect(X0, Y0, X1 - X0, 900); }
+    // 桌布：白底格子，横条近宽远窄，竖条朝消失点收；两遍半透明的灰叠出深浅三种
+    const TB = 612, TF = 990, VP = [960, -760];
+    wash(x, rectPts(X0 - 20, TB, X1 + 20, TF + 10), 242, { seed: 'cloth', amp: 4, layers: 2, alpha: 0.92, edge: 0.2, step: 20 });
+    const rows = [612, 640, 674, 716, 768, 830, 904, 990];
+    for (let j = 0; j < rows.length - 1; j += 2) wash(x, rectPts(X0 - 20, rows[j], X1 + 20, rows[j + 1]), 150, { seed: 'gr' + j, amp: 1.5, layers: 1, alpha: 0.26, edge: 0, step: 14 });
+    const at = (xb, y) => VP[0] + ((xb - VP[0]) * (y - VP[1])) / (TF - VP[1]);
+    for (let k = -12; k < 12; k += 2) {
+      const a = 960 + k * 120 + 60, b = a + 120;
+      wash(x, [[at(a, TB), TB], [at(b, TB), TB], [b, TF], [a, TF]], 150, { seed: 'gc' + k, amp: 1.5, layers: 1, alpha: 0.26, edge: 0, step: 14 });
+    }
+    wash(x, rectPts(X0 - 20, TB - 8, X1 + 20, TB + 14), 120, { seed: 'tbsh', amp: 3, layers: 2, alpha: 0.35, edge: 0 });
+    // 桌布垂下来的前沿：竖褶、波浪边，下面是暗的桌底
+    wash(x, rectPts(X0 - 20, TF, X1 + 20, Y1 + 20), 90, { seed: 'under', amp: 3, layers: 2, alpha: 0.9, edge: 0 });
+    const hem = [[X0 - 20, TF - 4], [X1 + 20, TF - 4]];
+    for (let i = 0; i <= 40; i++) { const u = i / 40; hem.push([lerp(X1 + 20, X0 - 20, u), 1110 + 16 * Math.abs(Math.sin(u * 14 * Math.PI))]); }
+    wash(x, hem, 228, { seed: 'hem', amp: 2, layers: 2, alpha: 0.95, edge: 0.4, step: 10 });
+    for (let i = 0; i < 16; i++) { const fx = X0 + 40 + i * 106; dry(x, fx, TF + 6, fx + 4, 1110, 8, 170, 0.5, 'fold' + i); }
+    paperOver(x, X0, Y0, X1 - X0, Y1 - Y0, 0.6);
+  });
+}
+
+// ───────────────────────── 拍子：道具同相伸缩 ─────────────────────────
+// 以锚点为原点：压扁 / 伸长 + 左右轮流歪
+function dance(x, ax, ay, amt = 1) {
+  const A = AMP * amt; x.translate(ax, ay); x.transform(1, 0, -LEAN * A * 0.9, 1, 0, 0); x.scale(1 + PV * A * 0.6, 1 - PV * A);
+}
+// 道具上的一点跟着 dance 变形后在哪：站在炉面、台面上的角色跟着一起蹲
+function danced(ax, ay, lx, ly, amt = 1) {
+  const A = AMP * amt, X = lx * (1 + PV * A * 0.6), Y = ly * (1 - PV * A);
+  return [ax + X - LEAN * A * 0.9 * Y, ay + Y];
+}
+function dancedBlit(g, s, ax, ay, amt = 1) { g.save(); dance(g, ax, ay, amt); blit(g, s); g.restore(); }
+
+// ───────────────────────── 角色的墨线（boil：一张换一次抖动） ─────────────────────────
+function cel(x, pts, fill, key, lw = 6) {
+  const p = pathOf(jitter(densify(pts, 8), 1.3, key + '#' + Q));
+  if (fill) { x.fillStyle = fill; x.fill(p); }
+  if (lw) { x.strokeStyle = INK; x.lineWidth = lw; x.lineJoin = 'round'; x.stroke(p); }
+  return p;
+}
+function hose(x, pts, w, key) {               // 橡皮管：等粗、圆头、顺着弯
+  x.strokeStyle = INK; x.lineWidth = w; x.lineCap = 'round'; x.lineJoin = 'round';
+  x.stroke(pathOf(jitter(densify(pts, 8, false), 1.1, key + '#' + Q, false), false));
+}
+function inkLine(x, pts, lw, key) { x.strokeStyle = INK; x.lineWidth = lw; x.lineCap = 'round'; x.lineJoin = 'round'; x.stroke(pathOf(jitter(densify(pts, 6, false), 0.8, key + '#' + Q, false), false)); }
+function pie(x, cx, cy, rx, ry, rot) {       // 派形眼的眼珠：黑椭圆切掉右上一角
+  const a0 = -0.85, d = 0.42; x.fillStyle = INK; x.beginPath(); x.moveTo(cx, cy);
+  x.ellipse(cx, cy, rx, ry, rot, a0 + d, a0 - d + TAU); x.closePath(); x.fill();
+}
+function eyeBall(x, E, rot, rx, ry, mode, look, key) {
+  cel(x, ellPts(E[0], E[1], rx, ry, 28, rot), gr(246), key, 5);
+  const c = Math.cos(rot), s = Math.sin(rot), loc = (u, v) => [E[0] + u * c - v * s, E[1] + u * s + v * c];
+  if (mode === 'happy') inkLine(x, quadPts(loc(-rx * 0.62, ry * 0.25), loc(0, -ry * 0.6), loc(rx * 0.62, ry * 0.25), 8), 6, key + 'h');
+  else { const P = loc(look[0] * rx * 0.4, look[1] * ry * 0.36 + ry * 0.08); pie(x, P[0], P[1], rx * 0.56, ry * 0.6, rot); }
+}
+// 白手套：喇叭口袖口 + 手掌；攥拳（fist）背上三道线，张开（open）四根手指
+function glove(x, P, ang, s, mode, key) {
+  const c = Math.cos(ang), sn = Math.sin(ang), at = (u, v) => [P[0] + (u * c - v * sn) * s, P[1] + (u * sn + v * c) * s];
+  if (mode === 'open') {
+    for (const [i, [fa, fl]] of [[-0.95, 18], [-0.32, 26], [0.12, 27], [0.55, 24]].entries()) {
+      const tip = [30 + Math.cos(fa) * (12 + fl), Math.sin(fa) * (12 + fl)];
+      cel(x, ellPts(...at((30 + tip[0]) / 2, tip[1] / 2), ((fl + 14) / 2) * s, 7 * s, 12, ang + fa), gr(248), key + 'f' + i, 4.5);
+    }
+    cel(x, ellPts(...at(28, 0), 17 * s, 16 * s, 18, ang), gr(248), key + 'p', 4.5);
+  } else {
+    cel(x, ellPts(...at(26, 0), 20 * s, 18 * s, 20, ang), gr(248), key + 'p', 4.5);
+    for (const v of [-7, 0, 7]) inkLine(x, [at(26, v), at(38, v * 1.2)], 3, key + 'k' + v);
+  }
+  cel(x, [at(-6, -11), at(10, -16), at(10, 16), at(-6, 11)], gr(248), key + 'c', 4.5);
+  inkLine(x, [at(3, -13), at(3, 13)], 3, key + 'cl');
+}
+function shoe(x, P, side, s, rot, key) {
+  const c = [P[0] + side * 10 * s, P[1] - 8 * s];
+  cel(x, ellPts(c[0], c[1], 30 * s, 14 * s, 16, rot), INK, key, 3);
+  x.fillStyle = gr(232); x.beginPath(); x.ellipse(c[0] + side * 8 * s, c[1] - 5 * s, 8 * s, 3 * s, rot, 0, TAU); x.fill();
+}
+function sparkle(x, cx, cy, R, rot, key) {   // 四角星：眨眼那一下的「叮」
+  const pts = [];
+  for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU + rot, rr = k % 2 ? R * 0.28 : R; pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]); }
+  cel(x, pts, gr(252), key, 4);
+}
+
+// ───────────────────────── 咖啡壶（局部坐标：两脚中间是原点，往上是负） ─────────────────────────
+const potHW = (y) => { const s = clamp((-50 - y) / 280); return lerp(112, 72, s) + 14 * Math.sin(Math.PI * s * 0.9); };
+const POT_BODY = (() => {
+  const side = [];
+  for (let i = 0; i <= 14; i++) { const y = lerp(-50, -330, i / 14); side.push([potHW(y), y]); }
+  const out = [...side, ...side.slice().reverse().map(([x, y]) => [-x, y])];
+  for (let i = 1; i < 12; i++) { const a = Math.PI - (i / 12) * Math.PI; out.push([Math.cos(a) * 112, -50 + Math.sin(a) * 16]); }
+  return out;
+})();
+const POT_FACE = (() => {                     // 白脸盘：椭圆，顶上中间往下凹一点（老卡通的美人尖）
+  const out = [];
+  for (let i = 0; i < 44; i++) {
+    const a = (i / 44) * TAU, d = Math.abs((((a - 1.5 * Math.PI) % TAU) + TAU + Math.PI) % TAU - Math.PI);
+    out.push([Math.cos(a) * 86, -226 + Math.sin(a) * 82 + (d < 0.55 ? 20 * Math.pow(1 - d / 0.55, 2) : 0)]);
+  }
+  return out;
+})();
+const POT_DOME = (() => { const out = []; for (let i = 0; i <= 16; i++) { const a = Math.PI + (i / 16) * Math.PI; out.push([Math.cos(a) * 68, -342 + Math.sin(a) * 46]); } return out; })();
+const FACE = [960, 556];                      // 壶脸在画面上的位置：镜头往这里慢推，光圈收到这里
+function potPose(b) {
+  const n = Math.floor(b + 1e-6), ph = b - n, s = swing(ph), pv = pulseAt(b), up = Math.max(0, -pv), k = Math.sin(Math.PI * s);
+  const P = { sx: 1 + 0.06 * pv, sy: 1 - 0.09 * pv, dy: -20 * up, rot: 0.07 * leanAt(b), look: [n % 2 ? 0.8 : -0.8, 0.2], wink: 0,
+    hand: 0, kick: [0, 0], lid: -14 * up, nose: pv, mouth: 'grin', spark: 0 };
+  if (b < B_FACE) P.kick[n % 2] = k;                       // 查尔斯顿：一拍一只脚，后半拍踢到最远
+  else {                                                   // 光圈收到脸上：转过来看镜头，只轻轻地颠
+    Object.assign(P, { sx: 1 + 0.03 * pv, sy: 1 - 0.045 * pv, dy: -6 * up, rot: 0.025 * leanAt(b), look: [0.05, 0.25], lid: -5 * up });
+    P.hand = MV.keys(b, [[B_WINK - 1 / 3, 0], [B_WINK - 1 / 6, 0.6], [B_WINK, 1], [B_WINK + 1 / 3, 1], [B_WINK + 0.5, 0.5], [B_WINK + 2 / 3, 0]]);
+    if (b >= B_WINK && b < B_WINK + 0.5) { P.wink = 1; P.mouth = 'smirk'; P.spark = [1.3, 1, 0.65][Math.round((b - B_WINK) * DR)]; }
+  }
+  return P;
+}
+function drawPot(x, cx, by, P) {
+  const cs = Math.cos(P.rot), sn = Math.sin(P.rot);
+  const tf = (lx, ly) => { const X = lx * P.sx, Y = ly * P.sy + P.dy; return [cx + X * cs - Y * sn, by + X * sn + Y * cs]; };
+  const T = (pts) => pts.map((p) => tf(p[0], p[1]));
+  // 腿：髋跟着身子，脚踩炉面；踢出去的那只往外往上
+  for (const [i, side] of [[0, -1], [1, 1]]) {
+    const k = P.kick[i], hip = tf(side * 40, -56), foot = [cx + side * (52 + 46 * k), by - 40 * k];
+    hose(x, quadPts(hip, [(hip[0] + foot[0]) / 2 + side * (16 + 12 * k), (hip[1] + foot[1]) / 2 - 8], foot, 10), 15, 'pleg' + i);
+    shoe(x, foot, side, 1, side * (0.12 + 0.35 * k), 'pshoe' + i);
+  }
+  cel(x, T(POT_BODY), gr(92), 'pbody');
+  x.strokeStyle = gr(196, 0.9); x.lineWidth = 7; x.lineCap = 'round'; x.stroke(pathOf(T([[88, -84], [94, -130], [92, -160]]), false));
+  // 盖子：拍上落回、后半拍跳起来
+  const L = (pts) => T(pts.map(([a, b]) => [a, b + P.lid]));
+  cel(x, L(POT_DOME), gr(74), 'pdome', 5.5);
+  x.strokeStyle = gr(200, 0.9); x.lineWidth = 6; x.stroke(pathOf(L([[-46, -356], [-36, -372], [-18, -382]]), false));
+  cel(x, L(rectPts(-9, -398, 9, -384)), gr(40), 'pneck', 4);
+  cel(x, L(ellPts(0, -410, 17, 17, 16)), gr(36), 'pknob', 5);
+  x.fillStyle = gr(220); const kh = tf(-6, -416 + P.lid); x.beginPath(); x.arc(kh[0], kh[1], 4, 0, TAU); x.fill();
+  cel(x, L(rrPts(-84, -344, 84, -328, 7)), gr(60), 'prim', 5);
+  // 脸：白脸盘、嘴、派形眼、壶嘴鼻子
+  cel(x, T(POT_FACE), gr(240), 'pface', 5.5);
+  const mouth = P.mouth === 'smirk' ? [quadPts([-42, -192], [0, -186], [48, -204], 8), quadPts([48, -204], [16, -140], [-42, -192], 10)]
+    : [quadPts([-48, -194], [0, -186], [44, -198], 8), quadPts([44, -198], [4, -132], [-48, -194], 10)];
+  const mp = cel(x, T([...mouth[0], ...mouth[1].slice(1, -1)]), INK, 'pmouth', 4.5);
+  x.save(); x.clip(mp); const tg = tf(8, -146); x.fillStyle = gr(130); x.beginPath(); x.ellipse(tg[0], tg[1], 20, 11, P.rot, 0, TAU); x.fill(); x.restore();
+  for (const [i, ex] of [[0, -30], [1, 30]]) eyeBall(x, tf(ex, -254), P.rot, 22 * P.sx, 30 * P.sy, P.wink && i ? 'happy' : 'open', P.look, 'peye' + i);
+  const nb = [6, -214], nc = [88, -210 + 8 * P.nose], nt = [128, -278 + 10 * P.nose];
+  cel(x, T(tube(nb, nc, nt, 32, 20)), gr(92), 'pnose', 5.5);
+  cel(x, T(ellPts(nb[0], nb[1], 18, 17, 18)), gr(92), 'pnoseb', 5.5);
+  const ta = Math.atan2(nt[1] - nc[1], nt[0] - nc[0]);
+  cel(x, T(ellPts(nt[0], nt[1], 7, 12, 14, ta)), gr(30), 'pnoset', 4);
+  x.strokeStyle = gr(200, 0.85); x.lineWidth = 5; x.stroke(pathOf(T(quadPts([30, -224], [76, -228], [100, -256], 6)), false));
+  // 壶把 = 叉腰的胳膊；眨眼那拍松开，举到脸边挥手
+  const h = P.hand, S0 = [-potHW(-300) + 8, -300];
+  const hand = [lerp(-potHW(-160) + 6, -128, h), lerp(-160, -312, h)], ctl = [lerp(-212, -176, h), lerp(-262, -248, h)];
+  hose(x, T(quadPts(S0, ctl, hand, 12)), 16, 'parm');
+  const wav = h > 0.5 ? 0.22 * (Q % 2 ? 1 : -1) : 0;
+  glove(x, tf(...hand), (h > 0.5 ? -2.2 + wav : lerp(0.35, -2.2, h)) + P.rot, 1, h > 0.5 ? 'open' : 'fist', 'pglove');
+  if (P.spark) sparkle(x, ...tf(70, -292), 30 * P.spark, (Q % 2) * 0.4, 'pspark');
+}
+
+// ───────────────────────── 咖啡杯（按圆柱画：yaw = 脸朝哪边转了多少，0 是正对镜头） ─────────────────────────
+const cupHW = (y) => 50 + 20 * Math.pow(clamp((-36 - y) / 114), 0.7);   // y：-36 杯底 → -150 杯口
+const CUP_BODY = (() => {
+  const side = [];
+  for (let i = 0; i <= 10; i++) { const y = lerp(-36, -150, i / 10); side.push([cupHW(y), y]); }
+  const out = [...side];
+  for (let i = 1; i < 16; i++) { const a = (-i / 16) * Math.PI; out.push([Math.cos(a) * 70, -150 + Math.sin(a) * 15]); }   // 杯口后沿
+  out.push(...side.slice().reverse().map(([x, y]) => [-x, y]));
+  for (let i = 1; i < 12; i++) { const a = Math.PI - (i / 12) * Math.PI; out.push([Math.cos(a) * 50, -36 + Math.sin(a) * 9]); }
+  return out;
+})();
+// 杯身上 y 高、绕着转了 a 弧度的那一点：横向 hw·sin，前后 cos（前面的略低一点，杯身是个斜着看的圆柱）
+const onCup = (y, a) => [cupHW(y) * Math.sin(a), y + 15 * (cupHW(y) / 70) * Math.cos(a)];
+const CUP_DOTS = (() => { const out = []; for (const [j, y] of [-128, -100, -72, -48].entries()) for (let k = 0; k < 6; k++) out.push([y, (k * Math.PI) / 3 + (j % 2) * (Math.PI / 6)]); return out; })();
+function drawCup(x, C) {
+  const s = C.s, cs = Math.cos(C.rot), sn = Math.sin(C.rot);
+  const tf = (lx, ly) => { const X = lx * s * C.sx, Y = (ly * C.sy + C.dy) * s; return [C.x + X * cs - Y * sn, C.y + X * sn + Y * cs]; };
+  const T = (pts) => pts.map((p) => tf(p[0], p[1]));
+  const k = C.key;
+  for (const [i, side] of [[0, -1], [1, 1]]) {
+    const hip = tf(side * 22, -40), foot = C.feet[i];
+    hose(x, quadPts(hip, [(hip[0] + foot[0]) / 2 + side * 10 * s, (hip[1] + foot[1]) / 2 - 4 * s], foot, 8), 11 * s, k + 'leg' + i);
+    shoe(x, foot, side, 0.62 * s, side * 0.15, k + 'shoe' + i);
+  }
+  const arm = (A, i) => {
+    const sh = tf(...A.sh), mid = [(sh[0] + A.hand[0]) / 2, (sh[1] + A.hand[1]) / 2 + 14 * s];
+    hose(x, quadPts(sh, mid, A.hand, 10), 10 * s, k + 'arm' + i);
+    if (A.mode) glove(x, A.hand, A.ang, 0.62 * s, A.mode, k + 'gl' + i);
+  };
+  C.arms.forEach((A, i) => { if (!A.front) arm(A, i); });
+  // 杯把：在脸的背面（yaw + π）。转到侧面是个 C 形的环，转到正前方 / 正后方压扁成一道竖环
+  const ah = C.yaw + Math.PI, hs = Math.sin(ah), front = Math.cos(ah) > 0;
+  const handle = () => {
+    const ex = cupHW(-104) * hs, sg = Math.sign(hs) || 1, w = 36 * Math.abs(hs) + 6;
+    const pts = T([...quadPts([ex, -134], [ex + sg * w * 1.2, -142], [ex + sg * w, -106], 8), ...quadPts([ex + sg * w, -106], [ex + sg * w * 0.9, -74], [ex * 0.96, -80], 8).slice(1)]);
+    hose(x, pts, 7 + 5 * s, k + 'hdl'); x.strokeStyle = gr(C.tone); x.lineWidth = 2 + 3 * s; x.stroke(pathOf(pts, false));
+  };
+  if (!front) handle();
+  cel(x, T(CUP_BODY), gr(C.tone), k + 'body');
+  const bp = pathOf(T(CUP_BODY));
+  x.save(); x.clip(bp);
+  if (C.pat === 'band') {
+    for (const [y0, y1] of [[-136, -124], [-58, -52]]) {
+      const top = [], bot = [];
+      for (let i = 0; i <= 16; i++) { const a = -Math.PI / 2 + (i / 16) * Math.PI; top.push(onCup(y0, a)); bot.push(onCup(y1, a)); }
+      x.fillStyle = gr(64); x.fill(pathOf(T([...top, ...bot.reverse()])));
+    }
+  } else {
+    x.fillStyle = gr(246);
+    for (const [y, a0] of CUP_DOTS) {
+      const a = a0 + C.yaw, c = Math.cos(a);
+      if (c < 0.12) continue;
+      const p = tf(...onCup(y, a)); x.beginPath(); x.ellipse(p[0], p[1], 7.5 * s * c, 7.5 * s, C.rot, 0, TAU); x.fill();
+    }
+  }
+  const hl = T([[-52, -132], [-58, -96], [-50, -60]]);   // 杯身左边一道高光
+  x.beginPath(); x.moveTo(...hl[0]); x.quadraticCurveTo(...hl[1], ...hl[2]); x.lineWidth = 7 * s; x.strokeStyle = gr(255, C.tone > 180 ? 0.8 : 0.45); x.stroke();
+  x.restore();
+  cel(x, T(ellPts(0, -150, 70, 15, 32)), gr(C.tone - 46), k + 'rim', 5);
+  cel(x, T(ellPts(0, -146, 58, 10, 28)), gr(44), k + 'cof', 0);
+  x.strokeStyle = gr(210, 0.8); x.lineWidth = 3 * s; x.beginPath(); const ch = T([[-30, -150], [-6, -153], [16, -151]]); x.moveTo(...ch[0]); x.quadraticCurveTo(...ch[1], ...ch[2]); x.stroke();
+  // 脸：眼睛、嘴按转了多少度摆，转到背面就不画
+  for (const [i, off] of [[0, -0.42], [1, 0.42]]) {
+    const a = C.yaw + off, c = Math.cos(a);
+    if (c < 0.08) continue;
+    const E = tf(...onCup(-104, a)), mode = C.eyes === 'happy' ? 'happy' : 'open';
+    eyeBall(x, E, C.rot, 14 * s * Math.max(0.42, c), 20 * s, mode, C.look, k + 'eye' + i);
+  }
+  const cm = Math.cos(C.yaw);
+  if (cm > 0.2) {
+    const m = onCup(-68, C.yaw), w = 22 * cm;
+    const mp = cel(x, T([...quadPts([m[0] - w, -74], [m[0], -70], [m[0] + w, -74], 6), ...quadPts([m[0] + w, -74], [m[0], -44], [m[0] - w, -74], 8).slice(1, -1)]), INK, k + 'mouth', 4);
+    x.save(); x.clip(mp); const tg = tf(m[0] + 3, -50); x.fillStyle = gr(130); x.beginPath(); x.ellipse(tg[0], tg[1], 10 * s * cm, 6 * s, C.rot, 0, TAU); x.fill(); x.restore();
+  }
+  if (front) handle();
+  C.arms.forEach((A, i) => { if (A.front) arm(A, i); });
+  if (C.steam) for (const sd of [-1, 1]) {   // 杯口一直冒的两缕蒸汽：墨线勾边的白
+    const pts = [];
+    for (let j = 0; j <= 8; j++) { const u = j / 8; pts.push(tf(sd * 16 + 9 * Math.sin(u * 5 + Q * 0.9 + sd), -156 - u * 70)); }
+    x.lineCap = 'round'; x.strokeStyle = INK; x.lineWidth = 10 * Math.min(1.4, s); x.stroke(pathOf(jitter(pts, 1, k + 'stm' + sd + '#' + Q, false), false));
+    x.strokeStyle = gr(248); x.lineWidth = 4.5 * Math.min(1.4, s); x.stroke(pathOf(pts, false));
+  }
+}
+
+// ───────────────────────── 镜头 1：老厨房全景 ─────────────────────────
+const STOVE = [960, 1000], CNT_L = [485, 1000], CNT_R = [1435, 1000], LAMP = [960, -40];
+let STRIKE = 0.19;                            // 勺子碰到锅的角度（开页面时算）
+function ladleAngle(b) { const n = Math.floor(b + 1e-6), s = swing(b - n); return lerp(STRIKE, -0.42, Math.sin(Math.PI * s)); }
+function solveStrike() {                      // 勺碗中心到锅心 = 两个半径之和
+  const pan = [NAIL[0], NAIL[1] + PAN_C], dist = (a) => Math.hypot(HOOK[0] - LADLE_L * Math.sin(a) - pan[0], HOOK[1] + LADLE_L * Math.cos(a) - pan[1]);
+  let lo = 0, hi = 0.8;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (dist(m) > PAN_R + LADLE_R) lo = m; else hi = m; }
+  return lo;
+}
+function bulb() { return danced(LAMP[0], LAMP[1], 0, 188, 0.8); }
+function drawPanAndLadle(g) {
+  const n = Math.floor(BF + 1e-6), ph = BF - n, f = F - n * FR;
+  g.save(); dance(g, NAIL[0], NAIL[1], 0.6); g.rotate(0.09 * Math.sin(TAU * 1.5 * ph) * Math.exp(-4 * ph)); blit(g, S.pan); g.restore();
+  const a = ladleAngle(BQ);
+  g.save(); g.translate(HOOK[0], HOOK[1]); g.rotate(a); blit(g, S.ladle); g.restore();
+  if (f <= 2) {                                // 敲上去的三格：碰的地方冒三道墨线，锅边两道震纹
+    const pc = [NAIL[0], NAIL[1] + PAN_C], bc = [HOOK[0] - LADLE_L * Math.sin(STRIKE), HOOK[1] + LADLE_L * Math.cos(STRIKE)];
+    const d = Math.atan2(bc[1] - pc[1], bc[0] - pc[0]), hit = [pc[0] + Math.cos(d) * PAN_R, pc[1] + Math.sin(d) * PAN_R];
+    for (const [i, da] of [-0.9, -0.35, 0.2].entries()) {
+      const aa = d - 0.6 + da, r0 = 26 + f * 12, r1 = r0 + [30, 44, 34][i] - f * 6;
+      inkLine(g, [[hit[0] + Math.cos(aa) * r0, hit[1] + Math.sin(aa) * r0 - 30], [hit[0] + Math.cos(aa) * r1, hit[1] + Math.sin(aa) * r1 - 30]], 5, 'clang' + i);
+    }
+    for (const j of [0, 1]) {
+      g.strokeStyle = INK; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath();
+      g.arc(pc[0], pc[1], PAN_R + 14 + j * 16 + f * 8, d - 0.7 - j * 0.15, d + 0.7 + j * 0.15); g.stroke();
+    }
+  }
+}
+function drawLampGlow(g) {
+  const [bx, by] = bulb(), s = 1 + 0.04 * PV;
+  g.fillStyle = gr(255, 0.06); g.beginPath(); g.moveTo(bx - 84, by - 8); g.lineTo(bx + 84, by - 8); g.lineTo(bx + 340, 800); g.lineTo(bx - 340, 800); g.closePath(); g.fill();
+  for (const [rr, a] of [[250, 0.06], [190, 0.08], [136, 0.11], [92, 0.15]]) { g.fillStyle = gr(255, a); g.beginPath(); g.arc(bx, by, rr * s, 0, TAU); g.fill(); }
+}
+function drawLampRays(g) {                    // 墨线光芒：只画灯罩下面半圈，长短相间，每拍转半格
+  const [bx, by] = bulb(), step = (0.8 * Math.PI) / 8, off = (Math.floor(BF + 1e-6) % 2) * step * 0.5;
+  for (let i = 0; i < 9; i++) {
+    const a = 0.1 * Math.PI + off + i * step;
+    if (a > 0.92 * Math.PI) continue;
+    const r0 = 52 * (1 + 0.04 * PV), r1 = r0 + (i % 2 ? 26 : 46) * (1 + 0.15 * PV);
+    inkLine(g, [[bx + Math.cos(a) * r0, by + Math.sin(a) * r0], [bx + Math.cos(a) * r1, by + Math.sin(a) * r1]], 4.5, 'ray' + i);
+  }
+}
+function cupDance(i, b, base) {              // 灶台上的两只杯子：跟着颠，两只手轮流举到肩高抖（不举过头，免得碰到勺子）
+  const n = Math.floor(b + 1e-6), s = swing(b - n), pv = pulseAt(b), up = Math.max(0, -pv), side = i ? -1 : 1, kk = Math.sin(Math.PI * s);
+  const C = { x: base[0], y: base[1], s: 1, yaw: side * 0.55, sx: 1 + 0.06 * pv, sy: 1 - 0.09 * pv, dy: -16 * up, rot: 0.08 * leanAt(b),
+    tone: i ? 132 : 236, pat: i ? 'dots' : 'band', look: [side * 0.8, 0.1], eyes: 'open', steam: true, key: 'cup' + i };
+  const tf = (lx, ly) => { const X = lx * C.sx, Y = ly * C.sy + C.dy, cs = Math.cos(C.rot), sn = Math.sin(C.rot); return [C.x + X * cs - Y * sn, C.y + X * sn + Y * cs]; };
+  const raised = b >= B_FACE ? -1 : (n + i) % 2;     // 光圈收到壶脸上以后两只手都叉腰，看壶眨眼（手不伸进光圈里）
+  C.arms = [-1, 1].map((sd, j) => {
+    const upArm = j === raised, hx = sd * (upArm ? 102 : 96), hy = upArm ? -118 - 8 * kk : -64 + 6 * kk;
+    return { sh: [sd * cupHW(-100) * 0.94, -100], hand: tf(hx, hy), ang: sd > 0 ? (upArm ? -0.9 : 0.5) : (upArm ? Math.PI + 0.9 : Math.PI - 0.5), mode: upArm ? 'open' : 'fist', front: true };
+  });
+  const tap = n % 2;
+  C.feet = [-1, 1].map((sd, j) => [base[0] + sd * 28, base[1] - (j === tap ? 16 * kk : 0)]);
+  return C;
+}
+function shotKitchen(g, t) {
+  const z = 1 + 0.1 * ease.inOut(seg(BF, 0, B_CUT));    // 一直往壶脸慢推（1 → 1.1），光圈收到哪、镜头就推向哪
+  g.save(); g.translate(FACE[0], FACE[1]); g.scale(z, z); g.translate(-FACE[0], -FACE[1]);
+  blit(g, S.kitchen);
+  drawLampGlow(g);
+  dancedBlit(g, S.cabL, 420, 380); dancedBlit(g, S.cabR, 1500, 380);
+  dancedBlit(g, S.win, 960, 486);
+  dancedBlit(g, S.shelf, 1520, 580, 0.9);
+  drawPanAndLadle(g);
+  dancedBlit(g, S.lamp, LAMP[0], LAMP[1], 0.8);
+  drawLampRays(g);
+  dancedBlit(g, S.cntL, CNT_L[0], CNT_L[1]); dancedBlit(g, S.cntR, CNT_R[0], CNT_R[1]);
+  dancedBlit(g, S.stove, STOVE[0], STOVE[1]);
+  const top = danced(STOVE[0], STOVE[1], 0, STOVE_TOP);
+  g.fillStyle = gr(255, 0.3); g.beginPath(); g.ellipse(top[0], top[1] + 4, 250 * (1 + 0.02 * PV), 22, 0, 0, TAU); g.fill();   // 炉面上的光池
+  g.fillStyle = gr(255, 0.3); g.beginPath(); g.ellipse(top[0], top[1] + 4, 160, 14, 0, 0, TAU); g.fill();
+  for (const i of [0, 1]) drawCup(g, cupDance(i, BQ, danced(...(i ? CNT_R : CNT_L), i ? -195 : 195, CNT_TOP)));
+  g.fillStyle = gr(20, 0.45); g.beginPath(); g.ellipse(top[0], top[1] + 2, 150, 12, 0, 0, TAU); g.fill();
+  drawPot(g, top[0], top[1], potPose(BQ));
+  g.restore();
+}
+
+// ───────────────────────── 镜头 2：桌面近景，两只杯子手拉手转圈 ─────────────────────────
+const SPIN = { cx: 960, cy: 818, R: 250, D: 46, hand: -100 };
+function spinCups(b) {                        // 第 7 拍转到并排（a = 0），一小节转一圈
+  const th = (Math.PI / 2) * (b - B_OPEN);
+  return [0, 1].map((i) => {
+    const a = th + i * Math.PI, Z = Math.sin(a), p = 1 + 0.1 * Z;
+    return { i, a, Z, p, x: SPIN.cx + Math.cos(a) * SPIN.R * p, y: SPIN.cy + Z * SPIN.D, s: 2 * p, yaw: 0.72 * Math.atan2(-Math.cos(a), -Math.sin(a)) };
+  });
+}
+// 音符的轮廓（一个闭合的形状，好和蒸汽团做变形）：符头是斜椭圆，符杆在右边，八分音符带一面旗、两个八分音符连一根横梁
+function headArc(cx, cy) { const out = []; for (let i = 0; i <= 26; i++) { const al = -0.15 + (i / 26) * (TAU - 0.55), X = Math.cos(al) * 26, Y = Math.sin(al) * 18, c = Math.cos(-0.4), s = Math.sin(-0.4); out.push([cx + X * c - Y * s, cy + X * s + Y * c]); } return out; }
+const NOTE1 = [[14, -118], [23, -118], ...quadPts([23, -118], [50, -104], [54, -60], 8).slice(1), [50, -54], ...quadPts([47, -64], [42, -88], [23, -94], 8), [23, -30], ...headArc(0, 0), [14, -30]];
+const NOTE2 = [[14, -126], [89, -138], [89, -122], [89, -30], ...headArc(66, -10), [80, -40], [80, -120.6], [23, -111.4], [23, -30], ...headArc(0, 0), [14, -30]];
+const PUFF = (() => { const out = [], r = MV.rng('puff'); const ph = r() * TAU; for (let i = 0; i < 40; i++) { const a = (i / 40) * TAU; const rr = 40 * (1 + 0.16 * Math.sin(5 * a + ph)); out.push([30 + Math.cos(a) * rr, -46 + Math.sin(a) * rr]); } return out; })();
+function drawNotes(g) {
+  for (let kb = B_CUT; kb < NB; kb++) {       // 每拍一只杯子冒一团蒸汽：半拍里变成音符，往上飘、跟着摇摆晃，三拍后碎掉
+    const age = BF - kb;
+    if (age < 0 || age > 3.25) continue;
+    const c = spinCups(kb)[kb % 2], x0 = c.x, y0 = c.y - 156 * c.s, side = x0 < SPIN.cx ? -1 : 1;
+    const x = x0 + side * 34 * age + 22 * LEAN, y = y0 - 30 - 112 * age;
+    if (age > 3) {                              // 碎成几颗小蒸汽泡
+      const u = (age - 3) / 0.25;
+      for (let j = 0; j < 5; j++) { const a = (j / 5) * TAU + kb; g.fillStyle = gr(250); g.strokeStyle = INK; g.lineWidth = 3.5; g.beginPath(); g.arc(x + Math.cos(a) * (30 + 50 * u), y - 50 + Math.sin(a) * (30 + 50 * u), 9 * (1 - u * 0.6), 0, TAU); g.fill(); g.stroke(); }
+      continue;
+    }
+    const u = ease.out(seg(age, 0, 0.5)), sc = (0.55 + 0.45 * ease.back(seg(age, 0, 0.5))) * (1 + 0.07 * PV) * 1.1;
+    const shape = MV.morph(PUFF, kb % 3 === 1 ? NOTE2 : NOTE1, u, 160);
+    const rot = 0.16 * LEAN + side * 0.08, cs = Math.cos(rot), sn = Math.sin(rot);
+    cel(g, shape.map(([px, py]) => [x + (px * cs - py * sn) * sc, y + (px * sn + py * cs) * sc]), gr(250), 'note' + kb, 5);
+  }
+}
+function shotTable(g, t) {
+  const z = 1 + 0.04 * ease.inOut(seg(BF, B_CUT, NB));
+  g.save(); g.translate(960, 650); g.scale(z, z); g.translate(-960, -650);
+  blit(g, S.table);
+  dancedBlit(g, S.win2, 470, 486, 1.1);
+  dancedBlit(g, S.rack, 1450, 470);
+  { const s = 1 + 0.03 * PV;                  // 灯从画外上面照下来：淡白光锥 + 桌面上一块更白的光池
+    g.fillStyle = gr(255, 0.05); g.beginPath(); g.moveTo(820, -10); g.lineTo(1100, -10); g.lineTo(1440, 840); g.lineTo(480, 840); g.closePath(); g.fill();
+    g.fillStyle = gr(255, 0.26); g.beginPath(); g.ellipse(960, 838, 480 * s, 92 * s, 0, 0, TAU); g.fill();
+    g.fillStyle = gr(255, 0.26); g.beginPath(); g.ellipse(960, 838, 300 * s, 58 * s, 0, 0, TAU); g.fill(); }
+  for (const [s, x0, y0] of [[S.sugar, 420, 700], [S.jug, 1500, 708]]) {
+    g.fillStyle = gr(30, 0.3); g.beginPath(); g.ellipse(x0, y0 + 2, 96, 14, 0, 0, TAU); g.fill();
+    dancedBlit(g, s, x0, y0, 1.1);
+  }
+  const cups = spinCups(BQ), pv = pulseAt(BQ), up = Math.max(0, -pv), n = Math.floor(BQ + 1e-6), kk = Math.sin(Math.PI * swing(BQ - n));
+  for (const c of cups) { g.fillStyle = gr(30, 0.4); g.beginPath(); g.ellipse(c.x, c.y + 4, 112 * c.p, 18 * c.p, 0, 0, TAU); g.fill(); }
+  const hy = SPIN.cy + SPIN.hand * 2 - 26 * up + 10 * pv;
+  const C = cups.map((c) => {
+    const toC = Math.sign(SPIN.cx - c.x) || 1, near = Math.abs(c.x - SPIN.cx) > 0.9 * cupHW(-100) * c.s;   // 杯身挡住圆心时，拉着的手藏在后面
+    const D = { x: c.x, y: c.y, s: c.s, yaw: c.yaw, sx: 1 + 0.07 * pv, sy: 1 - 0.1 * pv, dy: -14 * up, rot: -toC * 0.13 * Math.abs(Math.cos(c.a)) + 0.03 * leanAt(BQ),
+      tone: c.i ? 132 : 236, pat: c.i ? 'dots' : 'band', look: [toC * 0.7, 0.1], eyes: (n + c.i) % 2 ? 'happy' : 'open', steam: true, key: 'scup' + c.i };
+    D.arms = near ? [-106, -92].map((ly, j) => ({ sh: [toC * cupHW(ly) * 0.94, ly], hand: [SPIN.cx - toC * 34, hy + j * 14], mode: null, front: true })) : [];   // 近的那只胳膊和远的那只，差一点点高
+    const kick = (n + c.i) % 2;
+    D.feet = [-1, 1].map((sd, j) => [c.x + sd * 30 * c.s * (j === kick ? 1.5 : 1), c.y - (j === kick ? 30 * kk * c.p : 0)]);
+    return D;
+  });
+  const order = cups.map((c, i) => [c.Z, i]).sort((a, b) => a[0] - b[0]).map((o) => o[1]);
+  drawCup(g, C[order[0]]);
+  drawCup(g, C[order[1]]);
+  if (C[0].arms.length && C[1].arms.length) {  // 两只手套攥在一起（两只杯子都离圆心够远时才看得见）
+    const L = cups[0].x < cups[1].x ? 0 : 1;
+    glove(g, [SPIN.cx - 34, hy + 4], 0.12, 1.35, 'fist', 'clasp' + L);
+    glove(g, [SPIN.cx + 34, hy + 12], Math.PI - 0.12, 1.35, 'fist', 'clasp' + (1 - L));
+  }
+  drawNotes(g);
+  g.restore();
+}
+
+// ───────────────────────── 镜头表 + 转场：光圈 ─────────────────────────
+const SHOTS = [
+  { name: '老厨房全景', start: 0, end: BT(B_OPEN), draw: shotKitchen },
+  { name: '桌面近景', start: BT(B_IRIS), end: DUR + 1, draw: shotTable },
+];
+const R_FULL = 920, R_FACE = 240, R_PIN = 16;   // R_FULL：圆刚好盖过片门四角（壶脸到最远的角约 910），从这里起收，第一格就看得见在收
+function irisHold(b) { return R_FACE * (1 - 0.08 * Math.exp(-6 * (b - B_FACE))) * (1 - 0.035 * pulseAt(b)); }   // 收住：落位时紧一下，跟着拍子一缩一胀
+function irisR(b) {
+  if (b < B_FACE) return MV.lerpLog(R_FULL, irisHold(B_FACE), ease.smooth(seg(b, B_IRIS, B_FACE)));   // 对数插值：每格缩的比例差不多；用 smooth 不用 inOut，一秒 12 张时也是一格一格匀着收
+  if (b < B_PINCH) return irisHold(b);
+  if (b < B_CUT) return MV.lerpLog(irisHold(B_PINCH), R_PIN, ease.in(seg(b, B_PINCH, B_CUT)));
+  return MV.lerpLog(R_PIN, R_FULL, ease.out(seg(b, B_CUT, B_OPEN)));
+}
+// 光圈画在胶片里：先画圈里的镜头（针孔之前是 A，之后是 B），再用胶片黑盖住圈外
+function transition(g, t, a, b) {
+  (BF < B_CUT ? a : b).draw(g, t);
+  const r = irisR(BF);
+  g.fillStyle = INK; g.beginPath(); g.rect(GX0 - 40, -40, GX1 - GX0 + 80, H + 80); g.arc(FACE[0], FACE[1], r, 0, TAU, true); g.fill('evenodd');
+  g.strokeStyle = gr(20, 0.4); g.lineWidth = 6; g.beginPath(); g.arc(FACE[0], FACE[1], r + 2, 0, TAU); g.stroke();   // 圈口软一点
+}
+function weave(g) {                           // 片子在片门里跳：这一格整帧一起晃
+  const r = MV.rng('weave' + F), jump = r() < 0.06 ? 1 : 0;
+  g.translate((r() - 0.5) * 3 + jump * (r() - 0.5) * 6, (r() - 0.5) * 4 + jump * (r() - 0.5) * 10);
+}
+function drawFrame(g, t) {                    // 不叫 draw：页面里有全局 draw 时 p5 会进全局模式
+  clock(t);
+  g.save(); weave(g);
+  g.beginPath(); g.rect(GX0 - 8, -8, GX1 - GX0 + 16, H + 16); g.clip();
+  const live = SHOTS.filter((s) => t >= s.start && t < s.end);
+  if (live.length >= 2) transition(g, t, live[0], live[1]);
+  else if (live.length) live[0].draw(g, t);
+  g.restore();
+}
+
+// ───────────────────────── 字卡 + 跳跳球（overlay：不跟镜头推，跟着胶片晃） ─────────────────────────
+function cardPath(w, h, r) {                  // 四个角往里凹的老式字卡
+  const x0 = -w / 2, y0 = -h / 2, x1 = w / 2, y1 = h / 2, p = new Path2D();
+  p.moveTo(x0 + r, y0); p.lineTo(x1 - r, y0); p.arc(x1, y0, r, Math.PI, Math.PI / 2, true);
+  p.lineTo(x1, y1 - r); p.arc(x1, y1, r, Math.PI * 1.5, Math.PI, true);
+  p.lineTo(x0 + r, y1); p.arc(x0, y1, r, 0, -Math.PI / 2, true);
+  p.lineTo(x0, y0 + r); p.arc(x0, y0, r, Math.PI / 2, 0, true); p.closePath();
+  return p;
+}
+const LIT = (() => { const m = {}; for (const [b, i] of HOPS) if (i >= 0 && m[i] === undefined) m[i] = b; return m; })();
+let CHARS = null;
+function drawCard(g, t) {
+  const L = MV.lyricAt(t, { tail: 1, gap: 0 });
+  if (!L) return;
+  const CW = 900, CH = 176, FS = 64, TY = 32;
+  const f = F - Math.round(MV.beat(L.start) * FR), pop = [1.24, 0.93, 1.04, 1][clamp(f, 0, 3)];
+  g.save(); g.translate(960, 974); g.scale(pop, pop);
+  g.fillStyle = gr(16, 0.96); g.fill(cardPath(CW, CH, 18));
+  g.strokeStyle = gr(244); g.lineWidth = 3.5; g.stroke(cardPath(CW - 18, CH - 18, 14));
+  g.lineWidth = 1.6; g.stroke(cardPath(CW - 32, CH - 32, 10));
+  for (const s of [-1, 1]) { const dx = s * (CW / 2 - 42); g.fillStyle = gr(244); g.beginPath(); g.moveTo(dx, -9); g.lineTo(dx + 7, 0); g.lineTo(dx, 9); g.lineTo(dx - 7, 0); g.closePath(); g.fill(); }
+  g.font = `${FS}px ${FONT}`; g.textBaseline = 'middle'; g.textAlign = 'center';
+  if (!CHARS) {
+    const cs = Array.from(L.text), ws = cs.map((c) => g.measureText(c).width), gap = 4, tot = ws.reduce((a, b) => a + b, 0) + gap * (cs.length - 1);
+    let cx = -tot / 2; CHARS = cs.map((c, i) => { const o = { c, x: cx + ws[i] / 2 }; cx += ws[i] + gap; return o; });
+  }
+  for (const [i, c] of CHARS.entries()) {
+    const lb = LIT[i] ?? LIT[i - 1], lit = BF >= lb - 1e-6, flash = lit && BF < lb + 2 / FR - 1e-6;   // 逗号不落，跟前一个字一起亮
+    g.save(); g.translate(c.x, TY); if (flash) g.scale(1.13, 1.13);
+    g.fillStyle = lit ? gr(250) : gr(108); g.fillText(c.c, 0, 0); g.restore();
+  }
+  // 小白球：HOPS 里这一跳从哪个字到哪个字，长的跳高、短的跳低；落地那一格压扁
+  let j = 0; while (j < HOPS.length - 2 && BF >= HOPS[j + 1][0] - 1e-6) j++;
+  const [b0, i0] = HOPS[j], [b1, i1] = HOPS[j + 1], u = clamp((BF - b0) / (b1 - b0));
+  const X = (i) => (i < 0 ? -(CW / 2 - 42) : CHARS[i].x), land = TY - FS * 0.5 - 15;
+  const hh = i0 === i1 ? 20 : Math.min(40, 44 * Math.pow(b1 - b0, 0.75));
+  const bx = lerp(X(i0), X(i1), u), by = land - 4 * hh * u * (1 - u), sq = BF - b0 < 1 / FR - 1e-6 ? 1 : 0;
+  g.save(); g.translate(bx, by + sq * 4); g.scale(1 + 0.3 * sq, 1 - 0.3 * sq);
+  g.fillStyle = gr(250); g.strokeStyle = INK; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 15, 0, TAU); g.fill(); g.stroke();
+  g.fillStyle = gr(185); g.beginPath(); g.arc(5, 5, 5.5, 0, TAU); g.fill();
+  g.restore();
+  g.restore();
+}
+
+// ───────────────────────── 胶片：颗粒、灰尘、划痕、闪烁、暗角（格号做种子） ─────────────────────────
+function film(x) {
+  const r = MV.rng('film' + F);
+  const pat = x.createPattern(S.grain[F % 3], 'repeat');
+  pat.setTransform(new DOMMatrix([2, 0, 0, 2, Math.floor(r() * 256), Math.floor(r() * 256)]));
+  x.fillStyle = pat; x.fillRect(GX0, 0, GX1 - GX0, H);
+  const n = Math.floor(r() * r() * 7);        // 灰尘（印片上的黑点）、偶尔一个白点（片基上的划伤）
+  for (let i = 0; i < n; i++) {
+    const px = GX0 + r() * 1440, py = r() * H, rr = 1.6 + r() * r() * 7, dark = r() < 0.8;
+    x.fillStyle = dark ? gr(12, 0.85) : gr(245, 0.75); x.fill(pathOf(jitter(ellPts(px, py, rr, rr * (0.5 + r() * 0.5), 10, r() * 3), rr * 0.35, 'd' + F + i, true, 1)));
+  }
+  if (r() < 0.16) {                           // 偶尔一根毛发
+    let px = GX0 + 100 + r() * 1240, py = 80 + r() * 900, a = r() * TAU; const pts = [[px, py]];
+    for (let k = 0; k < 7; k++) { a += (r() - 0.5) * 1.6; px += Math.cos(a) * 16; py += Math.sin(a) * 16; pts.push([px, py]); }
+    x.strokeStyle = gr(14, 0.8); x.lineWidth = 1.7; x.lineCap = 'round'; x.stroke(pathOf(pts, false));
+  }
+  for (let j = 0; j < 3; j++) {               // 划痕：每道活几格，慢慢漂
+    const len = 9 + j * 6, f0 = F + j * 13, s = Math.floor(f0 / len), rr = MV.rng('scr' + j + ':' + s);
+    if (rr() < 0.45) continue;
+    const xx0 = GX0 + 60 + rr() * 1320, drift = (rr() - 0.5) * 2.2, light = rr() < 0.7, lw = 1 + rr() * 1.3, part = rr() < 0.35;
+    const y0 = part ? rr() * 500 : -10, y1 = part ? y0 + 200 + rr() * 500 : H + 10, xx = xx0 + drift * (f0 % len) + (rnd('sj' + j + ':' + F) - 0.5) * 1.5;
+    x.strokeStyle = light ? gr(235, 0.32) : gr(14, 0.35); x.lineWidth = lw; x.beginPath();
+    for (let y = y0, k = 0; y <= y1; y += 90, k++) { const ox = xx + Math.sin(y / 170 + j) * 2; k ? x.lineTo(ox, y) : x.moveTo(ox, y); }
+    x.stroke();
+  }
+  const fl = (rnd('flick' + F) - 0.5) * 0.1 + 0.03 * Math.sin(F * 0.7);   // 闪烁：这一格整体亮一点 / 暗一点
+  x.fillStyle = fl > 0 ? gr(255, fl * 0.5) : gr(0, -fl); x.fillRect(GX0, 0, GX1 - GX0, H);
+  const vg = x.createRadialGradient(960, 520, 330, 960, 540, 920);   // 暗角
+  vg.addColorStop(0, gr(0, 0)); vg.addColorStop(0.6, gr(0, 0.22)); vg.addColorStop(1, gr(0, 0.7));
+  x.fillStyle = vg; x.fillRect(GX0, 0, GX1 - GX0, H);
+}
+function overlay(g, t) {
+  clock(t);
+  g.save(); weave(g);
+  g.beginPath(); g.rect(GX0 - 8, -8, GX1 - GX0 + 16, H + 16); g.clip();
+  drawCard(g, t);
+  film(g);
+  g.restore();
+  g.drawImage(S.gate, 0, 0, W, H);
+}
+
+// ───────────────────────── 开页面：下字体、烤背景和道具 ─────────────────────────
+const S = {};
+function bake() {
+  K = Math.min((innerWidth || W) / W, (innerHeight || H) / H) || 1; BK = K * 1.1;
+  PAPER = makePaper();
+  S.kitchen = bakeKitchen(); S.table = bakeTable();
+  S.cabL = sprite(-192, -346, 192, 12, (x) => artCabinet(x, 'cabL'));
+  S.cabR = sprite(-192, -346, 192, 12, (x) => artCabinet(x, 'cabR'));
+  S.win = sprite(-204, -326, 204, 12, artWindow);
+  S.win2 = sprite(-245, -398, 245, 14, (x) => { x.scale(1.2, 1.2); artWindow(x); });
+  S.lamp = sprite(-104, -36, 104, 214, artLamp);
+  S.stove = sprite(-246, -238, 246, 6, artStove);
+  S.cntL = sprite(-272, -214, 272, 6, (x) => artCounter(x, 'cntL', 510));
+  S.cntR = sprite(-272, -214, 272, 6, (x) => artCounter(x, 'cntR', 510));
+  S.shelf = sprite(-160, -138, 160, 68, artShelf);
+  S.pan = sprite(-106, -14, 106, 276, artPan);
+  S.ladle = sprite(-42, -6, 42, 208, artLadle);
+  S.rack = sprite(-212, -134, 212, 46, artRack);
+  S.sugar = sprite(-100, -140, 100, 10, artSugar);
+  S.jug = sprite(-80, -170, 116, 6, artJug);
+  S.grain = [0, 1, 2].map((i) => {               // 胶片颗粒：三张，按格号挑一张再随机错位
+    const s = 256, c = canvas(s, s), x = c.getContext('2d'), id = x.createImageData(s, s), r = MV.rng('grain' + i);
+    for (let k = 0; k < s * s; k++) { const v = r(), o = k * 4; if (v < 0.5) id.data[o + 3] = (0.5 - v) * 2 * 32; else { id.data[o] = id.data[o + 1] = id.data[o + 2] = 255; id.data[o + 3] = (v - 0.5) * 2 * 24; } }
+    x.putImageData(id, 0, 0); return c;
+  });
+  const gc = canvas(W * K, H * K), gx = gc.getContext('2d');   // 片门：黑底挖一个圆角 4:3 窗，边缘稍软
+  gx.fillStyle = '#000'; gx.fillRect(0, 0, gc.width, gc.height);
+  gx.globalCompositeOperation = 'destination-out'; gx.filter = `blur(${(3 * K).toFixed(2)}px)`;
+  gx.beginPath(); gx.roundRect((GX0 + 4) * K, 4 * K, (GX1 - GX0 - 8) * K, (H - 8) * K, 46 * K); gx.fill();
+  S.gate = gc;
+  STRIKE = solveStrike();
+}
+async function ready() {
+  await MV.font(`64px "${FONT_NAME}"`, LYRIC);   // 没下到：出片时报错停下，预览时写在播放条上
+  bake();
+}
+MV.page({ W, H, fps: FPS, duration: DUR, ready, draw: drawFrame, overlay });
+</script></body></html>

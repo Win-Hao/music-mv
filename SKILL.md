@@ -1,41 +1,60 @@
 ---
 name: music-mv
-description: 用代码给一首歌做一支音乐 MV（不用视频生成模型）：先把歌听懂（歌词时间轴、节拍、情绪起落、别人怎么理解这首歌），再定画风、画角色、写剧本和分镜、先出草图再做整片，最后照清单看片修改；也能先拆一支参考视频的风格再照着做。画面用 Canvas / p5.js / p5.brush 一帧一帧画，HyperFrames 合成歌词和歌。用户说「给这首歌做个 MV」「做一支音乐 MV / 歌词 MV / 动画 MV」「学这个视频的风格做一支 MV」，或 make a music video / lyric video for this song 时使用。不限模型，能读写文件、跑命令的 agent 都能照做。
+description: 用代码给一首歌做动画音乐 MV（歌词 MV、动画 MV、手绘风 MV），每一帧都是代码画的，不用视频生成模型，也不用 HyperFrames、Remotion 这类剪辑合成工具。流程：听懂歌（歌词时间轴、节拍、情绪、网上的理解）→ 定画风（像素、拼贴、蜡笔水彩绘本、立体书、水墨、皮影、浮世绘、孔版印刷、橡皮管卡通、一笔画，或者照一支参考视频学风格）→ 画角色 → 剧本分镜 → 草图 → 整片 → 看片修改，关键处停下等用户确认。整支 MV 是一个网页，画面、转场、歌词都按歌的拍点编排，无头 Chrome 逐帧渲成视频、配上原曲。用户说「给这首歌做个 MV」「做个歌词视频 / 动画 MV / 音乐短片」「给 song.mp3 配个动画」「学这个视频的风格做一支 MV」，或者 make a music video / lyric video / animated MV for this song 时都用它；做音乐 MV 时优先用它，不用通用的 HTML 视频工具。不用于：给已有视频配 BGM、拿照片剪卡点视频、用 Sora、可灵这类模型生成视频。
 ---
 
 # 用代码做一支音乐 MV
 
-**原理**：不生成视频。代码把每一帧画出来（画面是时间 t 的函数），踩着歌的节拍和歌词编排，最后和原曲合成一条视频。下文 `<skill>` 指本文件所在的文件夹。
+**原理**：不生成视频。整支 MV 是一个网页，画面是时间 t 的函数：镜头怎么走、转场怎么接、角色什么时候动、歌词什么时候出，都由你按歌的拍点和歌词在代码里编排。无头 Chrome 把每一帧截下来接成视频，最后配上原曲。下文 `<skill>` 指本文件所在的文件夹；命令里的 `python3` 在 Windows 上换成 `py -3`（`check_env.py` 会打印本机该用哪个）。
 
-## 底线（每一步都守）
+## 底线
 
-1. **一切跟着音乐走**：镜头在哪变、哪个画面最安静、最重要的画面放哪，都从歌里来（`song.md`、`song-analysis.json`）
-2. **一句歌词，一个画面**：这句唱什么，画面就演什么。没听过这首歌的人只看画面，也能说出发生了什么
-3. **关键处停下来等用户点头**：歌词、画风、角色设定图、分镜、草图。用户没确认，不往下做
-4. **画面只由 t 决定**：同一个 t 永远画出同一帧，随机数用固定种子
-5. **一个镜头一个画布**：背景、角色、道具画在同一个画布上、跟同一个镜头动，不把单独渲的角色视频叠在背景上
-6. **你看不了视频**：节奏和动静靠脚本量（`video_rhythm.py`），画面靠接触表看（`contact_sheet.py`）。每版都跑，不凭感觉说「很流畅」
-7. **歌词有版权**：不在对话、命令里整段打出歌词（会被内容过滤拦），脚本读文件，回复里只说第几句
-8. **歌词以外的字不自己加**：片名、章节角标、印章徽章，用户要了再加
+**硬规矩**：用户明确要求过的，或者破了片子就出不来的。不因为画风、歌、时间紧而放宽。
+
+1. **关键处停下来等用户点头**：歌词、画风、角色设定图、分镜、草图。这几处返工最贵，用户没确认不往下做（用户提前授权了怎么走，见「用户说你看着办」）
+2. **画面只由 t 决定**：同一个 t 永远画出同一帧，随机数用固定种子。这样才能拖着预览、多进程渲、只重渲改过的一段
+3. **一个镜头一个画布**：背景、角色、道具画在同一个画布上、跟同一个镜头动。做过把单独渲的角色视频叠在背景上，推拉时出了重影、叠出四个角色
+4. **自己编排，不借剪辑合成工具**：不用 HyperFrames、Remotion 这类按片段拼接的工具（装了也不用），整支 MV 写在 `mv/index.html` 一个页面里。拼片段接出来的转场是僵的，转场要在同一个画布里自己动过去
+5. **歌词以外的字不自己加**：片名、角色名牌、章节角标、印章徽章，用户要了再加
+6. **不做没有衔接的硬切、整屏叠化、生硬的扫光条；一个镜头里不来回推拉、不晃**：以前的片子里这几样看着最僵、最晕。不算在内的：最重的几下整个画面轻轻顿一下（放大 2–3% 再回落）、画风自带的胶片跳动和手绘线条抖动。怎么接、怎么动见 `references/transitions.md`
+7. **歌词有版权**：不在对话、命令、文件里整段打出歌词（会被内容过滤拦）。脚本读 `lyrics.srt`，回复和分镜里写第几句
+8. **你看不了视频**：节奏和动静靠脚本量（`video_rhythm.py`），画面靠接触表看（`contact_sheet.py`）。每版都跑，不凭感觉说「很流畅」
+
+**做好看的原则**：
+
+- **一切跟着音乐走**：镜头在哪变、哪个画面最安静、最重要的画面放哪，都从歌里来（`song.md`、`song-analysis.json`）
+- **一句歌词，一个画面**：这句唱什么，画面就演什么，没听过这首歌的人只看画面也能说出发生了什么。说的是画面和词义对上，不是一句一切：几句短的可以在一个镜头里接着演，一句长的可以换两个景别，抽象的一句要几步才演得明白，就延到相邻几句里
+
+**数字是起点**：references 里的秒数、百分比、像素、「几个」，是以前的片子里调出来好用的值。画幅、歌速、画风、片长不一样时按同样的道理重估，在 `song.md` 里记一句为什么。上面的硬规矩和 `references/review.md` 里「要过的线」不在此列：那是交片前必须过的检查。
+
+## 用户说「你看着办」
+
+停点是给用户把关的，不能自己省掉，但用户可以提前替你拍板：
+
+- 用户明说某一步你定（「画风你挑」「分镜不用给我看」），那一步就不等：选了什么、为什么写进 `song.md`，回复里一句话告诉他，接着做。这一步的「完成」就是写进了 `song.md`。画风你挑：直接定一种，只画这一种的样图
+- 用户说「全交给你、不用问我」：所有停点都不等。歌词里拿不准的句子和草图这两样返工最贵，做完发给他看一眼（不等回复，接着做），他有意见再改。BPM 搜不到又没法问：自己对着模板里每拍落地的小球判断，怎么判断的记进 `song.md`，交片时提一句
+- 要停下来时，消息里写清：看哪个文件、你推荐哪个、他回「可以」你接着做什么。让用户十秒内能答
 
 ## 开始之前
 
 1. 文件夹里要有歌（`song.mp3`，wav、m4a 也行）；可选 `lyrics.srt`、`reference.mp4`（想学风格的那支视频）
-2. 跑 `python3 <skill>/scripts/check_env.py`。缺的东西把它打印的安装命令给用户，**问过再装**。出图要 puppeteer：在这个文件夹里 `npm i puppeteer-core`（用本机 Chrome）
-3. 一轮问完：画幅（横屏 1920×1080 / 竖屏 1080×1920 / 4:3 1920×1440）；整首还是一段；有没有想要的画风或参考视频；主角是谁（没想好就按歌来定）；歌词要不要上屏
-4. 给了参考视频：先做「学一支视频的风格」（最后一节），第 2 步按 `style.md` 来
+2. 跑 `python3 <skill>/scripts/check_env.py`。缺的东西把它打印的安装命令给用户，**问过再装**。出图要 puppeteer：在这个文件夹里 `npm i puppeteer-core`（用本机的 Chrome、Edge 或 Chromium）
+3. 一轮问完：画幅（横屏 1920×1080 / 竖屏 1080×1920 / 4:3 1920×1440）；发到哪个平台（抖音、视频号一般竖屏，只做副歌那 30–60 秒）；整首还是一段（一段的话从歌的第几秒到第几秒）；有没有想要的画风或参考视频；主角是谁（没想好就按歌来定）；歌词要不要上屏；哪几步想自己把关、哪几步交给你定
+4. 建 `mv/`：把 `<skill>/templates/mv/` 的 `index.html`、`kit.js` 拷进去（笔刷画风后面换成 `p5brush.html`，改名 `index.html`）。样图、设定图、草图、整片都用它
+5. 给了参考视频：先做「学一支视频的风格」（最后一节），第 2 步按 `style.md` 来
 
 文件这样放：
 
 ```
 <歌的文件夹>/
   song.mp3  lyrics.srt  song.md  song-analysis.json
-  styles/             第 2 步的样图
-  character.js        character-sheet.png
+  styles/             第 2 步的样图和画样图的页面（<画风>.html，引用 ../mv/kit.js）
+  character-sheet.png 第 3 步的设定图（页面是 mv/sheet.html）
   storyboard.md       sketches/  storyboard.png
-  mv/                 HyperFrames 工程
-  review/             每版的接触表、量出来的数
-  mv-r1.mp4  mv-r2.mp4 …    每改一版存一个，不覆盖
+  mv/                 整支 MV 的网页：index.html kit.js song.js lyrics.js character.js sheet.html
+  frames/  render.mp4       逐帧渲出来的图、接好的无声视频
+  review/             每版的接触表、量出来的数；先给用户看的试渲 try.mp4
+  mv-r1.mp4  mv-r2.mp4 …    交给用户的每一版存一个，不覆盖
 ```
 
 ## 第 1 步　听懂这首歌
@@ -43,15 +62,21 @@ description: 用代码给一首歌做一支音乐 MV（不用视频生成模型�
 1. **歌词**：有 `lyrics.srt` 就直接用。没有就用 Whisper 转成带时间轴的 `lyrics.srt`（`whisper song.mp3 --model medium --output_format srt`；Apple 芯片用 mlx-whisper 快得多）
    - 识别没把握的几句（第几句、几秒）列给用户，让他对着听改，不要自己猜着改。背景音重的歌常有错字
    - 模型说歌词有版权、不肯转，别硬来：请用户用剪辑软件的「识别歌词」导出 srt，或者从音乐软件复制歌词对好时间，命名 `lyrics.srt` 放进文件夹
-2. **骨架**：`python3 <skill>/scripts/analyze_song.py song.mp3 -o song-analysis.json`，得到 BPM、每一拍、每小节第一拍、分段和每段多响、突然安静 / 低音撤掉 / 重新进来的点、最重的几下、最后一下重音。BPM 可能差一倍，请用户跟着拍手对一下
-3. **理解**：上网搜这首歌的歌词解读、乐评、听众评论，归纳 3–5 种主流理解，每条附来源链接
-4. 写 `song.md`：主题和情绪走向（哪里起、哪里落）；分段表（时间、段名、情绪）；镜头该变的点；几种理解和链接；没把握的歌词
+   - 歌词定了，出页面用的 `mv/lyrics.js`：`python3 <skill>/scripts/srt2js.py lyrics.srt -o mv/lyrics.js`。歌词或者起点改过就重跑
+   - **逐字时间**：只有整句时间时，字按固定间隔出，和唱的对不上。有逐字时间就带上：Whisper 加 `--word_timestamps True --output_format json`，或者自己整理的 `lyrics-words.json`，`srt2js.py lyrics.srt -o mv/lyrics.js --words <那个 json>`，`MV.lyricAt` 就按每个字开唱的时间出字。格式和怎么核见 `references/render.md`「歌词上屏」
+2. **骨架**：`python3 <skill>/scripts/analyze_song.py song.mp3 -o song-analysis.json --js mv/song.js`，得到 BPM、每一拍、每小节第一拍、分段和每段多响、突然安静 / 低音撤掉 / 重新进来的点、最重的几下；`mv/song.js` 是同样的东西加上起音和响度包络，给页面卡拍子用
+   - BPM 可能测成一半、两倍，或者锁成 3:4：上网搜这首歌的 BPM 对一下（tunebat、songbpm 这类网站；不知道歌名就不搜），对不上就用 `--tempo-hint <搜到的 BPM>` 重跑（只在它上下 8% 里找）。慢歌测成两倍时减半要小心，DJ 版、几段接起来、一段循环、变速的歌先查清楚，见 `references/render.md`「拍子不对」。搜不到才请用户确认：浏览器打开 `mv/index.html`，模板里的小球每拍落地一次，对得上鼓点就是对的。和拿不准的歌词合成一条消息问
+   - 只做歌的一段：起点、终点（歌里的秒）写进 `song.md` 开头。`analyze_song.py` 加 `--offset -<起点> --end <终点>`，`srt2js.py` 加 `--offset -<起点>`；之后分镜、草图、检查都按成片秒（片头是 0），片长 = 终点 − 起点。别的脚本哪里还要带起点，见 `references/render.md`「只做歌的一段」
+3. **理解**：上网搜这首歌的歌词解读、乐评、听众评论，归纳 3–5 种主流理解，每条附来源链接。搜不到或者只有一两条就照实说，其余按歌词自己归纳，标明「我的理解，无来源」，不凑数
+4. 写 `song.md`：主题和情绪走向（哪里起、哪里落）；分段表（时间、段名、情绪）；镜头该变的点；几种理解和链接；没把握的歌词。段名要自己判断：脚本的分段只是按音色切开的，`lyrics.srt` 里重复出现、所在段又最响的那组句子是副歌
 
-完成：用户确认了歌词；`song.md`、`song-analysis.json` 都在
+完成：用户确认了歌词；`song.md`、`song-analysis.json`、`mv/song.js`、`mv/lyrics.js` 都在
 
 ## 第 2 步　定画风
 
-照 `references/styles.md`：按情绪挑 3 种（拿不准就用像素游戏风、纸艺拼贴绘本、蜡笔手绘绘本），用代码把**同一个开场画面**按每种风格自己的画法从头各画一张 1920×1080 样图放 `styles/`（不是画好一张再套滤镜，四种的原生示范在 `examples/`；出图用 `render_frames.mjs --times`，见 `references/render.md`「出静态图」），每张一句适配理由。不用图像生成模型。停，等用户选。用户已经说了画风，就只画那一种确认。
+照 `references/styles.md` 的一览表，按 `song.md` 的情绪挑 3 种，三种之间要拉开差别（比如一种稳妥、一种大胆、一种最贴歌词的意象）。像素游戏风、纸艺拼贴、蜡笔绘本代码画得最稳，歌的情绪没有明显倾向时拿来兜底；歌明显指向别的风格就别用兜底（古风、国风先看水墨和皮影，季节、旅途看浮世绘，摇摆爵士看橡皮管卡通）。蜡笔、水彩这类笔刷画风渲得慢（实测 30 秒的片子渲了一刻钟），片子长、时间紧就先考虑别的。
+
+用代码把**同一个开场画面**按每种风格自己的画法从头各画一张样图放 `styles/`，大小按选定的画幅。开场画面从 `song.md` 来：这首歌第一个场景里的主角（角色没定就先画一个简单的占位角色），不要照搬示范里的场景和角色。不是画好一张再套滤镜；十种的原生示范在 `examples/`（每种一个不同的题材），出图用 `render_frames.mjs --times`（见 `references/render.md`「出静态图」）。每张一句适配理由。不用图像生成模型。停，等用户选。用户已经说了一种画风，就只画那一种确认；给了两三种让你挑的，每种画一张、推荐一张。
 
 选定后把画法（颜色 HEX、线条、纹理、动起来的手感、歌词放哪）写进 `song.md` 的「画风」一节。
 
@@ -59,7 +84,7 @@ description: 用代码给一首歌做一支音乐 MV（不用视频生成模型�
 
 ## 第 3 步　画角色
 
-照 `references/character.md` 写 `character.js`：统一的绘制接口（朝向、表情、动作、拿着的道具），表情至少开心、害羞、难过，动作至少走、跳、拥抱、拿东西（按故事要的加）。画一张 `character-sheet.png`：三视图 + 表情表 + 动作定格。停，等用户确认。
+照 `references/character.md` 写 `mv/character.js`：统一的绘制接口（朝向、表情、动作、拿着的道具）。这一步先定造型：画一张 `character-sheet.png`（三视图 + 这首歌用得上的几种表情 + 两三个基本动作），停，等用户确认。故事要的其他动作，写完分镜再加进 `character.js`，不算新的停点。
 
 之后所有镜头都通过 `character.js` 画角色。
 
@@ -67,9 +92,9 @@ description: 用代码给一首歌做一支音乐 MV（不用视频生成模型�
 
 ## 第 4 步　剧本和分镜
 
-照 `references/storyboard.md` 写 `storyboard.md`：每句歌词一个镜头，起止以 `lyrics.srt` 为准、切换对齐拍点；抽象的歌词拆成看得懂的连续动作（用户说了自己的理解就照用户的）；每个镜头写场景、角色动作、景别运镜、情绪色调、卡在哪一拍。
+照 `references/storyboard.md` 写 `storyboard.md`：表里按歌词逐句列（写第几句，不抄歌词），每句写清画面演什么；再把相邻的句子分成镜头（一镜到底就分成段），镜头的起止跟着拍点和段落走，不必卡在歌词的起止上。抽象的歌词拆成看得懂的几步动作（用户说了自己的理解就照用户的）。每个镜头写场景、角色动作、景别运镜、情绪色调、卡在哪一拍。
 
-转场照 `references/transitions.md`：从一镜到底、卡点切换、拼贴快切里推荐一种并说明理由，再给每两个相邻镜头写明怎么接。
+转场照 `references/transitions.md`：整片的主方案（一镜到底、卡点切换、拼贴快切、嵌套缩放、原地看时间走、舞台书本老胶片、分格分屏）和理由写在 `storyboard.md` 开头，再按歌里的位置（鼓点、副歌进来、突然安静……）给每两个相邻镜头挑手法、写明怎么接。主方案和分镜一起给用户看，不单独停一次。
 
 整体要有情感起伏，结尾留余味（用户要欢快的就写欢快的）。停，等用户确认。故事被否就整个重写，不在旧的上面修。
 
@@ -77,23 +102,23 @@ description: 用代码给一首歌做一支音乐 MV（不用视频生成模型�
 
 ## 第 5 步　先出草图，再做整片
 
-1. **草图**：每个镜头用选定的画风画一张关键帧（`render_frames.mjs --times` 出 `sketches/01.png`…），拼成 `storyboard.png`（`contact_sheet.py --images sketches -o storyboard.png`）。停，等用户确认。在这时候改最省事
-2. **整片**：照 `references/render.md` 选路线。同步画得完的（Canvas 2D、SVG）用路线 A，直接写在 HyperFrames 里；p5.brush 这类一帧要等的用路线 B，先逐帧渲再叠歌词。歌词 `srt2js.py` 转成 `lyrics.js`，在最上层、不跟镜头动。先渲最难的 10–20 秒给用户看手感，再渲整片
-3. **声音**：`python3 <skill>/scripts/finalize_audio.py render.mp4 song.mp3 -o mv-r1.mp4`，把原曲按原音量封回去（渲染器常把歌压小 2 dB 以上）
-4. **自检**：照 `references/review.md`「每一版交给用户之前」，接触表、歌词对照、节奏量一遍，过线了再交
+1. **草图**：在 `mv/index.html` 里按分镜搭好镜头表，每个镜头先只画最能说明问题的那一瞬，清空 `sketches/` 再 `render_frames.mjs --page mv/index.html --times …` 出 `sketches/01.png`…，拼成 `storyboard.png`（`contact_sheet.py --images sketches -o storyboard.png`）。停，等用户确认。在这时候改最省事
+2. **整片**：照 `references/render.md`，在同一个页面里补齐动作、转场（`references/transitions.md`「在代码里怎么接」）、歌词（最上层、不跟镜头动）。边写边在浏览器里打开 `mv/index.html` 跟着歌看。先渲最难的 10–20 秒，照它打印的命令配上声音，发给用户看手感：`node <skill>/scripts/render_frames.mjs --page mv/index.html --fps 30 --out frames --from 20 --to 35 --encode review/try.mp4`。不等回复，接着渲整片（渲好的帧会跳过）：`node <skill>/scripts/render_frames.mjs --page mv/index.html --fps 30 --out frames --encode render.mp4`。片长默认用页面的 `MV.duration`
+3. **声音**：`python3 <skill>/scripts/finalize_audio.py render.mp4 song.mp3 -o mv-r1.mp4 [--start <起点>]`，把原曲按原音量配上去，量三个响度。只做歌的一段必须加 `--start`，不然配上的是歌的开头；`render_frames.mjs` 接完会把这条命令照这个文件夹写好打印出来（哪个 Python、歌是哪个文件、起点、成片叫 `mv-r几`），直接复制
+4. **自检**：照 `references/review.md`「每一版交给用户之前」，接触表、歌词对照、节奏、转场逐帧条都过一遍，过线了再交
 
 完成：`mv-r1.mp4` 自检通过；告诉用户文件在哪、多长、量出来的结果、哪些地方拿不准
 
 ## 第 6 步　看片、修改
 
-用户看完提意见，照 `references/review.md` 的毛病清单改（像幻灯片、运镜晃、表现力不够、道具不对、歌词没演出来，还有别的）。每改一版存新文件、说清改了什么在哪几秒、只重渲改过的段、重跑自检。剧情被否回第 4 步。
+用户看完提意见，照 `references/review.md` 的毛病清单改（像幻灯片、运镜晃、表现力不够、道具不对、歌词没演出来，还有别的）。交给用户的每一版存新文件（`mv-r2.mp4`…），说清改了什么在哪几秒；只重渲改过的段（改了 `character.js`、调色板这类共用的东西，用到它的镜头都要重渲），重跑自检。剧情被否回第 4 步。
 
 完成：用户说可以了
 
 ## 发布前（提醒用户）
 
 - 平台有「内容由 AI 生成」声明的，选上
-- 封面用片子里最好看的一帧，别另外套模板
+- 封面用片子里最好看的一帧，别另外套模板；竖屏的封面主体放中间，主页宫格会把上下裁掉一些
 - 标题写上歌名和画风（「像素风」「绘本」）
 - 歌的版权归原作者，发布前确认平台允许用这首歌
 
@@ -105,15 +130,15 @@ description: 用代码给一首歌做一支音乐 MV（不用视频生成模型�
 
 | 文件 | 干什么 |
 |---|---|
-| `scripts/check_env.py` | 查 ffmpeg、Node、Python 库、Whisper 在不在，只查不装 |
-| `scripts/analyze_song.py` | 歌的骨架：BPM、拍点、分段、突变点、重音 |
-| `scripts/srt2js.py` | `lyrics.srt` → `lyrics.js`（合成页面用） |
-| `scripts/contact_sheet.py` | 视频抽成带时间的接触表；`--srt` 按歌词抽；`--images` 拼草图 |
-| `scripts/video_rhythm.py` | 切点、每个镜头停多久、几乎不动的段、黑帧、卡不卡拍 |
-| `scripts/render_frames.mjs` | 调网页的 `renderAt(t)` 出图：`--times` 出样图、设定图、草图；路线 B 逐帧渲整片、接成视频 |
-| `scripts/finalize_audio.py` | 原曲按原音量封回成片，量三个响度 |
-| `templates/hf-canvas/` | 路线 A 的 HyperFrames 合成 |
-| `templates/frames/scene.html` | 路线 B 的逐帧页面（p5.js + p5.brush） |
-| `templates/hf-overlay/` | 路线 B 叠歌词、配歌的合成 |
-| `templates/lyrics-layer.js` | 歌词层（逐字弹出，不跟镜头动） |
-| `examples/<风格>/scene.html` | 四种画风的原生示范（同一段 5 秒，`renderAt(t)` 接口），读代码学画法 |
+| `scripts/check_env.py` | 查 ffmpeg、Node、Python 库、浏览器、Whisper 在不在，只查不装；最后打印本机跑脚本用的命令 |
+| `scripts/analyze_song.py` | 歌的骨架：BPM（按拍点算）、拍点、分段、突变点、重音；`--js` 另存页面用的 `song.js`；`--offset`、`--end` 只做一段（这段速度和整首不一样时按这段自己测）；`--tempo-hint` 限定 BPM 范围 |
+| `scripts/srt2js.py` | `lyrics.srt` → `lyrics.js`（页面用）；`--words` 带上逐字时间 |
+| `scripts/glyphs.py` | 写字类画风（蜡笔、水墨、一笔画）先把歌词每个字的笔画数据存成本地 `glyphs.js`，渲染时不联网 |
+| `scripts/contact_sheet.py` | 视频抽成带时间的接触表；`--srt` 按歌词抽（只写第几句，不印歌词）；`--around` 一次出所有转场前后的逐帧条；`--images` 拼草图；`--crop` 先裁再抽；`--guides douyin / wide` 画竖屏、横屏的安全范围和歌词带 |
+| `scripts/video_rhythm.py` | 切点、每个镜头停多久、几乎不动的段、大轮廓没动的段、黑帧、卡不卡拍；`--plan` 对照计划的转场，报每个转场变化最大和停稳在哪一刻；`--inshot` 标镜头里设计好的大动作，`--hold` 标故意停住的段 |
+| `scripts/render_frames.mjs` | 无头浏览器调页面的 `renderAt(t)` 出图：`--times` 出样图、设定图、草图；逐帧渲整片，`--encode` 接成视频（给了 `--from`、`--to` 就只接这一段），有帧失败自动补渲、补不上就不接；`--lyric-check` 按帧核逐字歌词。画面大小、片长自动用页面的 W×H、`MV.duration`；页面有 `window.PLAN` 就打印转场落点 |
+| `scripts/finalize_audio.py` | 原曲按原音量配上成片，量三个响度 |
+| `templates/mv/index.html` | 整支 MV 的页面（Canvas 2D）：镜头表 SHOTS、两个镜头重叠处的转场、拍前起步拍上落位的甩镜、按镜头速度开的动态模糊、近景、歌词层；横竖屏都能用 |
+| `templates/mv/p5brush.html` | 同上，p5.js + p5.brush 的笔刷画风：两个镜头、镜头推拉在 p5 里重画、收光转场、纸纹；p5 画布按出图像素开（草稿真的变快）、静背景按抖动版本缓存 |
+| `templates/mv/kit.js` | 几个小工具：拍点（`MV.beat`、`MV.pulse`）、缓动和关键帧、固定种子的随机数、转场用的遮罩和变形（`MV.reveal`、`MV.pushInto`、`MV.morph`、`MV.retime`）、歌词（逐字时间）、网页字体和笔画数据（`MV.font`、`MV.glyphs`，没加载到会报出来）、动态模糊、预览。不是框架，画面全是自己写的 |
+| `examples/<风格>/scene.html` | 十种画风的原生示范：每种一个不同的题材，5–6 秒，大多是两个镜头加一次这个画风自己的转场（拼贴是四张卡快切），用 `MV.page` 搭。读代码学画法，不搬场景 |

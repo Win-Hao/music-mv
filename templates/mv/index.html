@@ -1,0 +1,123 @@
+<!doctype html>
+<!-- music-mv 的整片页面（Canvas 2D）。整支 MV 就是这一个页面：画面、转场、歌词都按时间 t 画出来，没有剪辑软件，也没有片段和转场块。
+     开工：mkdir -p mv && cp <skill>/templates/mv/index.html <skill>/templates/mv/kit.js mv/
+          python3 <skill>/scripts/analyze_song.py song.mp3 -o song-analysis.json --js mv/song.js   # 拍点、分段、突变、响度包络（Windows 用 py -3；只做一段加 --offset -<起点> --end <终点>）
+          python3 <skill>/scripts/srt2js.py lyrics.srt -o mv/lyrics.js                              # 只做一段加 --offset -<起点>；有逐字时间加 --words lyrics-words.json（字按自己的时间出）
+     预览：浏览器直接打开 mv/index.html，跟着歌放（song.js 记的那首，或者 ../song.mp3、.wav…）（空格播放，← → 一帧，Shift + ← → 一拍；地址后面加 ?t=32 从 32 秒看起）
+     出片：node <skill>/scripts/render_frames.mjs --page mv/index.html --fps 30 --out frames --encode render.mp4   # 片长用下面的 DURATION；接完打印配声音的命令
+          python3 <skill>/scripts/finalize_audio.py render.mp4 song.mp3 -o mv-r1.mp4             # 只做一段加 --start <起点>（上一步会打印）
+     要换成你的：W、H（竖屏 1080×1920）、镜头表 SHOTS 和每个镜头的画法、转场 transition、歌词画法（drawLyric 换成画风自己的）。
+     歌词字体：网页加载的思源黑体（下面的 <link>），ready 里 MV.font 等它下好、没下到会报出来。换字体就换掉 <link> 和 MV.lyricStyle.font，别用系统字体（Windows、Mac 不一样）。
+     下面只是示范骨架：两个镜头。第一个是一个世界里白天、夜里两处地方，镜头在拍子前起步、拍点上甩过去；
+     第二个是近景。两个镜头重叠的那几拍是转场：一阵大雪从镜头前扫过去，雪后面换成近景。示范按 W、H 摆，横竖屏都能看。 -->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.2.8/800.css">
+<script src="kit.js"></script>
+<script src="song.js" onerror="console.warn('没有 song.js：按 MV.tempo 推拍子')"></script>
+<script src="lyrics.js" onerror="console.warn('没有 lyrics.js：不上歌词')"></script>
+<!-- <script src="character.js"></script> -->
+<style>html, body { margin: 0; overflow: hidden; background: #000; }</style>
+</head><body><script>
+const W = 1920, H = 1080, FPS = 30;                       // 竖屏：W = 1080, H = 1920
+const { lerp, seg, ease, rng, noise } = MV;
+if (!window.SONG) MV.tempo(120, 0);                      // 没跑 analyze_song.py --js 时，按 BPM 和第一拍推
+const DURATION = (window.SONG && SONG.duration) || 12;   // 整片长度：song.js 里的（只做一段时是 analyze_song.py --end 算好的片长）
+const U = Math.min(W, H) / 1080;                          // 尺寸单位：东西的大小都乘它，横竖屏一样大
+
+// ───── 镜头表：每个镜头一个画法，自己管自己的镜头。相邻两个镜头的时间要重叠一段，重叠的那几拍就是转场 ─────
+const T_WHIP = MV.beatTime(8);                           // 第 8 拍（从 0 数）甩到夜里
+const T_CUT = MV.beatTime(16);                           // 第 16 拍落在近景上
+const SHOTS = [
+  { name: '世界：白天甩到夜里', start: 0, end: T_CUT, draw: shotWorld },
+  { name: '近景：小球', start: T_CUT - 0.5, end: DURATION + 1, draw: shotClose },
+];
+// 转场落点（成片秒）：镜头之间重叠处的落点，加上镜头里的甩镜。render_frames 会打印出来，给 video_rhythm --plan、contact_sheet --around 用
+window.PLAN = [T_WHIP, ...SHOTS.slice(1).map((s, i) => SHOTS[i].end)].map((t) => +t.toFixed(3));
+// 不叫 draw：页面里有全局的 draw、setup、preload 函数时，p5 会自动进全局模式（换 p5 画风时会出错）
+function drawFrame(g, t) {
+  const live = SHOTS.filter((s) => t >= s.start && t < s.end);
+  if (live.length >= 2) transition(g, t, live[0], live[1]);
+  else if (live.length === 1) live[0].draw(g, t);
+}
+// 转场：前一个镜头在下面，后一个镜头从遮罩里露出来。这里是一阵大雪从左往右扫过镜头前，遮罩的边藏在雪里。
+// 换手法只改这个函数：形状匹配、穿越推进、收光、眨眼……写法见 references/transitions.md「在代码里怎么接」
+function transition(g, t, a, b) {
+  const u = ease.inOut(seg(t, b.start, a.end)), edge = -0.3 * W + 1.6 * W * u;
+  a.draw(g, t);
+  MV.reveal(g, (m) => m.rect(-W, -H, W + edge, 3 * H), (m) => b.draw(m, t), 120 * U);
+  for (let i = 0; i < 70; i++) {                         // 遮挡物：贴着边飘的一团大雪片
+    const r = rng('sweep' + i), x = edge + (r() - 0.5) * 0.5 * W, y = r() * H + noise('sw' + i, t * 2) * 40 * U;
+    g.fillStyle = `rgba(255,255,255,${0.55 + 0.4 * r()})`;
+    g.beginPath(); g.arc(x, y, (18 + r() * 52) * U, 0, Math.PI * 2); g.fill();
+  }
+}
+
+// ───── 镜头 1：一个世界，两处地方。镜头一直慢慢右移，拍前 0.5 秒起步、拍点上甩到夜里 ─────
+const A = { x: W / 2 }, B = { x: W / 2 + 2.4 * W };      // 世界里的两处地方
+const whip = (t) => ease.inOut(seg(t, T_WHIP - 0.5, T_WHIP));
+const camera = (t) => ({
+  x: A.x - 0.03 * W + 0.06 * W * (t / DURATION) + (B.x - A.x) * whip(t),                    // 慢移和甩镜叠在一起，速度从头到尾连续
+  y: H / 2,
+  zoom: 1 + 0.03 * ease.smooth(t / DURATION) + (window.SONG ? 0.02 * MV.pulse(t, 0.12, SONG.hits) : 0),   // 慢推 + 最重的几下轻轻顿一下
+});
+function shotWorld(g, t) {
+  const cam = camera(t), mid = (A.x + B.x) / 2, ground = H * 0.72;
+  g.save();
+  g.translate(W / 2, H / 2); g.scale(cam.zoom, cam.zoom); g.translate(-cam.x, -cam.y);
+  g.fillStyle = '#F2E2C2'; g.fillRect(A.x - 2 * W, -H, mid - (A.x - 2 * W), 3 * H);      // 白天的天
+  g.fillStyle = '#1F2D4F'; g.fillRect(mid, -H, B.x + 2 * W - mid, 3 * H);                 // 夜里的天
+  g.fillStyle = '#F7C548'; g.beginPath(); g.arc(A.x + 0.22 * W, H * 0.24, 90 * U, 0, Math.PI * 2); g.fill();   // 太阳
+  g.fillStyle = '#F4EED8'; g.beginPath(); g.arc(B.x + 0.2 * W, H * 0.21, 70 * U, 0, Math.PI * 2); g.fill();    // 月亮
+  g.fillStyle = '#1F2D4F'; g.beginPath(); g.arc(B.x + 0.2 * W + 30 * U, H * 0.21 - 20 * U, 62 * U, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#9CC6B8'; g.fillRect(A.x - 2 * W, ground, mid - (A.x - 2 * W), 2 * H);  // 地面
+  g.fillStyle = '#DCE3EE'; g.fillRect(mid, ground, B.x + 2 * W - mid, 2 * H);
+  for (let i = 0; i < 90; i++) {                         // 一直在动的东西：飘的光点、雪（位置只由 t 和种子决定）
+    const r = rng('flake' + i), x = A.x - W + r() * (B.x - A.x + 2 * W) + noise('fx' + i, t * 0.6) * 30 * U;
+    const y = (r() * H + t * (40 + r() * 70) * U) % H;
+    g.fillStyle = x > mid ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.55)';
+    g.beginPath(); g.arc(x, y, (3 + r() * 4) * U, 0, Math.PI * 2); g.fill();
+  }
+  // 角色（真做时用 character.js）：小球跟着拍子跳，落地压扁、起跳拉长；甩镜时跟着镜头一起过去
+  const ph = MV.beatPhase(t), hop = Math.sin(Math.PI * ph) * 120 * U, squash = MV.pulse(t, 0.09);
+  g.translate(cam.x - 0.08 * W, ground - hop); g.scale(1 + 0.25 * squash, 1 - 0.22 * squash + 0.1 * Math.sin(Math.PI * ph));
+  g.fillStyle = '#E07A4F'; g.beginPath(); g.arc(0, -60 * U, 60 * U, 0, Math.PI * 2); g.fill();
+  g.restore();
+}
+
+// ───── 镜头 2：近景。情绪点推到近景，镜头慢推一点 ─────
+function shotClose(g, t) {
+  const z = 1 + 0.06 * ease.smooth(seg(t, T_CUT - 0.5, T_CUT + 6));
+  g.save();
+  g.translate(W / 2, H / 2); g.scale(z, z); g.translate(-W / 2, -H / 2);
+  g.fillStyle = '#1F2D4F'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#F4EED8'; g.beginPath(); g.arc(W * 0.78, H * 0.2, 120 * U, 0, Math.PI * 2); g.fill();
+  for (let i = 0; i < 60; i++) {
+    const r = rng('close' + i), x = r() * W + noise('cx' + i, t * 0.5) * 40 * U, y = (r() * H + t * (60 + r() * 60) * U) % H;
+    g.fillStyle = 'rgba(255,255,255,.8)'; g.beginPath(); g.arc(x, y, (4 + r() * 8) * U, 0, Math.PI * 2); g.fill();
+  }
+  const ph = MV.beatPhase(t), breathe = 1 + 0.02 * Math.sin(t * 2.4), squash = MV.pulse(t, 0.12);
+  g.translate(W * 0.5, H * 0.58 + Math.sin(Math.PI * ph) * -20 * U);
+  g.scale(breathe * (1 + 0.12 * squash), breathe * (1 - 0.1 * squash));
+  g.fillStyle = '#E07A4F'; g.beginPath(); g.arc(0, 0, 260 * U, 0, Math.PI * 2); g.fill();
+  const close = Math.max(0, 1 - Math.abs(((t + 0.3) % 3.2) - 0.1) / 0.1), open = 1 - 0.85 * close;   // 每 3.2 秒眨一次眼，0.2 秒合上再睁开
+  g.fillStyle = '#22263F';
+  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 80 * U, -40 * U, 18 * U, 26 * U * open, 0, 0, Math.PI * 2); g.fill(); }
+  g.restore();
+}
+
+// 动态模糊：看这一帧镜头走了多少像素，大约每 4 像素一个子帧，镜头不动就不开（返回 1）。开了的帧 kit 至少拆 8 个（MV.page 的 blurMin），两三个会看到分开的残影
+function blur(t) {
+  if (t >= T_CUT - 0.5) return 1;
+  const a = camera(t - 1 / FPS), b = camera(t);
+  const px = Math.hypot(b.x - a.x, b.y - a.y) * b.zoom;
+  return Math.min(32, Math.max(1, Math.round(px * 0.5 / 4)));      // 0.5 = 快门，和 MV.page 的 shutter 一致
+}
+// 歌词：最上层、不跟镜头动、不参与动态模糊。这里用 kit 的通用画法，真做时换成画风自己的（对话框、纸条、题跋……）
+const overlay = (g, t) => MV.drawLyric(g, t);
+
+MV.page({ W, H, fps: FPS, duration: DURATION, draw: drawFrame, overlay, blur,
+  ready: async () => {
+    // 字体、笔画数据（MV.glyphs）、烤好的纸和缓存图层放这里。歌词字体下好再画，没下到会报出来（出片时停下，预览时写在播放条上）
+    if (window.LYRICS) await MV.font(`${MV.lyricStyle.weight} ${MV.lyricStyle.size}px ${MV.lyricStyle.font}`);
+  } });
+</script></body></html>

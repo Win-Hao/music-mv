@@ -1,801 +1,941 @@
 <!doctype html>
 <!--
-  像素游戏风（16-bit 时代的游戏画面）· music-mv 画风样例「雪夜街角的小螃蟹」
+  像素游戏风（16-bit 时代的游戏画面）· 夏日午后的海边公路：少年骑单车冲下坡，在拍上冲过水洼溅起水花，菱形格子转场切到近景回头笑
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。
   ------------------------------------------------------------------------------
   这是原生像素画，不是插画加像素滤镜。关键画法：
-  1. 只在 320×180 的小画布上画（LW×LH），每个像素都是调色板里的一个序号：
-     画面先画进 Uint8Array 索引缓冲 B（一个格子一个调色板序号），最后才按调色板转成 RGB。
-     放大到成片时整数倍（视口 640×360 → ×2，1920×1080 → ×6），imageSmoothingEnabled = false。
-  2. 一套固定调色板 PAL（24 色）：夜空蓝 5 级、雪 5 级、螃蟹红橙 6 级（含夜里的暗部）、木头 3 级、暖灯黄 3 级、被灯照到的暖雪 2 级。
-     暖黄只给灯和窗（一屏一个强调色）。出 GIF 时 palettegen 要 max_colors=24 且 reserve_transparent=0，才一格不差。
-  3. 渐变一律用 4×4 Bayer 有序抖动在相邻两格调色板之间取色（夜空、雪地远近、灯照的光池），
-     不用平滑渐变、不用半透明叠加。抖动的格子跟着图层的世界坐标走，镜头移动时花纹不会“滑”。
-  4. 打光 = 换调色板：灯亮以后按到灯的距离算一个亮度等级（0/1/2，同样 Bayer 抖动），
-     每个像素按 LIT1 / LIT2 查表换成更亮更暖的那一格；螃蟹在暗处、灯下各用一套颜色（夜里暗红，灯下橘色）。
-     亮灯那一帧整屏再按 FLASH 表提一级（老游戏的闪白），灯头两帧十字星芒。
-     影子（螃蟹脚下、长椅右下）是“灯照不到的格子”：材质标 4，打光时跳过，所以在暖色光池里留一块冷蓝。
-  5. 精灵都是手写的字符网格（BODY / CLAW / EYES / LAMP_HEAD / HEART / BANG …），字母对应调色板；螃蟹按部件拼（腿、眼柄、眼睛、身子、钳子），
-     每个部件自动描 1 像素深色外轮廓，再整体按“暗处 / 灯下”两套色表上色。
-     动作逐帧换画：走路 4 帧（12 fps 一帧一换）、吃惊、蹲、腾空、落地压扁、回弹，没有补间；位置一律取整到逻辑像素。
-  6. 镜头：不缩放（缩放像素画会把格子弄得大小不一），改成整像素的视差平移：前景 5 秒移 10 格，房子 0.45 倍，远山 0.2 倍，天空不动。
-  7. 雪是单像素 / 2×2 的点，三层（远、中、近）；星星闪烁 = 在几格调色板之间换色；窗户偶尔闪一下 = 换色。
-  8. 字：开源像素字体 Fusion Pixel 12px（OFL，jsDelivr 上 @fontsource 的包）在 12px 原尺寸画到小画布，
-     alpha 二值化（>50% 才算有像素）后写进索引缓冲，所以放大后字也是一格一格的。字体没加载上就退回系统字体同样二值化。
-     歌词进经典 RPG 对话框：深底、2 像素边框、圆角缺角、左上角名字牌「小螃蟹」，一字一字打出来，打完右下角 ▼ 闪。
-  9. 左上角一排像素红心是血条式小 UI，螃蟹冒爱心时第三颗补满。
-  画面只由 t 决定：随机数都用「元素名 + 序号」做种子（rnd），不存上一帧状态。
+  1. 工具：Canvas 2D + kit.js 的 MV.page。只在 320×180 的小画布上画（LW×LH），每个格子存的是调色板序号：
+     两个镜头各画进一块 Uint8Array 索引缓冲（BA、BB），合成到 BF，最后才按调色板转成 RGB，putImageData 到小画布，
+     再 drawImage 整数倍放大到 W×H（1920×1080 是 ×6，1280×720 是 ×4，960×540 是 ×3）。
+     MV.page 每帧会 reset 画布，imageSmoothingEnabled = false 要在 draw、overlay 里每帧重设，不然放大是糊的。
+  2. 分层和视差：镜头一秒往右 14 格，一个方向走到底；每层乘自己的系数再取整到整像素：天 0、积雨云 0.05、小云 0.1、
+     远岬和灯塔 0.15、帆船 0.2、海面浪纹 0.3、沙滩和浪 0.6、电线杆 0.9、护栏/路/草坡/少年 1、最前面的草丛 1.3。
+     不缩放（缩放像素画会把格子弄得大小不一）。近景是跟拍：少年不动，背景按远近以不同速度往左走，护栏立柱最快。
+  3. 颜色：一套 32 色的调色板 PAL（天和海共用 6 级蓝 + 白、浅海青 2、远岬 2、草绿 4、沥青和钢 4、头发 2、皮肤 2、
+     珊瑚红 3、黄 2、沙 2、墨蓝轮廓 1、深蓝 1）。红只给少年（衣服、车架、脸上的红晕），远处灯塔一道暗红腰带（一屏一个强调色）。
+  4. 渐变一律用 4×4 Bayer 有序抖动在相邻两格调色板之间取色（天、海、草坡、水洼、云的明暗），不用平滑渐变、不用半透明。
+     抖动的格子跟着各自那层的世界坐标走（云按云自己的坐标），镜头移动、云飘的时候花纹不会「滑」。
+     路面颗粒、草、浪的缺口查一张开页面时用 MV.rng 固定种子填好的 64×64 噪声表。
+  5. 光：朝右上的太阳光。云按每团圆的法线算明暗再抖动；衣服按「离脊梁多远」分亮、中、暗三格；脖子在下巴底下暗两三格；
+     海上的闪光按屏幕坐标（反光跟着太阳不跟镜头），一秒换 12 次。
+  6. 角色：小号少年（远景，约 28 格高）上半身是手写的字符网格，车架按坡度转（角度取整到 5°，同一个角度的车一模一样），
+     腿按脚蹬位置算膝盖；大号少年（近景，头约 26 格，约 3 倍）另画一套：身子、胳膊、腿用整数顶点的多边形和粗线段拼，
+     五官、耳朵是手点的格子，头按「侧脸 → 转过来 → 回头笑」三张换。每个部件自动描 1 像素墨蓝轮廓（盖在前面的部件上，
+     部件之间就有分界线）。海鸥这种十几格的小精灵描墨色会糊成一团黑：身子描灰、翅膀不描，翅尖一点墨。
+  7. 动起来的手感：角色、浪、云、车轮一律按 12 fps 一张张换，不做补间；位置每帧取整到整像素。
+     骑车 4 张（脚蹬位置）、车轮辐条 3 张、近景头发/背上/衣角/袖口 3 张、海鸥翅膀 4 张（上、平、下、平）、
+     云边每 0.25 秒换一档（每团圆半径 ±0.5 格）、浪两拍一道推上沙滩、草叶 3 张一摆、小花 2 张点头。
+     只有整格平移时 video_rhythm 会量成「几乎不动」，所以大一点的东西都在换张：远景靠少年和海鸥，近景靠飞过去的护栏立柱和头发。
+  8. 卡拍的动作：拍 6 前轮压进水洼——水幕四张（翻起、最高、塌下、散开）、36 颗水珠走抛物线、水洼里两圈波纹、后轮甩起一串水、
+     少年两腿翘起来；水在白护栏和浅色天前面容易看不见，水幕和水珠描一圈蓝（不是墨色）。之后路上一道湿车辙按抖动阈值渐渐变淡。
+  9. 转场（菱形格子，拍 6.5 → 拍 8）：屏幕切成 16×16 的格子，格子中心对准近景少年的脸；离脸越近的格子越早开始，
+     每格里一个菱形从中心长满整格，菱形里是近景、外面是远景，菱形边亮一格白。两个镜头这几拍都在画、都在动；
+     每个像素要么是 A、要么是 B、要么是白，调色板以外的颜色一格都不出。最后一格正好在拍 8 长满。
+     圆心对准「近景的脸」而不是「远景的小人」：先翻开的那几格就是他的脸，一眼认得出是同一个人推近了。
+     整屏均匀的抖动溶解看着就是叠化，按格子、有方向地换才像游戏。
+  10. 歌词：开源像素字体 Fusion Pixel 12px 在 12px 原尺寸画到小画布，alpha 二值化（>50% 才算有像素）后写进对话框那一层，
+     放大后字也是一格一格的；字体没加载上：出片时报错停下，预览时先用系统字体同样二值化凑合看。对话框在最上层（overlay，透明处是 255），不跟镜头动、
+     转场时也不动：白底、蓝边、墨蓝外框、外角缺一格，开窗三张（细缝 → 一半 → 整个），字用 MV.lyricAt 按半拍一个一个打出来，
+     打完右下角 ▼ 跟拍子一上一下。对话框放在上面：远景的路和水洼、近景的身子都在下半屏。不加名字牌：名字也是歌词以外的字。
+  画面只由 t 决定：随机数都用 MV.rng('元素名' + 序号)，不用 Math.random()、Date，不存上一帧。
+
+  时间线（128 BPM，一拍 0.469 秒，拍从 0 数）：
+    拍 0（0 秒）      少年在坡顶起步，越骑越快（匀加速）；海鸥从右上角掠过（0.15–2.5 秒），远处帆船、浪、云一直在动
+    拍 4（1.875）     对话框开窗；拍 4.5 起每半拍打一个字（「洼」在拍 6、「都」在拍 8、「我」在拍 10）
+    拍 6（2.81）      前轮压进水洼：溅水花
+    拍 6.5–8（3.05–3.75）菱形格子转场；拍 8 落点整屏是近景（window.PLAN = [3.75]）
+    拍 8–10           近景侧脸骑车，头发和衣角被风吹着，护栏立柱从右往左飞快掠过
+    拍 10（4.69）     回头笑（侧脸 → 转过来 → 笑，最后一张落在拍上）；字打完，▼ 跟拍子跳到片尾（6 秒）
+  速度：开页面（下 600 KB 字体 + 准备）约 3.5 秒；1920×1080 画一帧约 5.5 ms（最慢约 22 ms），连出 PNG 约 16 ms。
+  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧 →
+    ffmpeg -framerate 12 -i %06d.png -vf "split[a][b];[a]scale=640:360:flags=neighbor,palettegen=max_colors=32:reserve_transparent=0:stats_mode=full[p];
+    [b]scale=640:360:flags=lanczos[s];[s][p]paletteuse=dither=none" -loop 0，约 1.14 MB，GIF 里正好是这 32 色。
+    坑：lanczos 缩小会在格子边上混出过渡色，palettegen 直接吃 lanczos 的那份，平均出来的 32 色有 27 色偏了几级；
+    调色板要从最近邻缩的那份生成（上面的写法），lanczos 的那份再按它取色。全用 flags=neighbor 逐像素一格不差，约 1.10 MB。
+  外部资源：Fusion Pixel Font 12px Proportional SC（@fontsource 的包，jsDelivr 加载，OFL-1.1）。
 -->
 <html lang="zh-CN"><head><meta charset="UTF-8" />
-<style>html, body { margin: 0; overflow: hidden; background: #0a0d1f; } canvas { display: block; image-rendering: pixelated; }</style>
-</head><body>
-<canvas id="out"></canvas>
-<script>
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; overflow: hidden; background: #000; }</style>
+</head><body><script>
+(() => {
+'use strict';
 // ───────────────────────── 基本参数 ─────────────────────────
-const DURATION = 5, BPM = 120, BEAT = 60 / BPM;
-const LW = 320, LH = 180;                         // 逻辑画布：一切都在这上面一格一格画
-const SCALE = Math.max(1, Math.floor(Math.min((window.innerWidth || 640) / LW, (window.innerHeight || 360) / LH)));
+const W = 1920, H = 1080, FPS = 30, DURATION = 6, BPM = 128;
+MV.tempo(BPM, 0);                                     // 第 0 拍在 0 秒；下面所有时刻都从拍子算
+const BEAT = 60 / BPM, BT = (n) => MV.beatTime(n);
+const { clamp } = MV;
+const LW = 320, LH = 180, NPX = LW * LH;              // 逻辑画布：一切都在这上面一格一格画，最后整数倍放大
 const FONT_URL = 'https://cdn.jsdelivr.net/npm/@fontsource/fusion-pixel-12px-proportional-sc@5.3.0/files/fusion-pixel-12px-proportional-sc-latin-400-normal.woff2';
-const LYRIC = '把今天的星星，都留给你';
-const NAME = '小螃蟹';
+const LYRIC = '冲过水洼，海风都追不上我';
 
-// ───────────────────────── 调色板（24 色） ─────────────────────────
+// 时间线（拍从 0 数；128 BPM 一拍 0.469 秒）
+const T_BOX = BT(4);          // 对话框打开
+const T_TYPE = BT(4.5);       // 第一个字；之后每半拍打一个字
+const T_SPLASH = BT(6);       // 前轮压进水洼：溅水花
+const T_WIPE = BT(6.5);       // 菱形格子转场开始
+const T_LAND = BT(8);         // 转场落点：整屏换成近景
+const T_TURN = BT(10);        // 回头笑
+window.LYRICS = [[T_TYPE, DURATION + 1, LYRIC]];
+window.PLAN = [+T_LAND.toFixed(3)];
+
+// ───────────────────────── 调色板（32 色） ─────────────────────────
 const PAL = [
-  '#0a0d1f', // 0  墨蓝（轮廓、最深的夜）
-  '#131a3b', // 1  深夜蓝
-  '#1d2a57', // 2  夜蓝
-  '#2b3f78', // 3  蓝
-  '#3f5a98', // 4  地平线蓝
-  '#6680bb', // 5  远处雪影
-  '#93aad6', // 6  雪影
-  '#c3d2ec', // 7  雪
-  '#eef3fb', // 8  亮雪
-  '#ffffff', // 9  白（近处雪花、高光）
-  '#4a1a22', // 10 螃蟹轮廓 / 砖红暗
-  '#9c2a2a', // 11 暗红
-  '#e04a2e', // 12 橘红
-  '#ff8a4a', // 13 亮橘
-  '#ffd9b0', // 14 肚子浅杏
-  '#5a3328', // 15 深木
-  '#8f5a3a', // 16 木
-  '#c99a62', // 17 亮木
-  '#e8a23c', // 18 琥珀
-  '#ffd45e', // 19 暖黄（灯、窗）——全片唯一的强调色
-  '#fff4c4', // 20 灯芯浅暖
-  '#f2cf9a', // 21 被照亮的雪
-  '#d2ae98', // 22 被照亮的雪影（暖灰）
-  '#6e1f26', // 23 夜里螃蟹的暗部
+  '#1c2436', // 0  墨蓝：所有轮廓
+  '#2c3f66', // 1  深蓝：短裤、最深的影子
+  '#235a9c', // 2  深海
+  '#2f7cc6', // 3  海、天顶
+  '#4b9be3', // 4  天
+  '#7cbcf0', // 5  天（中）
+  '#aedcf6', // 6  天边、云影
+  '#e2f4fb', // 7  地平线的亮、云的暗面
+  '#ffffff', // 8  白：云顶、浪花、护栏、高光
+  '#26a3b0', // 9  浅海的青
+  '#84ddd0', // 10 浪花的影、浅水
+  '#86b9be', // 11 远岬亮面（带一点雾）
+  '#5f97a3', // 12 远岬背光
+  '#245c3f', // 13 深绿
+  '#3d8c47', // 14 绿
+  '#74c04f', // 15 草
+  '#bde374', // 16 草尖的亮
+  '#3d4150', // 17 沥青暗、轮胎
+  '#5c6273', // 18 沥青
+  '#8b92a3', // 19 沥青亮、钢
+  '#c6ccd6', // 20 浅灰
+  '#3f2723', // 21 头发
+  '#c27a57', // 22 皮肤暗
+  '#f7c9a0', // 23 皮肤
+  '#b4313d', // 24 衣服、车架的暗红
+  '#ef5848', // 25 珊瑚红：衣服和车架，全片唯一的强调色
+  '#f8c94a', // 26 黄：路中线、鸟嘴、反光片
+  '#fff3c4', // 27 浅暖黄：阳光在水上的闪
+  '#ecd6a0', // 28 沙
+  '#c9a872', // 29 湿沙
+  '#7a4a38', // 30 头发的亮、电线杆的木头
+  '#ff9a7c', // 31 衣服亮面、脸上的红晕
 ];
-const PAL_RGB = PAL.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
-// 灯光查表：一级（LIT1）、二级（LIT2）各把一格颜色换成更亮更暖的一格
-const LIT1 = [1, 2, 3, 4, 5, 22, 22, 21, 20, 9, 15, 12, 13, 14, 20, 16, 17, 18, 19, 20, 20, 20, 21, 11];
-// 亮灯那一帧整屏提一级（冷白的闪，不是整屏变黄）
-const FLASH = [1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 11, 12, 13, 14, 20, 16, 17, 18, 19, 20, 9, 20, 21, 11];
-const LIT2 = [2, 3, 4, 5, 6, 21, 21, 20, 20, 9, 11, 12, 13, 14, 20, 16, 17, 18, 19, 20, 20, 20, 21, 11];
+const RGB = PAL.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
 
 // ───────────────────────── 缓冲和小工具 ─────────────────────────
-const B = new Uint8Array(LW * LH);   // 调色板序号
-const M = new Uint8Array(LW * LH);   // 材质：0 世界，1 螃蟹（自己换色），2 光源（不再被照亮），3 UI，4 影子（灯照不到）
+const BA = new Uint8Array(NPX), BB = new Uint8Array(NPX), BF = new Uint8Array(NPX), BU = new Uint8Array(NPX);
+const CLEAR = 255;                                    // 对话框那一层的「透明」
+let CUR = BF;                                         // 现在往哪块缓冲画
+function px(x, y, c) { x = Math.round(x); y = Math.round(y); if (x < 0 || y < 0 || x >= LW || y >= LH) return; CUR[y * LW + x] = c; }
+function get(x, y) { x = Math.round(x); y = Math.round(y); if (x < 0 || y < 0 || x >= LW || y >= LH) return -1; return CUR[y * LW + x]; }
+function rect(x, y, w, h, c) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) px(x + i, y + j, c); }
+function hline(x0, x1, y, c) { for (let x = x0; x <= x1; x++) px(x, y, c); }
+function vline(x, y0, y1, c) { for (let y = y0; y <= y1; y++) px(x, y, c); }
+const F12 = (t) => Math.floor(t * 12 + 1e-6);         // 12 fps 的帧号：角色、浪、云的「换张」都按它
+
+// 4×4 Bayer 有序抖动：v 是连续值，在 ramp[floor(v)] 和下一格之间按格子的阈值选
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-const bt = (x, y) => (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
-function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; return h >>> 0; }
-const rnd = (key) => hash(key) / 4294967296;          // 种子 = 元素名 + 序号
-function px(x, y, c, m = 0) { x = Math.round(x); y = Math.round(y); if (x < 0 || y < 0 || x >= LW || y >= LH) return; const i = y * LW + x; B[i] = c; M[i] = m; }
-function rect(x, y, w, h, c, m = 0) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) px(x + i, y + j, c, m); }
-function hline(x0, x1, y, c, m = 0) { for (let x = x0; x <= x1; x++) px(x, y, c, m); }
-function vline(x, y0, y1, c, m = 0) { for (let y = y0; y <= y1; y++) px(x, y, c, m); }
-// 字符网格精灵：map 把字母换成调色板序号，'.' 透明
-function spr(rows, map, x, y, flip = false, m = 0) {
-  x = Math.round(x); y = Math.round(y);
-  const w = rows[0].length;
-  for (let j = 0; j < rows.length; j++) {
-    const r = rows[j];
+const bt = (x, y) => (BAYER[((y & 3) << 2) | (x & 3)] + 0.5) / 16;
+function dith(ramp, v, x, y) { const n = ramp.length - 1; if (v <= 0) return ramp[0]; if (v >= n) return ramp[n]; const k = Math.floor(v); return v - k > bt(x, y) ? ramp[k + 1] : ramp[k]; }
+
+// 纹理噪声表：开页面时用 MV.rng 固定种子填一次，按世界坐标取（路面颗粒、草、浪的缺口）
+const TEX = new Float32Array(64 * 64);
+{ const r = MV.rng('tex'); for (let i = 0; i < TEX.length; i++) TEX[i] = r(); }
+const tex = (x, y) => TEX[((y & 63) << 6) | (x & 63)];
+
+// ───────────────────────── 拼角色：一组组像素 + 自动描 1 像素轮廓 ─────────────────────────
+// 每个部件先描一圈轮廓（盖在前面画过的部件上，部件之间就有分界线），再填自己的颜色
+const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const KEY = (x, y) => ((y + 1024) << 12) | (x + 1024);
+function Comp() { this.m = new Map(); }
+Comp.prototype.add = function (cells, outline) {
+  if (outline !== undefined) {
+    const own = new Set(); for (const [x, y] of cells) own.add(KEY(x, y));
+    for (const [x, y] of cells) for (const [dx, dy] of N4) { const k = KEY(x + dx, y + dy); if (!own.has(k)) this.m.set(k, outline); }
+  }
+  for (const [x, y, c] of cells) this.m.set(KEY(x, y), c);
+  return this;
+};
+Comp.prototype.blit = function () { for (const [k, c] of this.m) px((k & 4095) - 1024, (k >> 12) - 1024, c); };
+
+// 字符网格：map 把字母换成调色板序号，'.' 透明
+function gridCells(rows, map, x0, y0, flip = false) {
+  const out = [], w = rows[0].length;
+  rows.forEach((r, j) => {
     if (r.length !== w) throw new Error('精灵行宽不一致：' + r);
     for (let i = 0; i < w; i++) {
-      const ch = r[flip ? w - 1 - i : i];
-      if (ch === '.') continue;
-      const c = map[ch];
-      if (c === undefined) throw new Error('精灵里有没定义的字母：' + ch);
-      px(x + i, y + j, c, m);
+      const ch = r[flip ? w - 1 - i : i]; if (ch === '.') continue;
+      const c = map[ch]; if (c === undefined) throw new Error('精灵里有没定义的字母：' + ch);
+      out.push([x0 + i, y0 + j, c]);
     }
-  }
-}
-// Bayer 抖动取色：v 是连续值，在 ramp[floor(v)] 和 ramp[floor(v)+1] 之间按格子阈值选
-function dith(ramp, v, x, y) { const f = Math.max(0, Math.min(ramp.length - 1.0001, v)); const k = Math.floor(f); return (f - k) > bt(x, y) ? ramp[Math.min(k + 1, ramp.length - 1)] : ramp[k]; }
-
-// 一组像素 + 自动描 1 像素外轮廓（轮廓画在这组像素外面一圈）
-function outlined(cells, oc, m = 0) {
-  const set = new Set(cells.map(([x, y]) => (y + 64) * 1024 + x + 64));
-  for (const [x, y] of cells) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!set.has((y + dy + 64) * 1024 + x + dx + 64)) px(x + dx, y + dy, oc, m);
-  for (const [x, y, c] of cells) px(x, y, c, m);
-}
-
-// ───────────────────────── 时间轴 ─────────────────────────
-const LAMP_ON = 2.5;
-const frameOf = (t) => Math.floor(t * 12 + 1e-6);         // 12 fps 的帧号（逐帧换画用）
-const camX = (t) => 2 * Math.min(t, DURATION);             // 前景 5 秒平移 10 格
-const GROUND = 106;                                        // 地平线
-const FEET = 139;                                          // 螃蟹脚踩的那一行
-const LAMP_X = 150, LAMP_BASE = 128;                       // 路灯（世界坐标）
-const BENCH_X = 192, BENCH_FEET = 126;
-const CRAB_STOP = 166;                                     // 螃蟹身子左上角停在这（世界坐标）
-
-// ───────────────────────── 天空、星星、月亮 ─────────────────────────
-function drawSky(t) {
-  for (let y = 0; y < GROUND; y++) {
-    const v = 0.35 + Math.pow(y / GROUND, 1.25) * 3.3;
-    for (let x = 0; x < LW; x++) px(x, y, dith([0, 1, 2, 3, 4], v, x, y));
-  }
-  // 月牙：在圆 A 里、又不在圆 B 里的格子；靠外的一圈用浅一格
-  for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) {
-    const a = (i - 7.5) ** 2 + (j - 7.5) ** 2, b = (i - 11) ** 2 + (j - 5) ** 2;
-    if (a < 7.6 ** 2 && b > 7 ** 2) px(266 + i, 10 + j, a > 6.4 ** 2 || b < 8.2 ** 2 ? 7 : 8);
-  }
-  const f = frameOf(t);
-  for (let i = 0; i < 64; i++) {
-    const x = Math.floor(rnd('star-x' + i) * LW), y = Math.floor(Math.pow(rnd('star-y' + i), 1.3) * 80) + 2;
-    if (x > 260 && x < 286 && y < 30) continue;
-    const kind = rnd('star-kind' + i);
-    const period = 6 + Math.floor(rnd('star-p' + i) * 14);               // 帧
-    const ph = Math.floor(rnd('star-ph' + i) * period);
-    const on = ((f + ph) % period) < Math.max(2, period * 0.6);
-    const tw = ((f + ph) % period) === 0;                                // 闪一下
-    if (kind < 0.72) px(x, y, tw ? 9 : on ? 7 : 5);
-    else if (kind < 0.93) { px(x, y, tw ? 9 : 8); if (on) { px(x - 1, y, 5); px(x + 1, y, 5); px(x, y - 1, 5); px(x, y + 1, 5); } }
-    else {
-      px(x, y, 9); px(x - 1, y, 7); px(x + 1, y, 7); px(x, y - 1, 7); px(x, y + 1, 7);
-      if (on || tw) { px(x - 2, y, 5); px(x + 2, y, 5); px(x, y - 2, 5); px(x, y + 2, 5); }
-    }
-  }
-}
-
-// ───────────────────────── 远山（视差 0.2） ─────────────────────────
-function drawHills(t) {
-  const off = Math.round(camX(t) * 0.2);
-  for (let sx = 0; sx < LW; sx++) {
-    const x = sx + off;
-    const h1 = Math.round(94 + 4 * Math.sin(x * 0.021 + 1.3) + 2 * Math.sin(x * 0.057));
-    for (let y = h1; y < GROUND + 2; y++) px(sx, y, y === h1 ? 4 : y < h1 + 3 ? dith([4, 3], (y - h1) / 3 * 1.5, x, y) : 3);
-    const h2 = Math.round(99 + 3 * Math.sin(x * 0.034 + 4.1) + 2 * Math.sin(x * 0.09 + 2));
-    for (let y = h2; y < GROUND + 2; y++) px(sx, y, y === h2 ? 5 : 2);
-  }
-  // 远处小松树剪影 + 远村的点点窗光
-  for (let i = 0; i < 14; i++) {
-    const wx = Math.floor(rnd('ftree' + i) * 360) - off;
-    const by = Math.round(99 + 3 * Math.sin((wx + off) * 0.034 + 4.1) + 2 * Math.sin((wx + off) * 0.09 + 2)) + 1;
-    const hgt = 5 + Math.floor(rnd('ftreeh' + i) * 4);
-    for (let j = 0; j < hgt; j++) { const half = Math.floor(j / 2); hline(wx - half, wx + half, by - hgt + j, 1); }
-    px(wx, by - hgt, 5);
-  }
-  const f = frameOf(t);
-  for (let i = 0; i < 9; i++) {
-    const wx = Math.floor(rnd('fwin' + i) * 340) - off, wy = 101 + Math.floor(rnd('fwiny' + i) * 4);
-    px(wx, wy, (f + i * 3) % 23 === 0 ? 18 : 19, 2);
-  }
-}
-
-// ───────────────────────── 房子（视差 0.45） ─────────────────────────
-const HOUSES = [
-  { x: 4, w: 44, wall: 26, roof: 16, c: [3, 2], kind: 'siding', door: 18, wins: [[6, 10], [32, 10]], chim: 30 },
-  { x: 92, w: 38, wall: 22, roof: 14, c: [10, 15], kind: 'brick', door: 6, wins: [[22, 8]], chim: 8 },
-  { x: 230, w: 56, wall: 34, roof: 18, c: [2, 1], kind: 'siding', door: 25, wins: [[6, 6], [42, 6], [6, 20], [42, 20], [24, 6]], chim: 40 },
-  { x: 300, w: 40, wall: 24, roof: 15, c: [3, 2], kind: 'siding', door: 4, wins: [[24, 9]], chim: 26 },
-];
-function drawHouses(t) {
-  const off = Math.round(camX(t) * 0.45), f = frameOf(t), base = 110;
-  HOUSES.forEach((H, hi) => {
-    const x = H.x - off, top = base - H.wall;
-    // 烟囱 + 烟
-    const cx = x + H.chim;
-    rect(cx, top - H.roof + 2, 5, H.roof, 10); vline(cx, top - H.roof + 2, top, 0); vline(cx + 4, top - H.roof + 2, top, 0);
-    hline(cx - 1, cx + 5, top - H.roof + 1, 7); hline(cx, cx + 4, top - H.roof, 8);
-    for (let k = 0; k < 4; k++) {
-      const age = ((t * 0.9 + k * 0.25 + hi * 0.13) % 1);
-      const sx = cx + 2 + Math.round(Math.sin(age * 5 + hi) * 1.5 + age * 6), sy = top - H.roof - 2 - Math.round(age * 16);
-      const s = age < 0.25 ? 2 : age < 0.7 ? 3 : 2;
-      const col = age < 0.45 ? 5 : 4;
-      if (s === 2) rect(sx, sy, 2, 2, col);
-      else { hline(sx, sx + 2, sy + 1, col); vline(sx + 1, sy, sy + 2, col); }
-    }
-    // 墙
-    for (let j = 0; j < H.wall; j++) for (let i = 0; i < H.w; i++) {
-      let c = H.c[0];
-      if (H.kind === 'siding' && j % 4 === 3) c = H.c[1];
-      if (H.kind === 'brick' && (j % 4 === 3 || ((i + (Math.floor(j / 4) % 2) * 3) % 6 === 0 && j % 4 !== 3))) c = H.c[1];
-      if (i >= H.w - 3) c = H.c[1];                      // 右边背光一条
-      px(x + i, top + j, c);
-    }
-    vline(x - 1, top, base, 0); vline(x + H.w, top, base, 0);
-    // 屋顶：雪盖住的三角
-    const rw = H.w + 8, rx = x - 4;
-    for (let j = 0; j < H.roof; j++) {
-      const half = Math.round((rw / 2) * (j + 1) / H.roof);
-      const mid = rx + Math.floor(rw / 2);
-      for (let i = mid - half; i <= mid + half; i++) {
-        const edge = i === mid - half || i === mid + half;
-        const c = edge ? 6 : (j < 2 ? 8 : dith([8, 7], (j / H.roof) * 1.6, i, j));
-        px(i, top - H.roof + j, c);
-      }
-    }
-    hline(rx, rx + rw, top, 0); hline(rx + 1, rx + rw - 1, top + 1, H.c[1]);
-    for (let i = rx + 2; i < rx + rw - 1; i++) { const r = rnd('icicle' + hi + ':' + i); if (r < 0.32) { px(i, top + 1, 8); if (r < 0.12) px(i, top + 2, 7); } }
-    // 窗
-    H.wins.forEach(([wx, wy], wi) => {
-      const flick = rnd('win' + hi + ':' + wi + ':' + Math.floor(t * 6)) < 0.07;
-      const lit = !(hi === 2 && wi === 4);
-      rect(x + wx - 1, top + wy - 1, 8, 9, 0);
-      for (let j = 0; j < 7; j++) for (let i = 0; i < 6; i++) {
-        let c = lit ? (flick ? 18 : 19) : 2;
-        if (lit && (i === 0 || j === 0)) c = flick ? 15 : 18;       // 窗框内侧的影子
-        if (i === 2 || j === 3) c = 0;                               // 十字窗棂
-        if (lit && !flick && i >= 3 && j >= 4) c = 20;               // 灯芯那一角亮一点
-        px(x + wx + i, top + wy + j, c, lit ? 2 : 0);
-      }
-      hline(x + wx - 2, x + wx + 7, top + wy + 8, 8); hline(x + wx - 1, x + wx + 6, top + wy + 9, 6);  // 窗台积雪
-    });
-    // 门
-    const dx = x + H.door, dh = 13;
-    rect(dx - 1, base - dh - 1, 9, dh + 1, 0);
-    rect(dx, base - dh, 7, dh, 15); vline(dx + 1, base - dh + 1, base - 1, 16); vline(dx + 4, base - dh + 1, base - 1, 16);
-    px(dx + 5, base - 6, 19, 2);
-    hline(dx - 2, dx + 8, base - dh - 2, 7);
-    // 墙根积雪
-    for (let i = -3; i < H.w + 3; i++) { const hh = 1 + Math.round(1.5 + 1.5 * Math.sin((i + hi * 7) * 0.5)); for (let j = 0; j < hh; j++) px(x + i, base - j, j === hh - 1 ? 8 : 7); }
   });
-}
-
-// ───────────────────────── 地面（前景，视差 1） ─────────────────────────
-function drawGround(t) {
-  const off = Math.round(camX(t));
-  for (let y = GROUND; y < LH; y++) {
-    const v = 0.35 + Math.pow((y - GROUND) / (LH - GROUND), 0.9) * 1.5;      // 远处暗、近处亮一点：雪影 → 雪
-    for (let sx = 0; sx < LW; sx++) { const x = sx + off; px(sx, y, dith([5, 6, 7], v, x, y)); }
-  }
-  hline(0, LW - 1, GROUND, 6);
-  // 雪面上几道缓坡：上沿亮一格、下面一格影子
-  for (let i = 0; i < 12; i++) {
-    const wx = Math.floor(rnd('ridge-x' + i) * 420) - 50 - off, wy = GROUND + 8 + Math.floor(rnd('ridge-y' + i) * 60);
-    const len = 14 + Math.floor(rnd('ridge-l' + i) * 22);
-    for (let k = 0; k < len; k++) {
-      const yy = wy - Math.round(Math.sin((k / len) * Math.PI) * 2);
-      px(wx + k, yy, wy > 140 ? 8 : 7); if (k > 1 && k < len - 2) px(wx + k, yy + 1, 5);
-    }
-  }
-  // 前景两个雪堆（左下、右下）
-  snowMound(10 - off, 180, 50, 14); snowMound(306 - off, 182, 64, 18);
-  // 螃蟹走过的小脚印
-  const cx = crabWorldX(t);
-  for (let x = -40; x < cx + 6; x += 6) {
-    const k = Math.round(x / 6) & 1, sx = x - off;
-    px(sx, FEET - 1 + k * 2, 5); px(sx + 1, FEET - 1 + k * 2, 5); px(sx + 3, FEET + 2 - k * 2, 5);
-  }
-}
-function snowMound(cx, by, w, h) {
-  for (let j = 0; j < h; j++) {
-    const f = j / h, half = Math.round((w / 2) * Math.sqrt(1 - f * f));
-    for (let i = -half; i <= half; i++) {
-      const top = j === h - 1 || Math.abs(i) === half;
-      const c = top ? 8 : dith([6, 7, 8], 1.9 - (i + half) / (2 * half + 1) * 1.5 + f * 0.5, cx + i, by - j);
-      px(cx + i, by - j, c);
-    }
-  }
-}
-
-// ───────────────────────── 松树（前景） ─────────────────────────
-function drawTree(t) {
-  const off = Math.round(camX(t)), cx = 40 - off, base = 122;
-  rect(cx - 2, base - 8, 5, 9, 15); vline(cx - 2, base - 8, base, 10); vline(cx + 2, base - 8, base, 10); px(cx, base - 5, 16);
-  hline(cx - 5, cx + 5, base, 7); hline(cx - 3, cx + 3, base - 1, 8);
-  // 从下往上画四层，上一层的下沿压在下一层的雪上（每层自己描轮廓）
-  const tiers = [[base - 26, 19, 17], [base - 39, 17, 13], [base - 50, 14, 10], [base - 59, 11, 6]];
-  tiers.forEach(([ay, h, hw], k) => {
-    const cells = [];
-    for (let j = 0; j < h; j++) {
-      const half = Math.round(hw * Math.pow((j + 1) / h, 0.8));
-      for (let dx = -half; dx <= half; dx++) {
-        if (j >= h - 2 && Math.abs(dx) > 1 && ((dx + 64 + k) % 4) >= (j === h - 1 ? 2 : 3)) continue;   // 下沿一根根垂下来的枝尖
-        let c = dx > half * 0.3 ? 1 : 2;                                                                // 右半边背光
-        if (dx <= half * 0.3 && ((dx * 3 + j * 5 + k) % 7 === 0)) c = 3;                                   // 针叶的亮点
-        if (dx > half * 0.3 && ((dx * 3 + j * 5 + k) % 9 === 0)) c = 0;
-        const snowTop = Math.round(h * 0.3 - Math.abs(dx) * 0.42 + 1.2 * Math.sin(dx * 1.9 + k * 2));
-        if (j <= snowTop) c = j === snowTop ? 7 : (j === 0 || dx < 0 ? 9 : 8);
-        if (j === h - 4 && Math.abs(dx) >= half - 3 && Math.abs(dx) < half) c = 8;                      // 枝尖上托着的雪
-        if (j === h - 3 && Math.abs(dx) >= half - 2 && Math.abs(dx) < half) c = 7;
-        cells.push([cx + dx, ay + j, c]);
-      }
-    }
-    outlined(cells, 0);
-  });
-  px(cx, base - 61, 9); px(cx, base - 60, 8);
-}
-
-// ───────────────────────── 路灯 ─────────────────────────
-const LAMP_HEAD = [
-  '.......k.......',
-  '......kIk......',
-  '.......k.......',
-  '......k8k......',
-  '.....k888k.....',
-  '....k88887k....',
-  '...k8888877k...',
-  '..kIIiiiiiiik..',
-  '.kkkkkkkkkkkkk.',
-  '..kGgggkgggGk..',
-  '..kGgccgccggk..',
-  '..kgGccgccggk..',
-  '..kggccgccggk..',
-  '..kggggkggggk..',
-  '...kgggkgggk...',
-  '..kkkkkkkkkkk..',
-  '...kIiiiiiik...',
-  '....kIiiiik....',
-  '......kIk......',
-];
-function drawLamp(t) {
-  const off = Math.round(camX(t)), x = LAMP_X - off, on = t >= LAMP_ON;
-  const top = 44;
-  const map = on ? { k: 0, I: 3, i: 2, 8: 8, 7: 7, g: 19, G: 20, c: 20 } : { k: 0, I: 3, i: 2, 8: 8, 7: 7, g: 1, G: 3, c: 2 };
-  // 杆：3 格宽，左墨、中高光、右深
-  for (let y = top + 19; y < LAMP_BASE - 6; y++) { px(x - 1, y, 0); px(x, y, 3); px(x + 1, y, 1); }
-  // 横担（给梯子靠的那根），上面积雪
-  hline(x - 6, x + 6, top + 23, 0); hline(x - 5, x + 5, top + 22, 8); px(x - 6, top + 22, 7); px(x + 6, top + 22, 7);
-  px(x - 7, top + 23, 3); px(x + 7, top + 23, 3); px(x - 7, top + 24, 0); px(x + 7, top + 24, 0);
-  // 中段的装饰环
-  hline(x - 2, x + 2, top + 46, 0); hline(x - 2, x + 2, top + 47, 3); hline(x - 2, x + 2, top + 48, 0);
-  // 底座：一层层台阶
-  rect(x - 3, LAMP_BASE - 6, 7, 2, 0); hline(x - 2, x + 2, LAMP_BASE - 6, 3);
-  rect(x - 4, LAMP_BASE - 4, 9, 2, 0); hline(x - 3, x + 3, LAMP_BASE - 4, 3);
-  rect(x - 5, LAMP_BASE - 2, 11, 2, 0); hline(x - 4, x + 4, LAMP_BASE - 2, 3);
-  hline(x - 4, x + 4, LAMP_BASE - 7, 8); hline(x - 3, x + 3, LAMP_BASE - 5, 7);
-  // 底座四周的积雪
-  for (let i = -9; i <= 9; i++) { const hh = Math.max(0, 3 - Math.floor(Math.abs(i) / 3)); for (let j = 0; j < hh; j++) px(x + i, LAMP_BASE - j, j === hh - 1 ? 8 : 7); }
-  spr(LAMP_HEAD, map, x - 7, top, false, on ? 2 : 0);
-}
-
-// ───────────────────────── 长椅 ─────────────────────────
-function drawBench(t) {
-  const off = Math.round(camX(t)), x = BENCH_X - off, y = BENCH_FEET, w = 54;
-  if (frameOf(t) > 30) {                   // 灯在左上：长椅的影子落在右下的雪上（这些格子灯照不到）
-    for (let r = 0; r < 6; r++) {
-      const yy = y - 1 + r, x0 = x + 8 + r * 3, x1 = x + w + 10 + r * 3;
-      for (let xx = x0; xx <= x1; xx++) {
-        const edge = xx - x0 < 2 || x1 - xx < 2 || r === 5;
-        if (edge && bt(xx + off, yy) < 0.5) continue;
-        const i = yy * LW + xx; if (xx < 0 || xx >= LW) continue;
-        B[i] = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8][B[i]] ?? B[i]; M[i] = 4;
-      }
-    }
-  }
-  // 铁腿（后两条略短、偏右一点 → 有一点透视）
-  for (const lx of [4, w - 6]) { vline(x + lx + 2, y - 13, y - 2, 0); px(x + lx + 3, y - 2, 0); }
-  // 椅背：三条木板
-  for (const [yy, hh] of [[y - 29, 3], [y - 25, 3], [y - 21, 3]]) {
-    rect(x, yy, w, hh, 16); hline(x, x + w - 1, yy, 17); hline(x, x + w - 1, yy + hh - 1, 15);
-    px(x - 1, yy + 1, 0); px(x + w, yy + 1, 0);
-  }
-  // 椅面：两条木板，看得到一点上面
-  rect(x - 1, y - 14, w + 2, 3, 16); hline(x - 1, x + w, y - 14, 17); hline(x - 1, x + w, y - 12, 15);
-  rect(x, y - 11, w, 2, 15); hline(x, x + w - 1, y - 9, 10);
-  // 两头的铁架：从椅背顶到地，扶手弯一下
-  for (const sx of [2, w - 4]) {
-    vline(x + sx, y - 30, y, 0); vline(x + sx + 1, y - 30, y, 2);
-    hline(x + sx - 2, x + sx + 3, y - 18, 0); px(x + sx - 3, y - 17, 0); px(x + sx + 4, y - 17, 0);
-    px(x + sx - 1, y, 0); px(x + sx + 2, y, 0);
-  }
-  // 积雪：椅背顶、椅面上一小堆一小堆
-  for (let i = -1; i <= w; i++) { px(x + i, y - 30, 8); if (Math.sin(i * 0.7) > 0.2) px(x + i, y - 31, 8); }
-  for (let i = 3; i < w - 3; i++) { const hh = Math.round(1 + Math.max(0, Math.sin(i * 0.33 + 1)) * 1.6); for (let j = 1; j <= hh; j++) px(x + i, y - 14 - j, j === hh ? 8 : 7); }
-  // 地上的雪把腿埋了一点
-  for (let i = -3; i < w + 3; i++) if (Math.sin(i * 0.9) > -0.2) px(x + i, y, 7);
-}
-
-// ───────────────────────── 螃蟹（部件拼装 + 自动描边） ─────────────────────────
-// 字母：r 身体，d 暗部，h 高光，b 肚子，B 肚子暗，w 眼白，e 眼珠，c 腮红，k 轮廓（自动描的也是 k）
-const BODY = [
-  '.........rrrrrrrr.........',
-  '......rrhhhhrrrrrrrr......',
-  '....rhhhhrrrrrrrrrrrrd....',
-  '..rhhhrrrrrrrrrrrrrrrrdd..',
-  '.rhhrrrrrrrrrrrrrrrrrrrdd.',
-  'rrrrrrrrrrrrrrrrrrrrrrrrdd',
-  'rrrrrccrrrrkrrkrrrrccrrrdd',
-  'drrrrrrrrrrrkkrrrrrrrrrrdd',
-  '.ddrrrrbbbbbbbbbbbbrrrrdd.',
-  '..ddrrbbbbbbbbbbbbbbrrdd..',
-  '....dddBbbbbbbbbbbBddd....',
-  '.......ddBBBBBBBBdd.......',
-];
-const CLAW = [            // 左边的钳子（右边镜像），开口朝上
-  '.rr....rr.',
-  'rhrr..rrrd',
-  'rhrr..rrrd',
-  'rhrrr.rrrd',
-  'rrrrrrrrrd',
-  'rrrrrrrrdd',
-  '.rrrrrrdd.',
-  '..rrrddd..',
-];
-const CLAW_OPEN = [
-  'rr......rr',
-  'rhr....rrd',
-  'rhrr..rrrd',
-  'rhrrrrrrrd',
-  'rrrrrrrrrd',
-  '.rrrrrrrd.',
-  '..rrrrdd..',
-];
-const EYES = {
-  n: ['.www.', 'wwwww', 'wweew', 'wweew', '.www.'],
-  l: ['.www.', 'wwwww', 'eewww', 'eewww', '.www.'],
-  r: ['.www.', 'wwwww', 'wwwee', 'wwwee', '.www.'],
-  u: ['.eew.', 'weeww', 'wwwww', 'wwwww', '.www.'],
-  s: ['..www..', '.wwwww.', 'wwwwwww', 'wwwewww', 'wwwwwww', '.wwwww.', '..www..'],
-  h: ['.www.', 'wweww', 'wewew', 'wwwww', '.www.'],   // 笑眯眼：眼白上一道 ^
-};
-const CODE = { k: 1, d: 2, r: 3, h: 4, b: 5, B: 6, w: 7, e: 8, c: 9 };
-const CW = 80, CH = 72, OX = 27, OY = 34;          // 螃蟹小缓冲；身子左上角在 (OX, OY)
-function cellsOf(rows, x0, y0, flip) {
-  const out = [], w = rows[0].length;
-  rows.forEach((r, j) => { if (r.length !== w) throw new Error('螃蟹部件行宽不一致'); for (let i = 0; i < w; i++) { const ch = r[flip ? w - 1 - i : i]; if (ch !== '.') out.push([x0 + i, y0 + j, CODE[ch]]); } });
   return out;
 }
-function lineCells(x0, y0, x1, y1, code, thick) {
-  const out = []; let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy, x = x0, y = y0;
+// 多边形：像素中心在里面的格子（整数顶点，边是干净的台阶）
+function polyCells(pts, c) {
+  let y0 = Infinity, y1 = -Infinity;
+  for (const p of pts) { y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  const out = [];
+  for (let y = Math.floor(y0); y <= Math.ceil(y1); y++) {
+    const cy = y + 0.5, xs = [];
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i], [xj, yj] = pts[j];
+      if ((yi > cy) !== (yj > cy)) xs.push(xi + ((cy - yi) / (yj - yi)) * (xj - xi));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) for (let x = Math.ceil(xs[k] - 0.5); x + 0.5 < xs[k + 1]; x++) out.push([x, y, c]);
+  }
+  return out;
+}
+function discCells(cx, cy, r, c) {
+  const out = [];
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++)
+    if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) out.push([x, y, c]);
+  return out;
+}
+// 粗线段（两头圆）：胳膊、腿
+function capsule(x0, y0, x1, y1, r, c) {
+  const out = [], vx = x1 - x0, vy = y1 - y0, L2 = vx * vx + vy * vy || 1;
+  for (let y = Math.floor(Math.min(y0, y1) - r); y <= Math.ceil(Math.max(y0, y1) + r); y++)
+    for (let x = Math.floor(Math.min(x0, x1) - r); x <= Math.ceil(Math.max(x0, x1) + r); x++) {
+      const u = clamp(((x - x0) * vx + (y - y0) * vy) / L2), ex = x - (x0 + u * vx), ey = y - (y0 + u * vy);
+      if (ex * ex + ey * ey <= r * r) out.push([x, y, typeof c === 'function' ? c(u, ex, ey) : c]);
+    }
+  return out;
+}
+// 1 像素的线（Bresenham）
+function lineCells(x0, y0, x1, y1, c) {
+  x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+  const out = []; const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy, x = x0, y = y0;
   for (;;) {
-    out.push([x, y, code]);
-    if (thick > 1) { if (dx > -dy) out.push([x, y + 1, code]); else out.push([x + 1, y, code]); }
+    out.push([x, y, c]);
     if (x === x1 && y === y1) break;
     const e2 = 2 * err; if (e2 >= dy) { err += dy; x += sx; } if (e2 <= dx) { err += dx; y += sy; }
   }
   return out;
 }
-function putPart(buf, cells, outline = true) {
-  if (outline) {
-    const set = new Set(cells.map(([x, y]) => y * CW + x));
-    for (const [x, y] of cells) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= CW || yy >= CH) continue;
-      if (!set.has(yy * CW + xx)) buf[yy * CW + xx] = 1;
+
+// ───────────────────────── 天、云（两个镜头共用） ─────────────────────────
+const SKY = [3, 4, 5, 6, 7];
+function skyFill(hz) {
+  for (let y = 0; y < hz; y++) {
+    const v = Math.pow(y / hz, 1.25) * 4;
+    for (let x = 0; x < LW; x++) CUR[y * LW + x] = dith(SKY, v, x, y);
+  }
+}
+// 云：几团圆拼起来、底是平的；按「右上来的光」算明暗，在 6 / 7 / 8 三格之间抖动过渡。
+// 每团圆的半径每 0.25 秒换一档（±0.5 格）：云边上几格像素在换张，云一直是活的，但不会抖。
+// 抖动的格子按云自己的坐标取，云飘的时候花纹跟着走、不「滑」。
+function cloud(cx, base, puffs, t, key) {
+  cx = Math.round(cx); base = Math.round(base);
+  const f = Math.floor(F12(t) / 3), sh = MV.hash(key) % 3;
+  const P = puffs.map(([dx, dy, r], i) => [cx + dx, base + dy, r + 0.5 * (((f + i * 2 + sh) % 3) - 1)]);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity;
+  for (const [x, y, r] of P) { x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r); y0 = Math.min(y0, y - r); }
+  for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(LH - 1, base); y++) for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(LW - 1, Math.ceil(x1)); x++) {
+    let best = -1, nx = 0, ny = 0;
+    for (const [qx, qy, r] of P) {
+      const dx = x - qx, dy = y - qy, d = Math.hypot(dx, dy);
+      if (d <= r && r - d > best) { best = r - d; nx = dx / r; ny = dy / r; }
     }
-  }
-  for (const [x, y, c] of cells) if (x >= 0 && y >= 0 && x < CW && y < CH) buf[y * CW + x] = c;
-}
-// pose：{ by 身子上下偏移, eyes 眼型, stalk 眼柄长, lean 眼睛左右歪, armL/armR 胳膊姿势, claw 'c'|'o', legs 腿型, wf 走路帧 }
-const ARMS = {            // 左边：肩、肘、腕（相对身子左上角）；右边镜像
-  rest: [[1, 6], [-4, 6], [-6, 1]],
-  restDown: [[1, 6], [-4, 7], [-6, 2]],
-  up: [[2, 4], [-3, -1], [-4, -8]],
-  upHigh: [[2, 4], [-2, -3], [-3, -10]],
-  out: [[1, 5], [-6, 3], [-10, -2]],
-  low: [[1, 6], [-5, 8], [-8, 4]],
-};
-// 腿：左边三条，每条 [胯, 膝, 脚]。胯、膝相对身子左上角（跟着身子上下），脚相对地面那一行（OY+18，不跟身子动）；右边镜像
-const LEGS = {
-  stand: [[[2, 8], [-3, 8], [-6, 18]], [[4, 10], [0, 11], [-2, 18]], [[7, 11], [4, 13], [2, 18]]],
-  crouch: [[[2, 8], [-5, 8], [-8, 18]], [[4, 10], [-2, 10], [-4, 18]], [[7, 11], [2, 12], [0, 18]]],
-  splay: [[[2, 8], [-5, 6], [-9, 18]], [[4, 10], [-2, 9], [-5, 18]], [[7, 11], [2, 12], [0, 18]]],
-  tuck: [[[2, 8], [-3, 9], [-4, 15]], [[4, 10], [0, 12], [-1, 16]], [[7, 11], [4, 13], [3, 16]]],
-};
-const WALK_LIFT = [[1, 0, 0, 0], [0, 0, 1, 0], [1, 0, 0, 0]];   // 走路 4 帧里哪条腿抬起来
-const WALK_SHIFT = [1, 0, -1, 0];
-function buildCrab(p) {
-  const buf = new Uint8Array(CW * CH);
-  const bx = OX, by = OY + (p.by || 0);
-  const W2 = 25;     // 身子宽 26，镜像用
-  // 腿（在身子后面）
-  for (const side of [0, 1]) {
-    const wf = side === 0 ? p.wf : (p.wf + 2) % 4;
-    const set = LEGS[p.legs === 'walk' ? 'stand' : p.legs];
-    set.forEach(([hip, knee, foot], i) => {
-      const mx = (x) => (side ? bx + W2 - x : bx + x);
-      let fx = foot[0], fy = foot[1], kx = knee[0], ky = knee[1];
-      if (p.legs === 'walk') { fx += WALK_SHIFT[wf]; kx += WALK_SHIFT[wf]; if (WALK_LIFT[i][wf]) { fy -= 2; ky -= 1; } }
-      const H = [mx(hip[0]), by + hip[1]], K = [mx(kx), by + ky], F = [mx(fx), OY + fy];
-      putPart(buf, [...lineCells(H[0], H[1], K[0], K[1], 2, 1), ...lineCells(K[0], K[1], F[0], F[1], 2, 1)]);
-    });
-  }
-  // 眼柄和眼睛
-  const eyeRows = EYES[p.eyes || 'n'];
-  for (const side of [0, 1]) {
-    const sx = side ? bx + 16 : bx + 8;
-    const top = by - (p.stalk || 4);
-    putPart(buf, [...lineCells(sx, by + 1, sx + (p.lean || 0), top, 3, 1), ...lineCells(sx + 1, by + 1, sx + 1 + (p.lean || 0), top, 2, 1)]);
-    const ew = eyeRows[0].length, eh = eyeRows.length;
-    const ex = sx + (p.lean || 0) - Math.floor((ew - 2) / 2), ey = top - eh;
-    putPart(buf, cellsOf(eyeRows, ex, ey, false));
-  }
-  // 身子
-  putPart(buf, cellsOf(BODY, bx, by, false));
-  // 胳膊 + 钳子
-  for (const side of [0, 1]) {
-    const pose = ARMS[side ? (p.armR || p.arm || 'rest') : (p.armL || p.arm || 'rest')];
-    const dy = side ? (p.clawDyR || 0) : (p.clawDyL || 0);
-    const mx = (x) => (side ? bx + W2 - x : bx + x);
-    const [s, e, w] = pose.map(([x, y], i) => [mx(x), by + y + (i === 2 ? dy : 0)]);
-    putPart(buf, [...lineCells(s[0], s[1], e[0], e[1], 3, 2), ...lineCells(e[0], e[1], w[0], w[1], 3, 2)]);
-    const cl = p.claw === 'o' ? CLAW_OPEN : CLAW;
-    const cw = cl[0].length, chh = cl.length;
-    const cx = side ? w[0] - Math.floor(cw / 2) + 1 : w[0] - Math.floor(cw / 2), cy = w[1] - chh + 1;
-    putPart(buf, cellsOf(cl, cx, cy, side === 1));
-  }
-  return buf;
-}
-const CRAB_NIGHT = { 1: 10, 2: 23, 3: 11, 4: 12, 5: 22, 6: 23, 7: 7, 8: 0, 9: 12 };
-const CRAB_LIT = { 1: 10, 2: 12, 3: 13, 4: 14, 5: 14, 6: 21, 7: 9, 8: 0, 9: 12 };
-function blitCrab(buf, x, y, map) {
-  for (let j = 0; j < CH; j++) for (let i = 0; i < CW; i++) { const c = buf[j * CW + i]; if (c) px(x + i - OX, y + j - OY, map[c], 1); }
-}
-
-// 螃蟹走到哪（世界坐标，身子左上角 x）
-function crabWorldX(t) {
-  const x0 = -34, x1 = CRAB_STOP, T = 1.9;
-  if (t >= T) return x1;
-  const p = t / T, v = 1 / 0.875;
-  const d = p < 0.75 ? v * p : v * 0.75 + v * (p - 0.75) - v * (p - 0.75) * (p - 0.75) / (2 * 0.25);
-  return Math.round(x0 + (x1 - x0) * d);
-}
-// 按时间给姿势（逐帧，不补间）
-function crabPose(t) {
-  const f = frameOf(t);
-  if (t < 1.9) {
-    const wf = f % 4;
-    return { pose: { by: wf % 2, eyes: 'r', stalk: 4, lean: 1, arm: 'rest', clawDyL: wf < 2 ? 0 : 1, clawDyR: wf < 2 ? 1 : 0, legs: 'walk', wf }, jump: 0 };
-  }
-  if (t < 2.0) return { pose: { by: 1, eyes: 'n', stalk: 4, arm: 'restDown', legs: 'stand', wf: 0 }, jump: 0 };
-  if (t < 2.167) return { pose: { by: 0, eyes: 'l', stalk: 4, lean: -2, arm: 'rest', legs: 'stand', wf: 0 }, jump: 0 };
-  if (t < 2.333) return { pose: { by: 0, eyes: 'r', stalk: 4, lean: 2, arm: 'rest', legs: 'stand', wf: 0 }, jump: 0 };
-  if (t < LAMP_ON) return { pose: { by: 0, eyes: 'u', stalk: 5, lean: -1, arm: 'rest', legs: 'stand', wf: 0 }, jump: 0 };
-  if (t < 2.75) return { pose: { by: -1, eyes: 's', stalk: 7, lean: 0, arm: 'out', claw: 'o', legs: 'splay', wf: 0 }, jump: f === 30 ? 2 : 0, bang: true };
-  if (t < 2.917) return { pose: { by: 3, eyes: 'h', stalk: 3, arm: 'low', legs: 'crouch', wf: 0 }, jump: 0 };
-  if (t < 3.25) { const k = f - 35; return { pose: { by: 0, eyes: 'h', stalk: 5, arm: 'up', claw: 'o', legs: 'tuck', wf: 0 }, jump: [9, 15, 16, 11][Math.max(0, Math.min(3, k))] }; }
-  if (t < 3.417) return { pose: { by: 3, eyes: 'h', stalk: 3, arm: 'up', claw: 'o', legs: 'splay', wf: 0 }, jump: 0 };
-  if (t < 3.5) return { pose: { by: -1, eyes: 'h', stalk: 5, arm: 'upHigh', claw: 'o', legs: 'stand', wf: 0 }, jump: 1 };
-  // 开心：钳子举着，跟拍子一左一右挥
-  const beat = Math.floor((t - 3.5) / 0.25) % 2;
-  return { pose: { by: Math.floor(t / BEAT) % 2, eyes: 'h', stalk: 4, armL: beat ? 'upHigh' : 'up', armR: beat ? 'up' : 'upHigh', claw: 'o', legs: 'stand', wf: 0 }, jump: 0 };
-}
-function drawCrab(t) {
-  const off = Math.round(camX(t)), wx = crabWorldX(t) - off;
-  const { pose, jump, bang } = crabPose(t);
-  // 地上的影子（腾空时变小）
-  // 影子：灯下是冷蓝（灯照不到的雪），夜里是深一格的雪影；中间实、边上抖动
-  const sw = jump > 8 ? 9 : 14, sy = FEET + 1;
-  for (let i = -sw; i <= sw; i++) for (let j = -1; j <= 1; j++) {
-    const e = (i * i) / (sw * sw) + (j * j) / 2.2;
-    if (e > 1) continue;
-    const x = wx + 13 + i, y = sy + j;
-    if (e > 0.55 && bt(x + off, y) < 0.5) continue;
-    px(x, y, t >= LAMP_ON ? 6 : 5, 4);
-  }
-  const buf = buildCrab(pose);
-  const lit = t >= LAMP_ON;
-  blitCrab(buf, wx, FEET - 18 - jump, lit ? CRAB_LIT : CRAB_NIGHT);
-  return { x: wx, y: FEET - 18 - jump, pose, bang };
-}
-
-// ───────────────────────── 气泡：! 和爱心 ─────────────────────────
-const BANG = [
-  '.kkkkkkk.',
-  'kwwwwwwwk',
-  'kwwwrwwwk',
-  'kwwwrwwwk',
-  'kwwwrwwwk',
-  'kwwwwwwwk',
-  'kwwwrwwwk',
-  'kwwwwwwwk',
-  '.kkkkkkk.',
-  '...kwk...',
-  '....k....',
-];
-const HEART = [
-  '.kkk...kkk.',
-  'khhrk.krrrk',
-  'khrrrkrrrrk',
-  'krrrrrrrrrk',
-  'krrrrrrrrdk',
-  '.krrrrrrdk.',
-  '..krrrrdk..',
-  '...krrdk...',
-  '....kdk....',
-  '.....k.....',
-];
-const HEART_S = ['.kk.kk.', 'khrkrrk', 'krrrrrk', '.krrrk.', '..krk..', '...k...'];
-function drawBubbles(t, c) {
-  const f = frameOf(t);
-  if (c.bang) spr(BANG, { k: 0, w: 9, r: 12 }, c.x + 9, c.y - 26 + (f === 30 ? -2 : 0), false, 3);
-  if (t >= 3.5) {
-    const k = f - 42;                                   // 3.5 秒那一帧是小心，下一帧蹦大，然后慢慢往上飘、跟拍子一上一下
-    const rise = Math.min(6, Math.floor((t - 3.5) * 5));
-    const hx = c.x + 8, hy = c.y - 26 - rise - (k > 1 ? Math.floor(t / BEAT) % 2 : 0);
-    const map = { k: 10, h: 14, r: 12, d: 11 };
-    if (k === 0) spr(HEART_S, map, hx + 2, hy + 5, false, 3);
-    else spr(HEART, map, hx, hy - (k === 1 ? 2 : 0), false, 3);
+    if (best < 0) continue;
+    let b = 0.62 + 0.55 * (nx * 0.6 - ny * 0.8);      // 朝光的一面亮
+    b -= 0.5 * clamp((y - (base - 7)) / 7);            // 底下一层暗
+    px(x, y, y === base ? 6 : dith([6, 7, 8], b * 2.4, x - cx, y - base));
   }
 }
 
-// ───────────────────────── 雪 ─────────────────────────
-function drawSnow(t, layer) {
-  const n = [70, 46, 22][layer], speed = [9, 16, 30][layer], par = [0.2, 0.6, 1.3][layer];
-  const off = camX(t) * par;
+// 海上的闪光：屏幕坐标（反光跟着太阳，不跟镜头），一秒换 12 次
+const SEA_SET = new Set([2, 3, 4, 5, 9, 10]);
+function glitter(t, x0, x1, y0, y1, n, key) {
+  const f = F12(t);
   for (let i = 0; i < n; i++) {
-    const key = 'snow' + layer + ':' + i;
-    const x0 = rnd(key + 'x') * (LW + 40), y0 = rnd(key + 'y') * (LH + 20);
-    const sp = speed * (0.7 + rnd(key + 's') * 0.6);
-    const y = ((y0 + sp * t) % (LH + 20)) - 10;
-    const amp = 1 + rnd(key + 'a') * (layer + 1) * 1.5, ph = rnd(key + 'p') * 6.28;
-    let x = x0 - off - 6 * t + amp * Math.sin(t * (1.2 + layer * 0.4) + ph);
-    x = ((x % (LW + 40)) + LW + 40) % (LW + 40) - 20;
-    const xi = Math.round(x), yi = Math.round(y);
-    if (layer === 0) { if (yi < GROUND + 4) px(xi, yi, 6); }
-    else if (layer === 1) px(xi, yi, 8);
-    else { const big = rnd(key + 'b') < 0.55; px(xi, yi, 9); if (big) { px(xi + 1, yi, 9); px(xi, yi + 1, 8); px(xi + 1, yi + 1, 8); } }
+    const r = MV.rng(key + i);
+    const x = Math.round(x0 + r() * (x1 - x0)), y = Math.round(y0 + Math.pow(r(), 1.4) * (y1 - y0));
+    if (!SEA_SET.has(get(x, y))) continue;
+    const on = MV.rng(key + i + ':' + f)();
+    if (on > 0.34) continue;
+    if (on < 0.07) { px(x, y, 8); if (SEA_SET.has(get(x - 1, y))) px(x - 1, y, 27); if (SEA_SET.has(get(x + 1, y))) px(x + 1, y, 27); }
+    else px(x, y, on < 0.2 ? 8 : 27);
+  }
+}
+// 海面上的浪纹：一小段一小段亮一格的横线，一闪一闪，跟着自己那层走
+const LIGHTER = { 2: 3, 3: 4, 4: 5, 5: 6, 9: 10, 10: 7 };
+function seaRipples(t, off, hz, y1, n, key, speed) {
+  const f = F12(t);
+  for (let i = 0; i < n; i++) {
+    const r = MV.rng(key + i);
+    const y = hz + 3 + Math.floor(Math.pow(r(), 0.85) * (y1 - hz - 3));
+    const len = 2 + Math.round((y - hz) / 9 + r() * 2);
+    const per = 6 + Math.floor(r() * 8), ph = Math.floor(r() * per);
+    if ((f + ph) % per >= per * 0.6) continue;
+    const sx = Math.round((((r() * 420 - off - speed * t) % 420) + 420) % 420) - 50;
+    for (let k = 0; k < len; k++) { const c0 = get(sx + k, y); if (LIGHTER[c0] !== undefined) px(sx + k, y, LIGHTER[c0]); }
   }
 }
 
-// ───────────────────────── 灯光（换色 + 抖动） ─────────────────────────
-function lightPass(t) {
-  const f = frameOf(t);
-  if (t < LAMP_ON) return;
-  const off = Math.round(camX(t)), lx = LAMP_X - off, ly = 56, gy = LAMP_BASE + 6;
-  const flash = f === 30;
-  for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) {
-    const i = y * LW + x, m = M[i];
-    if (m === 3 || m === 1) continue;                                        // UI 不动；螃蟹自己按暗处 / 灯下换整套颜色
-    if (m === 2 || m === 4) { if (flash) B[i] = FLASH[B[i]]; continue; }      // 光源、影子不被灯照
-    const dx = x - lx, wx = x + off;
-    let I = 0;
-    const d = Math.hypot(dx, (y - ly) * 1.1);
-    I = Math.max(I, 2.2 * (1 - d / 19));                                    // 灯头四周
-    if (y > ly + 6) {                                                       // 往下的光锥
-      const fr = (y - ly - 6) / (gy - ly - 6), w = 7 + fr * 46;
-      I = Math.max(I, (1 - Math.abs(dx) / w) * (0.55 + 0.25 * fr));
-    }
-    if (y >= GROUND + 4) {                                                  // 雪地上的光池
-      const e = (dx / 78) ** 2 + ((y - gy) / 17) ** 2;
-      I = Math.max(I, 2.4 * (1 - e));
-    }
-    const lvl = Math.min(2, Math.floor(I + bt(wx, y)));
-    if (lvl === 1) B[i] = LIT1[B[i]]; else if (lvl === 2) B[i] = LIT2[B[i]];
-    if (flash) B[i] = FLASH[B[i]];
+// 海鸥：身子是格子精灵（朝右画，朝左时整只翻过来），翅膀是手点的四张（上、平、下、平），肩膀在身子的 (5, 0)。
+// 这么小的精灵描墨色轮廓会糊成一团黑：身子只描一圈灰（18），翅膀不描，翅尖一点墨色
+const GULL_BODY = ['.....wwww..', 'ggwwwwwwwey', '.GGwwwwwww.', '...GGGGG...'];
+const GULL_MAP = { g: 20, G: 19, w: 8, e: 0, y: 26 };
+const WING = [
+  [[0, -1, 8], [1, -1, 8], [-1, -1, 20], [0, -2, 20], [-1, -2, 20], [-2, -2, 19], [-1, -3, 20], [-2, -3, 19], [-3, -3, 19], [-2, -4, 19], [-3, -4, 19], [-4, -5, 0], [-3, -5, 0]],   // 上
+  [[1, -1, 8], [0, -1, 20], [-1, -1, 20], [-2, -1, 20], [-3, -1, 19], [-1, -2, 20], [-2, -2, 20], [-3, -2, 19], [-4, -2, 19], [-5, -2, 19], [-6, -2, 19], [-7, -3, 0], [-8, -3, 0]],  // 平（滑翔）
+  [[0, 1, 20], [-1, 2, 20], [0, 2, 20], [-1, 3, 19], [-2, 3, 19], [-2, 4, 19], [-3, 4, 19], [-3, 5, 0], [-4, 5, 0]],                                                          // 下
+];
+function gull(x, y, f, dir) {
+  x = Math.round(x); y = Math.round(y);
+  const flip = dir < 0, fx = (dx) => (flip ? x + 10 - dx : x + dx);
+  const C = new Comp();
+  C.add(gridCells(GULL_BODY, GULL_MAP, x, y, flip), 18);
+  C.add(WING[[0, 1, 2, 1][f & 3]].map(([dx, dy, c]) => [fx(5 + dx), y + dy, c]));
+  C.blit();
+}
+// 远处的小海鸥：一个「v」，两张换
+function gullTiny(x, y, f) {
+  x = Math.round(x); y = Math.round(y);
+  if (f & 1) { px(x - 2, y, 1); px(x - 1, y, 1); px(x + 1, y, 1); px(x + 2, y, 1); px(x, y + 1, 1); }
+  else { px(x - 2, y - 1, 1); px(x - 1, y, 1); px(x + 1, y, 1); px(x + 2, y - 1, 1); px(x, y + 1, 1); }
+}
+// 风：一道白线、头上打个卷，从右往左掠过去（「海风」）
+function windStreak(x, y, len) {
+  x = Math.round(x); y = Math.round(y);
+  hline(x, x + len, y, 8);
+  px(x - 1, y - 1, 8); px(x - 1, y - 2, 8); px(x, y - 3, 8); px(x + 1, y - 2, 8);
+  px(x + len + 1, y + 1, 7); px(x + len + 2, y + 1, 7);
+}
+
+// ───────────────────────── 镜头 A：海边公路（远景） ─────────────────────────
+const HZ_A = 68;                                     // 海平线
+const camA = (t) => 14 * t;                          // 镜头一个方向慢慢右移；每层乘自己的视差系数再取整
+const lay = (t, k) => Math.round(camA(t) * k);
+// 路：左边高、右边低的一段坡（余弦 S 形），远边的 y
+const ROAD_Y0 = 70, ROAD_Y1 = 116, SLOPE_A = -16, SLOPE_B = 206;
+function roadFar(x) {
+  if (x <= SLOPE_A) return ROAD_Y0; if (x >= SLOPE_B) return ROAD_Y1;
+  return ROAD_Y0 + ((ROAD_Y1 - ROAD_Y0) * (1 - Math.cos((Math.PI * (x - SLOPE_A)) / (SLOPE_B - SLOPE_A)))) / 2;
+}
+const contactY = (x) => roadFar(x) + 9;              // 车轮压的那条线
+// 少年在世界里的位置：坡上匀加速，拍 6 前轮正好压到水洼中间，之后匀速
+const PUDDLE_X = 236, X0 = 26, V0 = 30, X_S = PUDDLE_X - 9;
+const ACC = (2 * (X_S - X0 - V0 * T_SPLASH)) / (T_SPLASH * T_SPLASH), V_S = V0 + ACC * T_SPLASH;
+const boyX = (t) => (t <= T_SPLASH ? X0 + V0 * t + 0.5 * ACC * t * t : X_S + V_S * (t - T_SPLASH));
+
+function capeA(t) {
+  const off = lay(t, 0.15);
+  for (let sx = 0; sx < LW; sx++) {
+    const u = sx + off - 262;
+    if (u < 0) continue;
+    const h = Math.round(Math.min(15, 2 + u * 0.55 + 1.4 * Math.sin(u * 0.23)));
+    for (let j = 0; j < h; j++) px(sx, HZ_A - 1 - j, j === h - 1 ? 11 : dith([11, 12], 0.4 + (h - j) / h * 1.2, u, j));
+  }
+  // 岬尖上的灯塔
+  const lx = 268 - off, base = HZ_A - 4;
+  rect(lx, base - 9, 3, 9, 8); vline(lx + 2, base - 9, base - 1, 20); hline(lx, lx + 2, base - 6, 24); hline(lx, lx + 2, base - 5, 24);
+  rect(lx - 1, base - 12, 5, 3, 0); px(lx + 1, base - 11, 27); px(lx + 1, base - 13, 0);
+}
+function sailboat(t) {
+  const sx = Math.round(118 + 1.5 * t - lay(t, 0.2)), y = HZ_A + 2, bob = Math.floor(t * 2) % 2;
+  for (let j = 0; j < 6; j++) for (let i = 0; i <= Math.floor(j / 2); i++) px(sx + 1 + i, y - 7 + j + bob, i === Math.floor(j / 2) && j > 1 ? 20 : 8);
+  vline(sx, y - 7 + bob, y - 1 + bob, 0);
+  hline(sx - 3, sx + 4, y + bob, 0); hline(sx - 2, sx + 3, y + 1 + bob, 1);
+}
+function seaA(t) {
+  const off = lay(t, 0.3);
+  for (let y = HZ_A; y < 112; y++) for (let x = 0; x < LW; x++) {
+    let c;
+    if (y === HZ_A) c = 7;
+    else if (y < HZ_A + 3) c = 5;
+    else if (y < 95) c = dith([5, 4, 3, 2], 0.2 + ((y - HZ_A - 3) / (95 - HZ_A - 3)) * 3, x + off, y);
+    else c = dith([2, 9, 10], ((y - 95) / 9) * 2, x + off, y);
+    CUR[y * LW + x] = c;
+  }
+  seaRipples(t, off, HZ_A, 100, 110, 'ripA', 5);
+  glitter(t, 150, 320, HZ_A + 2, 100, 60, 'glA');
+}
+// 沙滩和浪（视差 0.6）：两拍一道浪推上来，碎成白沫冲上沙、再退回去
+const SHORE_Y = 104;
+function shoreA(t) {
+  const off = lay(t, 0.6);
+  for (let y = SHORE_Y; y < 126; y++) for (let x = 0; x < LW; x++) CUR[y * LW + x] = dith([29, 28], (y - SHORE_Y) / 5, x + off, y);
+  const ph = ((MV.beat(F12(t) / 12) / 2) % 1 + 1) % 1;
+  const crest = Math.round(SHORE_Y - 8 + ph * 7);
+  for (let x = 0; x < LW; x++) {
+    const xw = x + off;
+    if (tex(xw, 3) > 0.22) px(x, crest, 8);
+    if (tex(xw, 9) > 0.45) px(x, crest + 1, 10);
+    if (tex(xw, 21) > 0.6) px(x, crest - 1, 10);
+  }
+  const wash = ph > 0.75 ? (ph - 0.75) / 0.25 : ph < 0.4 ? 1 - ph / 0.4 : 0;
+  for (let x = 0; x < LW; x++) {
+    const xw = x + off, edge = SHORE_Y + Math.round(wash * 4 + tex(xw >> 2, 17) * 1.6 - 0.8);
+    for (let y = SHORE_Y - 1; y <= edge; y++) px(x, y, y === edge ? 8 : 10);
   }
 }
-// 灯下的雪地上几颗一闪一闪的亮点
-function drawGlints(t) {
-  if (t < LAMP_ON) return;
-  const off = Math.round(camX(t)), lx = LAMP_X - off, gy = LAMP_BASE + 6, k = Math.floor(t * 8);
+// 护栏（视差 1）：立柱每 16 格一根，W 形钢板压在立柱前面
+function railA(t) {
+  const off = lay(t, 1);
+  for (let k = Math.floor(off / 16) - 1; k <= Math.floor((off + LW) / 16) + 1; k++) {
+    const x = k * 16, sx = x - off, yF = Math.round(roadFar(x));
+    vline(sx - 1, yF - 12, yF - 1, 0); vline(sx, yF - 12, yF - 1, 8); vline(sx + 1, yF - 12, yF - 1, 20); vline(sx + 2, yF - 12, yF - 1, 0);
+    hline(sx - 1, sx + 2, yF - 13, 0); px(sx, yF - 11, 26);
+  }
+  for (let sx = 0; sx < LW; sx++) {
+    const yF = Math.round(roadFar(sx + off));
+    px(sx, yF - 9, 0); px(sx, yF - 8, 8); px(sx, yF - 7, 20); px(sx, yF - 6, 19); px(sx, yF - 5, 17); px(sx, yF - 4, 0);
+  }
+}
+function roadA(t) {
+  const off = lay(t, 1);
+  for (let sx = 0; sx < LW; sx++) {
+    const x = sx + off, yF = Math.round(roadFar(x));
+    px(sx, yF, 17);
+    for (let j = 1; j <= 11; j++) {
+      const n = tex(x, j * 5);
+      let c = n < 0.1 ? 17 : n > 0.93 ? 19 : 18;
+      if (j <= 3 && 0.45 + (3 - j) * 0.12 > bt(x, j)) c = c === 17 ? 18 : 19;     // 远半边晒得亮：抖动
+      px(sx, yF + j, c);
+    }
+    if (((x % 12) + 12) % 12 < 7) px(sx, yF + 5, 26);            // 黄色中线
+    px(sx, yF + 12, 8); px(sx, yF + 13, 20); px(sx, yF + 14, 19); px(sx, yF + 15, 17);
+  }
+}
+// 坡下的草地（跟路一层）：上沿亮、往下深；草叶按 12 fps 三张一摆，小花两张一点头
+function bankA(t) {
+  const off = lay(t, 1), f = F12(t);
+  for (let sx = 0; sx < LW; sx++) {
+    const x = sx + off, top = Math.round(roadFar(x)) + 16;
+    for (let y = top; y < LH; y++) {
+      const d = y - top;
+      let c = d === 0 ? 16 : dith([15, 14, 13], 0.15 + (d / 44) * 2, x, y);
+      const n = tex(x, y);
+      if (n > 0.9 && d > 1) c = c === 13 ? 14 : 15;
+      CUR[y * LW + sx] = c;
+    }
+  }
+  for (let i = 0; i < 70; i++) {
+    const r = MV.rng('tuft' + i), xw = Math.floor(r() * 460) - 40, sx = xw - off;
+    if (sx < -4 || sx > LW + 4) continue;
+    const top = Math.round(roadFar(xw)) + 17, y = top + Math.floor(r() * (LH - top));
+    const sway = [0, 1, 0, -1][(Math.floor(f / 2) + i) & 3], tall = 2 + Math.floor(r() * 3), c = y - top > 24 ? 14 : 16;
+    for (const dx of [-1, 1]) { px(sx + dx, y, c === 14 ? 13 : 15); px(sx + dx * 2 + sway, y - 1, c); }
+    for (let k = 0; k < tall; k++) px(sx + (k === tall - 1 ? sway : 0), y - k, c);
+  }
   for (let i = 0; i < 26; i++) {
-    const a = rnd('glint-a' + i) * Math.PI * 2, r = Math.sqrt(rnd('glint-r' + i)) * 0.85;
-    const x = Math.round(lx + Math.cos(a) * r * 74), y = Math.round(gy + Math.sin(a) * r * 15);
-    if (x < 0 || x >= LW || y < GROUND + 3 || y >= LH || M[y * LW + x] !== 0) continue;
-    if (rnd('glint' + i + ':' + k) < 0.3) px(x, y, 9);
+    const r = MV.rng('flower' + i), xw = Math.floor(r() * 460) - 40, sx = xw - off;
+    if (sx < -3 || sx > LW + 3) continue;
+    const top = Math.round(roadFar(xw)) + 18, y = top + Math.floor(r() * Math.max(1, LH - top - 4));
+    const yellow = r() < 0.4, nod = (Math.floor(f / 3) + i) & 1;
+    const pet = yellow ? 26 : 8, mid = yellow ? 27 : 26;
+    px(sx - 1, y + nod, pet); px(sx + 1, y + nod, pet); px(sx, y - 1 + nod, pet); px(sx, y + 1 + nod, 14); px(sx, y + nod, mid);
+  }
+  // 最前面的一层大草丛（视差 1.3，比路走得快一点）：贴着画面下沿，三张一摆
+  const fo = lay(t, 1.3);
+  for (let i = 0; i < 9; i++) {
+    const r = MV.rng('clump' + i), sx = Math.round((((r() * 520 - fo) % 520) + 520) % 520) - 60, base = LH + 2;
+    const blades = 6 + Math.floor(r() * 4);
+    for (let b = 0; b < blades; b++) {
+      const lean = (b - blades / 2) * 0.9, hgt = 8 + Math.floor(r() * 10), sway = [0, 1, 2, 1][(Math.floor(f / 2) + i + b) & 3];
+      const tipx = sx + b * 2 + Math.round(lean + sway), tipy = base - hgt;
+      const cells = lineCells(sx + b * 2, base, tipx, tipy, 14).map(([x, y], k, a) => [x, y, k > a.length - 3 ? 15 : k < 3 ? 13 : 14]);
+      for (const [x, y, c] of cells) { px(x, y, c); px(x + 1, y, 13); }
+    }
   }
 }
-// 亮灯头两帧：十字星芒
-function drawFlare(t) {
-  const f = frameOf(t);
-  if (f < 30 || f > 31) return;
-  const off = Math.round(camX(t)), lx = LAMP_X - off, ly = 56;
-  const len = f === 30 ? 16 : 10;
-  for (let k = 3; k < len; k++) {
-    const c = k < len - 4 ? 20 : 19;
-    px(lx - 9 - k + 3, ly, c, 3); px(lx + 9 + k - 3, ly, c, 3);
-    if (k % 2 === 0) { px(lx - 6 - Math.floor(k * 0.7), ly - 5 - Math.floor(k * 0.7), 19, 3); px(lx + 6 + Math.floor(k * 0.7), ly - 5 - Math.floor(k * 0.7), 19, 3); }
-    if (k % 2 === 0) { px(lx - 6 - Math.floor(k * 0.7), ly + 5 + Math.floor(k * 0.7), 19, 3); px(lx + 6 + Math.floor(k * 0.7), ly + 5 + Math.floor(k * 0.7), 19, 3); }
+function puddleA(t) {
+  const off = lay(t, 1), cx = PUDDLE_X - off, cy = Math.round(contactY(PUDDLE_X)), f = F12(t);
+  for (let j = -3; j <= 3; j++) for (let i = -21; i <= 21; i++) {
+    const e = (i * i) / (18 * 18) + (j * j) / (2.7 * 2.7);
+    if (e > 1.3) continue;
+    px(cx + i, cy + j, e > 1 ? 17 : dith([7, 6, 5], 0.4 + ((j + 3) / 6) * 1.7, i + PUDDLE_X, cy + j));
+  }
+  for (let k = 0; k < 4; k++) {               // 水面的亮道，一秒换 4 次
+    const r = MV.rng('pud' + k + ':' + Math.floor(f / 3)), x = cx - 13 + Math.floor(r() * 26), y = cy - 1 + Math.floor(r() * 3);
+    hline(x, x + 1 + Math.floor(r() * 3), y, 8);
   }
 }
 
-// ───────────────────────── 字 ─────────────────────────
-const GLYPHS = {};       // 字 → { w, h, bits }
+// ── 小号少年和单车：车架按坡度转（角度取整到 5°，同一个角度的车长得一模一样），人按 12 fps 一张张换 ──
+// 字母：h 头发 s 皮肤 d 皮肤暗 e 眼睛 m 张嘴 r 衣服 R 衣服暗 n 短裤
+const RIDER = [
+  '.....hhh...',
+  '...hhhhhhh.',
+  '..hhhhhhhhh',
+  '.hhhhhssess',
+  '..hhhhsssss',
+  '...hhdsss..',
+  '....dss....',
+  '...rrrrr...',
+  '..Rrrrrrr..',
+  '.RRrrrrr...',
+  'RRrrrr.....',
+  'nnnnn......',
+  'nnnn.......',
+];
+const RIDER_MAP = { h: 21, s: 23, d: 22, e: 0, m: 24, r: 25, R: 24, n: 1 };
+const CRANK = [[3, 0], [0, 3], [-3, 0], [0, -3]];
+function knee(hx, hy, fx, fy, L1, L2) {                 // 两节腿：膝盖往前顶
+  const dx = fx - hx, dy = fy - hy, d = Math.min(Math.hypot(dx, dy), L1 + L2 - 0.01) || 0.01;
+  const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+  const ux = dx / Math.hypot(dx, dy), uy = dy / Math.hypot(dx, dy);
+  const mx = hx + a * ux, my = hy + a * uy;
+  const k1 = [mx - h * uy, my + h * ux], k2 = [mx + h * uy, my - h * ux];
+  return k1[0] > k2[0] ? k1 : k2;
+}
+function wheelCells(cx, cy, r, frame) {
+  const out = [];
+  for (let y = -Math.ceil(r) - 1; y <= Math.ceil(r) + 1; y++) for (let x = -Math.ceil(r) - 1; x <= Math.ceil(r) + 1; x++) {
+    const d = Math.hypot(x, y);
+    if (d >= r - 0.9 && d < r + 0.5) out.push([cx + x, cy + y, 0]);
+  }
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI + (frame % 3) * (Math.PI / 9);
+    out.push(...lineCells(cx - Math.cos(a) * (r - 1.2), cy - Math.sin(a) * (r - 1.2), cx + Math.cos(a) * (r - 1.2), cy + Math.sin(a) * (r - 1.2), 20));
+  }
+  out.push([cx, cy, 19]);
+  return out;
+}
+function riderA(t) {
+  const off = lay(t, 1), f = F12(t), xw = boyX(t);
+  const xr = xw - 9, xf = xw + 9;
+  const ang = Math.round((Math.atan2(contactY(xf) - contactY(xr), 18) * 180) / Math.PI / 5) * 5 * (Math.PI / 180);
+  const u = [Math.cos(ang), Math.sin(ang)], n = [u[1], -u[0]];
+  const R = [Math.round(xr - off), Math.round(contactY(xr) - 5)];
+  const P = (a, b) => [Math.round(R[0] + a * u[0] + b * n[0]), Math.round(R[1] + a * u[1] + b * n[1])];
+  const legsUp = t >= T_SPLASH - 1 / 12 && t < T_SPLASH + 5 / 12;      // 冲进水洼：两腿翘起来
+  const bump = t >= T_SPLASH && t < T_SPLASH + 1 / 12 ? -1 : 0;          // 压进水那一张车往上一颠
+  const travel = boyX(f / 12);
+  const pf = Math.floor(travel / 7) & 3, wf = Math.floor(travel / 4);
+  const RH = [R[0], R[1] + bump], FH = P(18, 0); FH[1] += bump;
+  const BBp = P(7, -1), ST = P(5, 7), HT = P(15, 8), HB = P(16, 5), SAD = P(4, 9), BAR = P(16, 12);
+  [BBp, ST, HT, HB, SAD, BAR].forEach((p) => (p[1] += bump));
+  const C = new Comp();
+  const hip = [SAD[0], SAD[1] - 1 + (pf & 1)];
+  const body = [hip[0] - 1, hip[1] - 12];                           // 精灵左上角（髋在精灵的 (1, 12)）
+  // 远侧的腿和脚蹬（在车后面）
+  const farPed = legsUp ? [hip[0] - 8, hip[1] + 4] : [BBp[0] - CRANK[pf][0], BBp[1] - CRANK[pf][1]];
+  const farK = legsUp ? [hip[0] - 4, hip[1] + 2] : knee(hip[0], hip[1], farPed[0], farPed[1], 6, 6.5);
+  C.add([...lineCells(hip[0], hip[1], farK[0], farK[1], 1), ...lineCells(farK[0], farK[1], farPed[0], farPed[1], 22), [farPed[0], farPed[1], 20], [farPed[0] + 1, farPed[1], 20]], 0);
+  // 车轮、车架
+  C.add(wheelCells(RH[0], RH[1], 5.3, wf), undefined);
+  C.add(wheelCells(FH[0], FH[1], 5.3, wf), undefined);
+  C.add([...lineCells(RH[0], RH[1], BBp[0], BBp[1], 24), ...lineCells(RH[0], RH[1], ST[0], ST[1], 24), ...lineCells(BBp[0], BBp[1], ST[0], ST[1], 25),
+    ...lineCells(ST[0], ST[1], HT[0], HT[1], 25), ...lineCells(BBp[0], BBp[1], HB[0], HB[1], 25), ...lineCells(HT[0], HT[1], HB[0], HB[1], 25),
+    ...lineCells(HB[0], HB[1], FH[0], FH[1], 24)], undefined);
+  C.add([...lineCells(SAD[0] - 2, SAD[1], SAD[0] + 2, SAD[1], 0), ...lineCells(HT[0], HT[1], BAR[0], BAR[1], 19), [BAR[0] - 1, BAR[1], 0], [BAR[0], BAR[1], 0]], undefined);
+  // 近侧的腿：大腿穿短裤，小腿皮肤，白鞋
+  const ped = legsUp ? [hip[0] + 11, hip[1] - 1] : [BBp[0] + CRANK[pf][0], BBp[1] + CRANK[pf][1]];
+  const K = legsUp ? [hip[0] + 6, hip[1] - 1] : knee(hip[0], hip[1], ped[0], ped[1], 6, 6.5);
+  const thigh = lineCells(hip[0], hip[1], K[0], K[1], 1).map(([x, y], i) => [x, y, i < 3 ? 1 : 23]);
+  C.add([...thigh, ...lineCells(K[0], K[1], ped[0], ped[1], 23), [ped[0], ped[1], 8], [ped[0] + 1, ped[1], 8]], 0);
+  // 身子和头
+  const bodyCells = gridCells(RIDER, RIDER_MAP, body[0], body[1]);
+  if (legsUp || t >= T_SPLASH + 5 / 12) bodyCells.push([body[0] + 10, body[1] + 4, 24]);    // 张嘴笑
+  const flap = f & 1;                                                                         // 后脑勺翘起的一撮被风吹：两张
+  bodyCells.push([body[0] + 1 - flap, body[1] + 2 + flap, 21]);
+  C.add(bodyCells, 0);
+  // 近侧的胳膊：袖子两格，接着是小臂，手握车把
+  const sh = [body[0] + 5, body[1] + 8];
+  C.add(lineCells(sh[0], sh[1], BAR[0], BAR[1], 23).map(([x, y], i) => [x, y, i < 2 ? 25 : 23]), 0);
+  C.add([[BAR[0], BAR[1], 23]], undefined);
+  C.blit();
+  return { head: [body[0] + 6, body[1] + 3], front: FH, rear: RH };
+}
+// 溅水花：压进水那一刻起，两片水幕往上翻（4 张）→ 水珠抛出去落回来；水洼里的波纹一圈圈往外走；后轮带起一串水。
+// 水在白护栏、浅色天前面容易看不见：水幕和水珠描一圈蓝（不是墨色），一眼是水
+function splashA(t) {
+  const dt = t - T_SPLASH;
+  if (dt < 0 || dt > 1.1) return;
+  const off = lay(t, 1), k = Math.floor(dt * 12 + 1e-6);
+  const cx = PUDDLE_X - off, cy = Math.round(contactY(PUDDLE_X));
+  // 波纹：椭圆环，越往外越稀（按抖动阈值丢格子）
+  for (let ring = 0; ring < 2; ring++) {
+    const age = dt - ring * 0.18; if (age < 0) continue;
+    const rx = 4 + age * 34, ry = rx * 0.17, fade = clamp(age / 0.9);
+    for (let a = 0; a < 64; a++) {
+      const th = (a / 64) * Math.PI * 2, x = Math.round(cx + Math.cos(th) * rx), y = Math.round(cy + Math.sin(th) * ry);
+      if (fade > bt(x, y)) continue;
+      px(x, y, 8);
+    }
+  }
+  const C = new Comp();
+  // 水幕：[左片顶点, 右片顶点]，一张一换：翻起来 → 最高 → 塌下去散开
+  const CROWN = [[[-8, -9], [9, -11]], [[-12, -16], [14, -18]], [[-15, -10], [18, -12]], [[-17, -4], [20, -5]]];
+  if (k < CROWN.length) {
+    const [L, Rt] = CROWN[k];
+    C.add(polyCells([[cx - 2, cy + 1], [cx - 6, cy + 1], [cx + L[0], cy + L[1]], [cx + L[0] + 3, cy + L[1] + 1]], 8), 4);
+    C.add(polyCells([[cx + 3, cy + 1], [cx + 7, cy + 1], [cx + Rt[0], cy + Rt[1]], [cx + Rt[0] - 3, cy + Rt[1] + 1]], 8), 4);
+  }
+  // 水珠：抛物线，落到路面就没了；大的 2×2
+  for (let i = 0; i < 36; i++) {
+    const r = MV.rng('drop' + i);
+    const vx = -70 + r() * 175, vy = -(80 + r() * 110), big = r() < 0.45, d0 = r() * 0.06;
+    const tt = dt - d0; if (tt < 0) continue;
+    const x = Math.round(cx + vx * tt), y = Math.round(cy - 3 + vy * tt + 0.5 * 430 * tt * tt);
+    if (y > cy + 1) continue;
+    C.add(big ? [[x, y, 8], [x + 1, y, 8], [x, y + 1, 7], [x + 1, y + 1, 6]] : [[x, y, 8]], 4);
+  }
+  // 后轮带起的一串水（离开水洼以后）
+  if (dt > 0.08 && dt < 0.6) {
+    const rx = boyX(t) - 9 - off, ry = Math.round(contactY(boyX(t) - 9));
+    for (let i = 0; i < 12; i++) {
+      const r = MV.rng('tail' + i), a = r() * 0.6, tt = (dt * 4 + r()) % 1;
+      const x = Math.round(rx - 4 - tt * (12 + 10 * a)), y = Math.round(ry - 3 - tt * (9 + 12 * a) + tt * tt * 16);
+      C.add([[x, y, 8]], 4);
+    }
+  }
+  C.blit();
+}
+// 压过水洼以后，路上一道湿的车辙，往后渐渐变淡（抖动）
+function tracksA(t) {
+  if (t < T_SPLASH) return;
+  const off = lay(t, 1), end = boyX(t) - 9;
+  for (let x = PUDDLE_X + 18; x < end; x++) {
+    const fade = (x - PUDDLE_X - 18) / 70;
+    if (fade > bt(x, 3)) continue;
+    px(x - off, Math.round(contactY(x)) + 1, 17);
+  }
+}
+// 电线杆和电线（在路的后面，视差 0.9）：只立一根在左边，两根电线垂着弧一直拉到画面外，夏天海边路的味道
+function polesA(t) {
+  const off = lay(t, 0.9), road = lay(t, 1), tops = [];
+  for (const xw of [40, 430]) {
+    const sx = xw - off, base = Math.round(roadFar(sx + road)) - 2, top = 16;
+    tops.push([sx, top + 3]);
+    if (sx < -8 || sx > LW + 8) continue;
+    for (let y = top; y < base; y++) { px(sx, y, 30); px(sx + 1, y, 21); px(sx - 1, y, 0); px(sx + 2, y, 0); }
+    hline(sx - 6, sx + 7, top + 3, 0); hline(sx - 5, sx + 6, top + 4, 21);
+    for (const dx of [-5, 0, 6]) { px(sx + dx, top + 2, 8); }
+  }
+  for (let i = 0; i + 1 < tops.length; i++) {
+    const [ax, ay] = tops[i], [bx] = tops[i + 1];
+    for (let x = ax; x <= bx; x++) {
+      const u = (x - ax) / (bx - ax), sag = 14 * 4 * u * (1 - u);
+      px(x, Math.round(ay - 1 + sag), 1);
+      px(x, Math.round(ay + 1 + sag * 1.1), 1);
+    }
+  }
+}
+function shotRoad(t) {
+  skyFill(HZ_A);
+  cloud(236 - lay(t, 0.05) - 1.2 * t, HZ_A, [[0, -8, 15], [20, -12, 17], [40, -9, 13], [-18, -5, 10], [56, -5, 9], [8, -27, 14], [27, -31, 15], [17, -45, 12], [32, -47, 10], [3, -40, 9]], t, 'tower');
+  cloud(92 - lay(t, 0.1) - 4 * t, 30, [[0, -4, 8], [10, -7, 9], [20, -4, 7], [-8, -2, 5]], t, 'c1');
+  cloud(170 - lay(t, 0.1) - 4 * t, 50, [[0, -3, 5], [7, -4, 6], [13, -2, 4]], t, 'c2');
+  capeA(t);
+  seaA(t);
+  sailboat(t);
+  shoreA(t);
+  polesA(t);
+  const f = F12(t);
+  gullTiny(150 + 9 * t - lay(t, 0.2), 56 + (f % 8 < 4 ? 0 : 1), Math.floor(f / 3));
+  railA(t);
+  roadA(t);
+  bankA(t);
+  puddleA(t);
+  tracksA(t);
+  const rider = riderA(t);
+  splashA(t);
+  // 一只海鸥从右上角掠过整个画面（朝左飞，滑翔一阵、扇几下）
+  const gt = t - 0.15;
+  if (gt > 0 && gt < 2.4) {
+    const gx = 336 - gt * 165, gy = 58 + 16 * Math.sin(gt * 1.6) - gt * 3, gf = gt % 1.2 < 0.7 ? 1 : (F12(t) >> 1) & 3;
+    gull(gx, gy, gf, -1);
+  }
+  // 风：少年冲起来以后，身后掠过几道风
+  if (t > 1.2) for (let i = 0; i < 3; i++) {
+    const age = (t * 1.6 + i / 3) % 1, len = 6 + i * 2;
+    windStreak(rider.head[0] - 14 - age * 60, rider.head[1] - 6 + i * 7 + Math.floor(age * 3), len);
+  }
+  return rider;
+}
+
+// ───────────────────────── 镜头 B：近景，大号精灵（跟着少年走的跟拍镜头） ─────────────────────────
+const HZ_B = 96;
+const NECK_B = [196, 80];                            // 近景少年的脖子根：身子、头、转场的圆心都从这量
+function shotClose(t) {
+  const f = F12(t);
+  skyFill(HZ_B);
+  cloud(70 - 6 * t, 60, [[0, -6, 13], [18, -10, 15], [36, -6, 11], [-16, -3, 8], [10, -22, 11], [26, -24, 10]], t, 'b1');
+  cloud(250 - 6 * t, 42, [[0, -3, 6], [8, -5, 7], [16, -3, 5]], t, 'b2');
+  // 远处的小岛
+  const io = Math.round(10 * t);
+  for (let sx = 0; sx < LW; sx++) {
+    const u = sx + io - 30;
+    if (u < 0 || u > 70) continue;
+    const h = Math.round(Math.sin((u / 70) * Math.PI) * 6 + 1);
+    for (let j = 0; j < h; j++) px(sx, HZ_B - 1 - j, j === h - 1 ? 11 : 12);
+  }
+  // 海
+  const so = Math.round(40 * t);
+  for (let y = HZ_B; y < LH; y++) for (let x = 0; x < LW; x++) {
+    let c;
+    if (y === HZ_B) c = 7; else if (y < HZ_B + 2) c = 5;
+    else c = dith([5, 4, 3, 2], 0.2 + ((y - HZ_B - 2) / 50) * 3, x + so, y);
+    CUR[y * LW + x] = c;
+  }
+  seaRipples(t, so, HZ_B, 150, 120, 'ripB', 0);
+  glitter(t, 0, 320, HZ_B + 2, 150, 70, 'glB');
+  // 海鸥：跟着飞了一阵，慢慢落在后面
+  gull(96 - 14 * t + 2 * Math.sin(t * 3), 66 + Math.round(3 * Math.sin(t * 2.2)), Math.floor(f / 2) & 3, 1);
+  gullTiny(40 - 4 * t, 52, Math.floor(f / 3));
+  // 护栏：立柱从右往左飞快掠过（离镜头近，视差最大）
+  const ro = Math.round(170 * t);
+  for (let k = Math.floor(ro / 46) - 1; k <= Math.floor((ro + LW) / 46) + 1; k++) {
+    const sx = k * 46 - ro;
+    rect(sx - 1, 116, 6, LH - 116, 0); rect(sx, 117, 3, LH - 117, 8); vline(sx + 3, 117, LH - 1, 20); px(sx + 1, 120, 26); px(sx + 1, 121, 26);
+  }
+  hline(0, LW - 1, 123, 0);
+  for (let x = 0; x < LW; x++) { px(x, 124, 8); px(x, 125, 20); px(x, 126, 20); px(x, 127, 19); px(x, 128, 18); px(x, 129, 19); px(x, 130, 17); }
+  hline(0, LW - 1, 131, 0);
+  // 风
+  for (let i = 0; i < 3; i++) {
+    const age = (t * 1.3 + i * 0.37) % 1;
+    windStreak(330 - age * 420, [30, 104, 46][i], 10 + i * 3);
+  }
+  boyB(t);
+}
+
+// ── 大号少年（近景）：同一个人，另画一套约 3 倍大的；头按「侧脸 → 转过来 → 回头笑」三张换 ──
+// 身体、胳膊、腿用整数顶点的多边形和粗线段拼出来，每个部件描 1 像素轮廓；五官是手点的格子
+function headCells(view, f) {
+  const m = new Map(), put = (cells) => { for (const [x, y, c] of cells) m.set(KEY(x, y), c); };
+  const face = {
+    P: [[13, 8], [21, 7], [23, 10], [23, 12], [25, 14], [23, 15], [23, 17], [22, 19], [19, 21], [15, 21], [12, 18]],
+    Q: [[8, 8], [20, 7], [22, 10], [22, 14], [21, 17], [19, 20], [16, 22], [12, 21], [8, 17]],
+    S: [[4, 8], [20, 8], [21, 12], [20, 17], [17, 21], [12, 23], [7, 21], [4, 17], [3, 12]],
+  }[view];
+  const fringe = {
+    P: [[12, 2], [24, 6], [24, 9], [22, 8], [21, 11], [19, 8], [17, 10], [15, 8], [13, 9]],
+    Q: [[7, 3], [23, 6], [23, 9], [21, 8], [20, 11], [17, 8], [15, 11], [12, 8], [10, 10], [7, 8]],
+    S: [[2, 4], [22, 5], [22, 9], [20, 8], [19, 11], [16, 8], [13, 11], [11, 8], [8, 11], [6, 8], [4, 10], [2, 9]],
+  }[view];
+  // 后脑勺被风往后吹的几绺头发：三张一循环
+  const LOCKS = [[[3, 4], [6, 7], [-5, 3]], [[2, 9], [4, 13], [-8, 10]], [[4, 14], [7, 18], [-4, 19]]];
+  const WAVE = [[0, 0], [-2, 1], [-1, -1]];
+  LOCKS.forEach(([a, b, tip], i) => { const [wx, wy] = WAVE[(f + i) % 3]; put(polyCells([a, b, [tip[0] + wx, tip[1] + wy]], 21)); });
+  put(discCells(12, 11, 10.3, 21));
+  put(polyCells([[2, 11], [11, 12], [12, 19], [7, 21], [3, 18]], 21));
+  const neck = polyCells([[12, 16], [19, 18], [19, 27], [12, 27]], 23);   // 脖子
+  put(neck);
+  const faceCells = polyCells(face, 23);
+  put(faceCells);
+  put(polyCells(fringe, 21));
+  // 头发的高光：头顶一道弧（「天使环」），隔几格断一下像一缕缕
+  for (const [k, c] of m) {
+    if (c !== 21) continue;
+    const x = (k & 4095) - 1024, y = (k >> 12) - 1024, d = Math.hypot(x - 12, y - 11), a = Math.atan2(y - 11, x - 12);
+    if (d > 6.6 && d < 8.4 && a < -0.5 && a > -2.6 && (x + y) % 4 !== 0) m.set(k, 30);
+  }
+  // 暗面：下巴底下两三格的脖子（每一列从脸的下沿往下算）、脖子靠后的一条；侧脸时耳朵前面那块腮也暗
+  const faceSet = new Set(faceCells.map(([x, y]) => KEY(x, y))), chin = {};
+  for (const [x, y] of faceCells) chin[x] = Math.max(chin[x] ?? -99, y);
+  for (const [x, y] of neck) {
+    const k = KEY(x, y);
+    if (faceSet.has(k) || m.get(k) !== 23) continue;
+    if (x <= 13 || y <= (chin[x] ?? 19) + 2) m.set(k, 22);
+  }
+  if (view === 'P') for (const [x, y] of faceCells) if (x <= 13 && y >= 15 && m.get(KEY(x, y)) === 23) m.set(KEY(x, y), 22);
+  const feat = {
+    P: { cells: [[19, 11, 0], [20, 11, 0], [19, 12, 0], [20, 12, 8], [19, 13, 0], [20, 13, 0], [19, 15, 31], [20, 15, 31], [23, 17, 24], [22, 17, 24]],
+      ear: [[9, 11], [10, 11], [8, 12], [9, 12], [10, 12], [11, 12], [8, 13], [9, 13], [10, 13], [9, 14], [10, 14], [9, 15]] },
+    Q: { cells: [[11, 11, 0], [12, 11, 0], [11, 12, 0], [12, 12, 8], [11, 13, 0], [12, 13, 0], [18, 11, 0], [18, 12, 0], [18, 13, 0], [16, 15, 22],
+      [14, 18, 24], [15, 18, 24], [16, 18, 24], [10, 16, 31], [11, 16, 31], [19, 16, 31]],
+      ear: [[5, 11], [6, 11], [4, 12], [5, 12], [6, 12], [4, 13], [5, 13], [6, 13], [5, 14], [6, 14]] },
+    S: { cells: [[6, 13, 0], [7, 12, 0], [8, 12, 0], [9, 13, 0], [14, 13, 0], [15, 12, 0], [16, 12, 0], [17, 13, 0],
+      [9, 16, 0], [10, 16, 8], [11, 16, 8], [12, 16, 8], [13, 16, 8], [14, 16, 0], [9, 17, 0], [10, 17, 24], [11, 17, 25], [12, 17, 25], [13, 17, 24], [14, 17, 0],
+      [10, 18, 0], [11, 18, 0], [12, 18, 0], [13, 18, 0], [5, 15, 31], [6, 15, 31], [17, 15, 31], [18, 15, 31]],
+      ear: [[21, 12], [22, 12], [21, 13], [22, 13], [21, 14], [21, 15]] },
+  }[view];
+  for (const [x, y] of feat.ear) m.set(KEY(x, y), 23);
+  if (view === 'P') { m.set(KEY(10, 12), 22); m.set(KEY(10, 13), 22); }
+  for (const [x, y, c] of feat.cells) m.set(KEY(x, y), c);
+  const out = []; for (const [k, c] of m) out.push([(k & 4095) - 1024, (k >> 12) - 1024, c]);
+  return out;
+}
+const BIKE_KNEE = [[0, 0], [3, 3], [0, 6], [-3, 3]];             // 膝盖跟着脚蹬转：四张
+function boyB(t) {
+  const f = F12(t), pf = f & 3, bob = pf & 1;
+  const N = [NECK_B[0], NECK_B[1] + bob];                      // 脖子根；蹬车时身子一张一沉
+  const at = (dx, dy) => [N[0] + dx, N[1] + dy];
+  const C = new Comp();
+  // 前轮（只露出上面一截，辐条三张一转）和车头
+  const FH = [272, 196];
+  const wheel = [];
+  for (let y = 150; y < LH; y++) for (let x = 230; x < LW; x++) {
+    const d = Math.hypot(x - FH[0], y - FH[1]);
+    if (d < 29 && d >= 26.6) wheel.push([x, y, 0]); else if (d < 26.6 && d >= 25.4) wheel.push([x, y, 19]);
+  }
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI + (f % 3) * (Math.PI / 18);
+    wheel.push(...lineCells(FH[0], FH[1], FH[0] + Math.cos(a) * 25, FH[1] - Math.abs(Math.sin(a)) * 25, 20));
+  }
+  C.add(wheel, undefined);
+  const HT = at(46, 44), HB = at(51, 66);
+  C.add([...capsule(HB[0], HB[1], FH[0], FH[1], 2.2, 24), ...capsule(HT[0], HT[1], HB[0], HB[1], 3, 25)], 0);
+  C.add([...capsule(N[0] - 11, N[1] + 62, N[0] - 2, N[1] + 114, 2.2, 24), ...capsule(HB[0], HB[1], N[0] - 2, N[1] + 114, 2.4, 25)], 0);   // 立管、下管（往下出画）
+  C.add(capsule(HT[0] - 2, HT[1] + 5, N[0] - 10, N[1] + 63, 2.2, 25), 0);              // 上管
+  C.add(capsule(N[0] - 14, N[1] + 55, N[0] - 11, N[1] + 62, 1.6, 19), 0);               // 座管
+  C.add(capsule(HT[0], HT[1], N[0] + 40, N[1] + 36, 1.8, 19), 0);                      // 车把立管
+  // 近侧的腿：大腿（短裤）从髋往前下，膝盖跟着脚蹬四张换
+  const hip = at(-8, 50), kn = BIKE_KNEE[pf], K = at(18 + kn[0], 70 + kn[1]);
+  C.add(capsule(K[0], K[1], K[0] - 3, LH + 6, 3.8, (u, ex) => (ex < -1.2 ? 22 : 23)), 0);
+  C.add(capsule(hip[0], hip[1], K[0], K[1], 5.6, (u) => (u > 0.86 ? 23 : 1)), 0);
+  C.add(polyCells([at(-26, 52), at(-8, 50), at(-6, 54), at(-24, 56)], 17), 0);             // 车座
+  // 身子：往前倾，背在左；背上两处和衣角被风吹得一鼓一鼓（三张）
+  const T = [[-4, 0], [5, 1], [9, 5], [11, 11], [12, 21], [10, 32], [7, 43], [2, 51], [-11, 54], [-19, 50], [-21, 38], [-18, 24], [-14, 10], [-8, 2]];
+  const torso = polyCells(T.map(([x, y]) => at(x, y)), 25);
+  const ph = f % 3, FL = [[2, 0], [4, 2], [3, -1]], fl = (k) => FL[(ph + k) % 3];
+  const flaps = [
+    [[-14, 13], [-18 - fl(0)[0], 18 + fl(0)[1]], [-18, 24]],
+    [[-18, 29], [-22 - fl(1)[0], 35 + fl(1)[1]], [-21, 40]],
+    [[-19, 45], [-29 - fl(2)[0] * 2, 51 + fl(2)[1]], [-15, 54]],
+  ].map((p) => polyCells(p.map(([x, y]) => at(x, y)), 24));
+  const inTorso = new Set(torso.map(([x, y]) => KEY(x, y)));
+  const folds = new Set();                                                    // 被风压在胸前的几道褶子
+  for (const [a, b] of [[[8, 10], [-4, 15]], [[10, 20], [-6, 26]], [[8, 31], [-7, 36]]]) for (const [x, y] of lineCells(...at(...a), ...at(...b), 0)) folds.add(KEY(x, y));
+  const shirt = [...flaps.flat(), ...torso].map(([x, y]) => {
+    const rx = x - N[0], ry = y - N[1], w = rx * 0.984 + ry * 0.179;          // 离脊梁多远：正的是胸前（朝光）
+    let c = w > 7 ? 31 : w > -8 ? 25 : 24;
+    if (folds.has(KEY(x, y)) && inTorso.has(KEY(x, y))) c = c === 31 ? 25 : 24;
+    return [x, y, c];
+  });
+  C.add(shirt, 0);
+  // 头：侧脸 → 转过来 → 回头笑（最后一张卡在拍 10 上）
+  const view = t < T_TURN - 2 / 12 ? 'P' : t < T_TURN ? 'Q' : 'S';
+  const HO = [N[0] - 15, N[1] - 26];
+  C.add(headCells(view, f).map(([x, y, c]) => [HO[0] + x, HO[1] + y, c]), 0);
+  // 近侧的胳膊：袖子（袖口被风吹得抖，三张）→ 小臂 → 握车把的手
+  const S = at(3, 8), E = at(23, 24), Wr = at(38, 34);
+  C.add(capsule(S[0], S[1], E[0], E[1], 4.4, (u, ex, ey) => (u < 0.55 ? (ey < -2 ? 31 : ey > 2 ? 24 : 25) : ey > 1.2 ? 22 : 23)), 0);
+  const sf = [[0, 0], [-2, 2], [-1, 1]][f % 3];
+  C.add(polyCells([at(-1, 12), at(9, 19 + sf[1]), at(2 + sf[0], 19 + sf[1])], 24), 0);
+  C.add(capsule(E[0], E[1], Wr[0], Wr[1], 3.2, (u, ex, ey) => (ey > 1 ? 22 : 23)), 0);
+  C.add(capsule(Wr[0] - 2, Wr[1] + 3, Wr[0] + 8, Wr[1] + 4, 1.7, 17), 0);            // 车把
+  C.add(discCells(Wr[0] + 2, Wr[1] + 2, 3, 23).map(([x, y]) => [x, y, y > Wr[1] + 3 ? 22 : 23]), 0);
+  C.blit();
+}
+
+// ───────────────────────── 转场：菱形格子从少年的脸上一圈圈翻开 ─────────────────────────
+// 屏幕切成 16×16 的格子，格子的中心对准近景里少年的脸（远景里他正骑到这附近）；离脸越近的格子越早开始，
+// 每格里一个菱形从中心长满整格，菱形里是近景、外面还是远景，菱形的边亮一格白。
+// 每个像素要么是 A 要么是 B 要么是白（调色板以外的颜色一格都不出），最后一格正好在拍 8 长满。
+const TILE = 16, TAU = 0.2;
+const WO = { x: NECK_B[0] - 3, y: NECK_B[1] - 14, dmax: 1 };
+function initWipe() {
+  const ti = (x) => Math.floor((x - WO.x + 8) / TILE), tj = (y) => Math.floor((y - WO.y + 8) / TILE);
+  WO.dmax = Math.max(Math.abs(ti(0)), Math.abs(ti(LW - 1))) + Math.max(Math.abs(tj(0)), Math.abs(tj(LH - 1)));
+}
+function transition(t, a, b) {
+  CUR = BA; a.draw(t);
+  CUR = BB; b.draw(t);
+  const span = T_LAND - TAU - T_WIPE;
+  for (let y = 0; y < LH; y++) {
+    const j = Math.floor((y - WO.y + 8) / TILE), cy = WO.y + j * TILE - 0.5;
+    for (let x = 0; x < LW; x++) {
+      const i = Math.floor((x - WO.x + 8) / TILE), cx = WO.x + i * TILE - 0.5;
+      const s = T_WIPE + span * Math.pow((Math.abs(i) + Math.abs(j)) / WO.dmax, 0.8);
+      const r = 16.5 * clamp((t - s) / TAU), m = Math.abs(x - cx) + Math.abs(y - cy), p = y * LW + x;
+      BF[p] = m < r - 1 ? BB[p] : m < r ? 8 : BA[p];
+    }
+  }
+}
+
+// ───────────────────────── 镜头表 ─────────────────────────
+const SHOTS = [
+  { name: '海边公路：冲下坡、溅水花', start: 0, end: T_LAND, draw: shotRoad },
+  { name: '近景：回头笑', start: T_WIPE, end: DURATION + 1, draw: shotClose },
+];
+function compose(t) {
+  const live = SHOTS.filter((s) => t >= s.start && t < s.end);
+  if (live.length >= 2) transition(t, live[0], live[1]);
+  else { CUR = BF; (live[0] || SHOTS[SHOTS.length - 1]).draw(t); }
+}
+
+// ───────────────────────── 字：像素字体在 12px 原尺寸画到小画布，二值化 ─────────────────────────
+const GLYPHS = {};
 function buildGlyphs(family) {
   const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
   const g = cv.getContext('2d', { willReadFrequently: true });
-  for (const ch of new Set((LYRIC + NAME).split(''))) {
+  for (const ch of new Set(Array.from(LYRIC))) {
     g.clearRect(0, 0, 32, 32); g.fillStyle = '#fff'; g.textBaseline = 'top'; g.font = `12px ${family}`;
     g.fillText(ch, 2, 2);
-    const adv = Math.round(g.measureText(ch).width);
-    const d = g.getImageData(0, 0, 32, 32).data, bits = [];
+    const adv = Math.round(g.measureText(ch).width), d = g.getImageData(0, 0, 32, 32).data, bits = [];
     for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (d[(y * 32 + x) * 4 + 3] > 127) bits.push([x - 2, y - 2]);
     GLYPHS[ch] = { adv: Math.max(adv, 4), bits };
   }
 }
-function text(str, x, y, c, shadow) {
-  let cx = x;
-  for (const ch of str) {
-    const gph = GLYPHS[ch]; if (!gph) continue;
-    for (const [gx, gy] of gph.bits) { if (shadow !== undefined) px(cx + gx + 1, y + gy + 1, shadow, 3); }
-    for (const [gx, gy] of gph.bits) px(cx + gx, y + gy, c, 3);
-    cx += gph.adv;
-  }
-  return cx - x;
-}
-function textW(str) { let w = 0; for (const ch of str) w += GLYPHS[ch] ? GLYPHS[ch].adv : 0; return w; }
 
-// ───────────────────────── UI：对话框、名字牌、红心 ─────────────────────────
-function frameBox(x, y, w, h, fill) {
-  // 圆角缺角的 RPG 窗口：墨蓝外线 → 白 → 雪影 → 深底
+// ───────────────────────── 对话框（最上层、不跟镜头动） ─────────────────────────
+const BOX = { x: 8, y: 6, w: 304, h: 30 };
+function frameBox(x, y, w, h) {
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    if ((i === 0 || i === w - 1) && (j === 0 || j === h - 1)) continue;        // 外角缺一格：圆角
     const e = Math.min(i, j, w - 1 - i, h - 1 - j);
-    const corner = (i < 2 || i > w - 3) && (j < 2 || j > h - 3);
-    if ((i === 0 || i === w - 1) && (j === 0 || j === h - 1)) continue;          // 外角缺一格
-    let c = fill;
-    if (e === 0) c = 0; else if (e === 1) c = 9; else if (e === 2) c = 6;
-    if (corner && e === 1 && ((i === 1 || i === w - 2) && (j === 1 || j === h - 2))) c = 0;
-    px(x + i, y + j, c, 3);
+    let c = e === 0 ? 0 : e === 1 ? 3 : e === 2 ? 6 : 8;
+    if (e === 1 && (i === 1 || i === w - 2) && (j === 1 || j === h - 2)) c = 0;
+    px(x + i, y + j, c);
   }
 }
-function drawDialog(t) {
-  const f = frameOf(t), open = 35;          // 2.917 秒开始开窗
-  if (f < open) return;
-  const X = 10, Y = 145, W = 300, Hh = 32;
-  if (f === open) { frameBox(X, Y + 13, W, 6, 1); return; }            // 第一帧：一条细缝
-  frameBox(X, Y, W, Hh, 1);
-  // 名字牌
-  const nw = textW(NAME) + 12;
-  frameBox(X + 8, Y - 9, nw, 17, 2);
-  text(NAME, X + 14, Y - 6, 13);
-  // 歌词：打字机，一秒 10 个字
-  const n = Math.max(0, Math.min(LYRIC.length, Math.floor((t - 3.0) * 10 + 1e-6) + 1));
-  const s = LYRIC.slice(0, f >= 36 ? n : 0);
-  const tx = X + 16;
-  text(s, tx, Y + 12, 9, 2);
-  if (n >= LYRIC.length && Math.floor(t * 4) % 2 === 0) {                 // 打完：▼ 闪
-    const ax = X + W - 14, ay = Y + Hh - 9;
-    hline(ax, ax + 4, ay, 19, 3); hline(ax + 1, ax + 3, ay + 1, 19, 3); px(ax + 2, ay + 2, 19, 3);
+function drawUI(t) {
+  BU.fill(CLEAR);
+  if (t < T_BOX) return false;
+  CUR = BU;
+  const k = F12(t) - F12(T_BOX);
+  if (k < 2) { const hh = k === 0 ? 4 : 14; frameBox(BOX.x, BOX.y + ((BOX.h - hh) >> 1), BOX.w, hh); return true; }   // 开窗：细缝 → 一半 → 整个
+  frameBox(BOX.x, BOX.y, BOX.w, BOX.h);
+  const L = MV.lyricAt(t, { per: BEAT / 2, pop: 1 / 60, tail: 9, gap: 0 });
+  let cx = BOX.x + 12, last = -1;
+  const ty = BOX.y + 9;
+  if (L) for (const c of L.chars) {
+    if (c.u <= 0) break;
+    const gph = GLYPHS[c.ch]; if (!gph) continue;
+    for (const [gx, gy] of gph.bits) px(cx + gx + 1, ty + gy + 1, 20);
+    for (const [gx, gy] of gph.bits) px(cx + gx, ty + gy, 0);
+    cx += gph.adv; last = c.k;
   }
-}
-const HUD_HEART = ['.kk.kk.', 'kxxkxxk', 'kxxxxxk', '.kxxxk.', '..kxk..', '...k...'];
-function drawHUD(t) {
-  const f = frameOf(t);
-  for (let i = 0; i < 3; i++) {
-    const full = i < 2 || f >= 43;
-    const blink = i === 2 && f >= 42 && f < 46 && f % 2 === 0;
-    spr(HUD_HEART, { k: 0, x: full ? (blink ? 13 : 12) : 2 }, 6 + i * 9, 6, false, 3);
-    if (full) px(7 + i * 9, 7, 14, 3);
+  if (L && last === L.chars.length - 1 && t >= T_TYPE + (L.chars.length - 0.5) * (BEAT / 2)) {
+    const ax = BOX.x + BOX.w - 15, ay = BOX.y + BOX.h - 10 + (MV.beatPhase(t) < 0.5 ? 1 : 0);    // ▼ 跟着拍子一上一下
+    hline(ax, ax + 4, ay, 25); hline(ax + 1, ax + 3, ay + 1, 25); px(ax + 2, ay + 2, 25);
   }
+  return true;
 }
 
-// ───────────────────────── 合成一帧 ─────────────────────────
-const out = document.getElementById('out');
-out.width = LW * SCALE; out.height = LH * SCALE;
-const octx = out.getContext('2d'); octx.imageSmoothingEnabled = false;
-const small = document.createElement('canvas'); small.width = LW; small.height = LH;
-const sctx = small.getContext('2d');
-const IMG = sctx.createImageData(LW, LH);
-function drawFrame(t) {
-  B.fill(0); M.fill(0);
-  drawSky(t);
-  drawSnow(t, 0);
-  drawHills(t);
-  drawHouses(t);
-  drawGround(t);
-  drawTree(t);
-  drawSnow(t, 1);
-  drawBench(t);
-  drawLamp(t);
-  const c = drawCrab(t);
-  drawSnow(t, 2);
-  lightPass(t);
-  drawGlints(t);
-  drawFlare(t);
-  drawBubbles(t, c);
-  drawHUD(t);
-  drawDialog(t);
-  const d = IMG.data;
-  for (let i = 0; i < LW * LH; i++) { const rgb = PAL_RGB[B[i]]; d[i * 4] = rgb[0]; d[i * 4 + 1] = rgb[1]; d[i * 4 + 2] = rgb[2]; d[i * 4 + 3] = 255; }
-  sctx.putImageData(IMG, 0, 0);
-  octx.imageSmoothingEnabled = false;
-  octx.drawImage(small, 0, 0, LW * SCALE, LH * SCALE);
+// ───────────────────────── 上屏：索引缓冲 → RGB → 小画布 → 整数倍放大 ─────────────────────────
+const sceneCv = document.createElement('canvas'); sceneCv.width = LW; sceneCv.height = LH;
+const sctx = sceneCv.getContext('2d'), SIMG = sctx.createImageData(LW, LH);
+const uiCv = document.createElement('canvas'); uiCv.width = LW; uiCv.height = LH;
+const uctx = uiCv.getContext('2d'), UIMG = uctx.createImageData(LW, LH);
+function toImage(buf, img) {
+  const d = img.data;
+  for (let i = 0; i < NPX; i++) {
+    const c = buf[i];
+    if (c === CLEAR) { d[i * 4 + 3] = 0; continue; }
+    const rgb = RGB[c]; d[i * 4] = rgb[0]; d[i * 4 + 1] = rgb[1]; d[i * 4 + 2] = rgb[2]; d[i * 4 + 3] = 255;
+  }
+}
+function drawFrame(g, t) {
+  compose(t);
+  toImage(BF, SIMG); sctx.putImageData(SIMG, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(sceneCv, 0, 0, W, H);
+}
+function drawOverlay(g, t) {
+  if (!drawUI(t)) return;
+  toImage(BU, UIMG); uctx.putImageData(UIMG, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(uiCv, 0, 0, W, H);
 }
 
-window.sceneReady = (async () => {
-  let family = '"PixelZH"';
-  try {
-    const ff = new FontFace('PixelZH', `url(${FONT_URL})`);
-    await ff.load(); document.fonts.add(ff);
-  } catch (e) {
-    console.warn('像素字体没加载上，退回系统字体二值化', e);
-    family = '"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif';
-  }
-  buildGlyphs(family);
-  drawFrame(0);
+MV.page({
+  W, H, fps: FPS, duration: DURATION, draw: drawFrame, overlay: drawOverlay,
+  ready: async () => {
+    let family = '"PixelZH"';
+    try {
+      const ff = new FontFace('PixelZH', `url(${FONT_URL})`);
+      await ff.load(); document.fonts.add(ff);
+    } catch (e) {
+      // 没加载上要报出来：出片时 MV.fail 直接报错停下（Windows、Mac 的系统字体不一样）；预览时写在播放条上，先用系统字体二值化凑合看
+      MV.fail(`像素字体没加载上：${FONT_URL}（${e && e.message || e}）`);
+      family = '"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif';
+    }
+    buildGlyphs(family);
+    initWipe();
+  },
+});
 })();
-window.renderAt = async (t) => { drawFrame(t); return out.toDataURL('image/png'); };
 </script></body></html>

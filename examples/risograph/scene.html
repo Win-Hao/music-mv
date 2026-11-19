@@ -1,0 +1,645 @@
+<!doctype html>
+<!--
+  Risograph 孔版印刷（risograph print / riso zine）· 傍晚的城市天台：衣服跟着拍子摆，白猫沿护栏走来、在拍上跳上水箱；重拍上错版一跳，辊子刷上新的一版，落到夕阳前蹲着的猫
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。
+  片长 6 秒，BPM 110，第 0 拍在 0 秒（MV.tempo(110, 0)），所有时刻都从拍子算（MV.beatTime(n)，一拍约 0.545 秒）。
+
+  关键画法（Canvas 2D 逐像素，不靠任何库；页面接口用 templates/mv/kit.js 的 MV.page）：
+  1. 分版：画面不是彩色的，是三张「版」。一张离屏画布（TC）的 R、G、B 三个通道 = 蓝版、荧光粉版、黄版的浓度（0 不印，255 实地）。
+     每样东西用 tone(蓝, 粉, 黄) 不透明地填一次，三张版同时改：前面的东西自然把后面的「挖空」（knockout），一块地方最多两种墨。
+     白猫是很浅的粉 + 黄网点（被夕阳照着），阴影只印蓝；太阳、被照亮的墙顶只印粉 + 黄；黄墨从不叠在蓝上（会变绿），蓝叠粉只用在背光的楼、墙和猫的花斑。
+     渐变不用平滑渐变，用几级固定浓度的台阶（天 7 级、太阳光晕 2 圈），台阶的边带一点手剪的起伏，交给网点去出深浅。
+  2. 纸和网点（press()，开页面时按实际的画面像素烤好，见 bake()）：暖白纸自己有纤维、杂点和大块的浆斑；每张版一套网点，角度不同
+     （蓝 15°、粉 75°、黄 0°），网距 11 px（按 1920 宽），点的边缘带一点抖动；版的浓度和网点阈值比较得到覆盖率，再乘这张版的「出墨」：
+     大块浓淡不匀、沿走纸方向（竖着）的条痕、细颗粒、实地里的小针孔。网点和纸纹钉在纸上，不跟镜头推移。
+  3. 颜色：三种墨按半透明的油墨相乘叠到纸上，叠出来的颜色不另调：蓝 × 粉 = 紫（背光的墙、楼），粉 × 黄 = 橘红（太阳、毛巾条纹、辊子的浓墨）。
+     天是蓝 → 粉 → 黄一级一级过渡的台阶，上浅下暖，不做深底霓虹、不做紫色大渐变。
+  4. 套印：采样每张版时各自错开几像素（蓝 0、粉 (+3,-2)、黄 (-3,+2)），边上露纸、露彩边；平时固定，不每帧乱抖。
+     猫外面挖一圈 9 px 纸白，错版时彩边露在纸白里。
+  5. 动起来：一秒印 12 张（猫、衣服、电车、影子按张换；猫的张对齐第 4 拍，落地那张正好在拍上）；出墨的颗粒和针孔烤 3 份，每拍换一份。
+     衣服绕夹子摆：cos(π × 拍)，拍点上摆到最边、左右交替，地上的长影子跟着摆。镜头 1 很慢地往右移 40 px（远近几层移的多少不同），
+     镜头 2 很慢地推近 1.0 → 1.04，各自只做这一种慢动作。
+  6. 光：太阳在楼后面，东西的影子往镜头这边拉长；被照到的顶面印粉 + 黄，影子只印蓝（把黄挖掉）。近景里衣服的影子扫过猫和水箱盖：
+     影子的形状裁在猫的轮廓、水箱盖里面，猫身上是浅蓝网点，水箱盖上是蓝 + 粉。
+  7. 转场（错版一跳 + 辊子刷新一版）：第 6 拍粉版、黄版突然错开 12–14 px，顶住 60 毫秒再按阻尼弹簧弹回；紧接着辊子从上往下刷（smooth 缓动，
+     第 7 拍刷到底）。辊子的线略斜、边上带毛，线上方是第二个镜头，紧贴线的一条是刚压上去的浓墨（粉 + 黄实地，里面几道没吃饱墨的竖条），
+     镜头交界藏在浓墨里。上下两块各用自己的套准印（pressRegion）：线下面的第一个镜头还在错版里弹，线上面是新的一版，落到第 7 拍时轻轻弹一下。
+  8. 歌词：在 overlay 里，最上层、不跟镜头动。纸白挖空的纸条（两头燕尾）+ 得意黑（Smiley Sans）印在蓝版上、实地（fillText 再加 2.6 px
+     同色描边，不然颗粒一吃字就细），画进同一套版里只把这一条重印一遍，所以字跟着蓝版错位、颗粒和网点跟画面一样。
+     第 2 拍纸条随辊子从左往右印出来，三段词卡在八分音符上（第 2、2.5、3 拍）一段一段印。画面里除了歌词没有别的字。
+  时间线（拍从 0 数）：
+    0 拍      猫沿女儿墙从左往右走，电车从右边远处开过来，衣服跟着拍子摆，太阳往楼后沉
+    第 2 拍   歌词纸条印出来：「晚风」→ 第 2.5 拍「在晾衣绳上」→ 第 3 拍「打拍子」
+    第 3 拍   猫停住、压低身子；第 3.5 拍起跳
+    第 4 拍   落到水箱盖上（压一下再坐起来），尾巴摆
+    第 6 拍   重拍：错版一跳；0.06 秒后辊子从上往下刷新一版
+    第 7 拍   辊子刷到底 = 近景（window.PLAN 的落点 3.818 秒）
+    第 7–11 拍 近景：衣服的影子每拍从猫身上扫过一次，第 9 拍猫抬头眯一下眼，远处一小列电车从夕阳前开过
+  画面只由 t 决定：随机数都用 MV.rng / MV.noise 加「元素名 + 序号」做种子，不用 Math.random()、Date，不存上一帧。
+  速度：开页面时烤纸、网点和 3 份出墨，1920×1080 约 1.2 秒、1280×720 约 0.6 秒（第一次还要从 jsDelivr 取字体，冷启动多几秒）。
+    一帧同步画完：页面里 1920×1080 约 0.1 秒、1280×720 约 0.06 秒；render_frames 连存 PNG 1920×1080 约 0.43 秒一张、1280×720 约 0.16 秒、960×540 约 0.1 秒。
+  出 README 动图：render_frames.mjs --fps 12 --width 1280 --height 720 --format png 渲 72 帧，ffmpeg scale=640:360:flags=lanczos，
+    palettegen=max_colors=128:stats_mode=diff + paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle，-loop 0，约 3.4 MB。
+  坑：帧一定存 PNG，JPEG 会把网点抹糊；出墨颗粒每张都换，640×360 的 GIF 会大一倍多，每拍换一份就够；黄叠在蓝上会变绿，亮的地方先把蓝挖掉；
+    三种墨叠在一起发黑发脏，印在黄上的蓝（猫的瞳孔）要先把黄挖掉；
+    网点按实际画面的像素烤（ensureSize：渲 1280×720 就烤 1280×720），不要先印 1920 再缩放，缩放会把网点抹成灰。
+  外部资源：得意黑 Smiley Sans（字体 OFL-1.1，中文网字计划的网页字体包 @chinese-fonts/dyh 是 MIT），从 jsDelivr 加载；没下载到 MV.font 会报出来（出片时停下）。
+-->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/dyh@3.0.0/dist/SmileySans-Oblique/result.css">
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; padding: 0; overflow: hidden; background: #F4EEDF; }</style>
+</head><body><script>
+'use strict';
+// ───────────────────────── 基本量 ─────────────────────────
+const W = 1920, H = 1080, FPS = 30, DUR = 6, BPM = 110;
+MV.tempo(BPM, 0);
+const { clamp, lerp, seg, ease } = MV;
+const B = (n) => MV.beatTime(n);
+const PRINTS = 12;                                   // 一秒印 12 张：猫、衣服、电车按张换
+const T_LAND = B(4);                                 // 第 4 拍：猫落到水箱上
+const T_KICK = B(6);                                 // 第 6 拍（重拍）：错版一跳
+const T_ROLL0 = T_KICK + 0.06, T_SWAP = B(7);        // 辊子：错版顶住一下后起步，第 7 拍刷到底 = 第二个镜头
+window.PLAN = [+T_SWAP.toFixed(3)];
+const LYRIC = '晚风在晾衣绳上打拍子';
+// 歌词按拍子自己排（没用 lyrics.js）：三段词卡在八分音符上，第 2 拍起印，一直留到片尾
+const GROUPS = [[0, 2, B(2)], [2, 7, B(2.5)], [7, 10, B(3)]];   // 词卡在八分音符上：[起, 止, 时刻]
+const FONT_NAME = '"Smiley Sans Oblique"';
+const FONT = `${FONT_NAME}, "Microsoft YaHei", "PingFang SC", sans-serif`;
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+
+// 墨（半透明，按相乘叠到纸上）和纸
+const INK = { B: [30, 64, 150], P: [255, 70, 168], Y: [255, 226, 0] };
+const PAPER = [245, 239, 225];
+const SCREEN = { B: 15, P: 75, Y: 0 }, PERIOD = 11;  // 网点角度、网距（按 1920 宽）
+const REG = { B: [0, 0], P: [3, -2], Y: [-3, 2] };   // 平时的套印错位（逻辑 px，固定）
+const KICK = { B: [-3, 2], P: [14, -6], Y: [-12, 9] };
+
+// ───────────────────────── 工具 ─────────────────────────
+const rng = MV.rng;
+const n01 = (k, x) => .5 + .5 * MV.noise(k, x);
+const tone = (b = 0, p = 0, y = 0) => `rgb(${Math.round(clamp(b) * 255)},${Math.round(clamp(p) * 255)},${Math.round(clamp(y) * 255)})`;
+const PAPER_T = tone(0, 0, 0);
+function ell(cx, cy, rx, ry, rot = 0) { const p = new Path2D(); p.ellipse(cx, cy, Math.max(.1, rx), Math.max(.1, ry), rot, 0, TAU); return p; }
+function poly(pts) { const p = new Path2D(); p.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) p.lineTo(pts[i][0], pts[i][1]); p.closePath(); return p; }
+function fill(g, path, tn) { g.fillStyle = tn; g.fill(path); }
+function rect(g, x, y, w, h, tn) { g.fillStyle = tn; g.fillRect(x, y, w, h); }
+
+// ───────────────────────── 烤：纸、网点、出墨（设备像素） ─────────────────────────
+let PW = 0, PH = 0, K = 1, N = 0;
+let TC = null, tg = null, OUT = null, OUTC = null, outg = null;
+let PR, PG, PB;
+const THR = {}, MOD = {}, TAB = {};
+const VARIANTS = 3;
+let KSOFT = 3;
+
+function lowNoise(key, cell) {
+  const gw = Math.ceil(PW / cell) + 2, gh = Math.ceil(PH / cell) + 2, r = rng(key), grid = new Float32Array(gw * gh), out = new Float32Array(N);
+  for (let i = 0; i < grid.length; i++) grid[i] = r();
+  for (let y = 0; y < PH; y++) {
+    const fy = y / cell, iy = Math.floor(fy), vy = fy - iy, uy = vy * vy * (3 - 2 * vy);
+    for (let x = 0; x < PW; x++) {
+      const fx = x / cell, ix = Math.floor(fx), vx = fx - ix, ux = vx * vx * (3 - 2 * vx), o = iy * gw + ix;
+      const a = grid[o] + (grid[o + 1] - grid[o]) * ux, b = grid[o + gw] + (grid[o + gw + 1] - grid[o + gw]) * ux;
+      out[y * PW + x] = a + (b - a) * uy;
+    }
+  }
+  return out;
+}
+function bakePaper() {
+  const c = document.createElement('canvas'); c.width = PW; c.height = PH;
+  const g = c.getContext('2d'), r = rng('paper');
+  g.fillStyle = `rgb(${PAPER[0]},${PAPER[1]},${PAPER[2]})`; g.fillRect(0, 0, PW, PH);
+  g.lineCap = 'round';
+  for (let i = 0; i < 1800 * K * K; i++) {
+    const x = r() * PW, y = r() * PH, a = r() * TAU, l = (6 + r() * 22) * K;
+    g.strokeStyle = r() < .6 ? `rgba(150,128,96,${.05 + r() * .07})` : `rgba(255,255,250,${.18 + r() * .2})`;
+    g.lineWidth = (.5 + r() * .8) * K;
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + .6) * l * .5, y + Math.sin(a + .6) * l * .5, x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  for (let i = 0; i < 2600 * K * K; i++) {
+    g.fillStyle = r() < .8 ? `rgba(110,90,70,${.06 + r() * .14})` : `rgba(70,60,60,${.2 + r() * .2})`;
+    const s = (.6 + r() * 1.4) * K; g.fillRect(r() * PW, r() * PH, s, s);
+  }
+  const d = g.getImageData(0, 0, PW, PH).data, mot = lowNoise('paper-mottle', 90 * K);
+  PR = new Uint8Array(N); PG = new Uint8Array(N); PB = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    const m = (mot[i] - .5) * 9;
+    PR[i] = clamp(d[i * 4] + m, 0, 255); PG[i] = clamp(d[i * 4 + 1] + m, 0, 255); PB[i] = clamp(d[i * 4 + 2] + m * 1.3, 0, 255);
+  }
+}
+function bakeScreens() {
+  const per = PERIOD * K; KSOFT = Math.max(1.6, per / Math.PI);
+  const lo = 128 / KSOFT + 3, hi = 255 - 128 / KSOFT - 3;
+  for (const pl of ['B', 'P', 'Y']) {
+    const a = SCREEN[pl] * D2R, ca = Math.cos(a) / per * TAU, sa = Math.sin(a) / per * TAU;
+    const T = new Uint8Array(N), jit = lowNoise('dotjit' + pl, 2.2 * K), r = rng('dotjit2' + pl);
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+      const i = y * PW + x, u = x * ca + y * sa, v = -x * sa + y * ca;
+      const s = .5 - .25 * (Math.cos(u) + Math.cos(v)) + (jit[i] - .5) * .16 + (r() - .5) * .05;
+      T[i] = clamp(lo + (hi - lo) * s, 0, 255);
+    }
+    THR[pl] = T;
+  }
+}
+function bakeInk() {
+  for (const pl of ['B', 'P', 'Y']) {
+    const blot = lowNoise('blot' + pl, 240 * K), blot2 = lowNoise('blot2' + pl, 55 * K);
+    const streak = new Float32Array(PW);
+    for (let x = 0; x < PW; x++) streak[x] = .55 * n01('st' + pl, x / (2.5 * K)) + .45 * n01('st2' + pl, x / (34 * K));
+    const fade = pl === 'Y' ? .1 : .14;
+    MOD[pl] = [];
+    for (let v = 0; v < VARIANTS; v++) {
+      const M = new Uint8Array(N), r = rng('grain' + pl + v);
+      for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+        const i = y * PW + x, q = r();
+        M[i] = clamp(1 - fade * blot[i] - .07 * blot2[i] - .085 * streak[x] - .26 * q * q * q, 0, 1) * 255;
+      }
+      const holes = Math.round(N * .00045);
+      for (let h = 0; h < holes; h++) {
+        const x = Math.floor(r() * PW), y = Math.floor(r() * PH), s = Math.max(1, Math.round((.8 + r() * 1.6) * K));
+        for (let yy = y; yy < Math.min(PH, y + s); yy++) for (let xx = x; xx < Math.min(PW, x + s); xx++) M[yy * PW + xx] = 30 + r() * 60;
+      }
+      MOD[pl].push(M);
+    }
+    TAB[pl] = [0, 1, 2].map(ch => { const t = new Float32Array(256); for (let a = 0; a < 256; a++) t[a] = 1 - (a / 255) * (1 - INK[pl][ch] / 255); return t; });
+  }
+}
+function bake(pw, ph) {
+  PW = pw; PH = ph; N = PW * PH; K = PW / W;
+  TC = document.createElement('canvas'); TC.width = PW; TC.height = PH;
+  tg = TC.getContext('2d', { willReadFrequently: true });
+  OUTC = document.createElement('canvas'); OUTC.width = PW; OUTC.height = PH;
+  outg = OUTC.getContext('2d');
+  OUT = outg.createImageData(PW, PH);
+  bakePaper(); bakeScreens(); bakeInk();
+}
+
+// ───────────────────────── 印：三张版各自错开、过网点、按半透明油墨叠到纸上 ─────────────────────────
+// 只印 [x0, x1) × [y0, y1) 这一块（歌词那一条单独重印）
+function press(reg, variant, x0 = 0, y0 = 0, x1 = PW, y1 = PH) {
+  const src = tg.getImageData(0, 0, PW, PH).data, out = OUT.data;
+  const ob = reg.B.map(v => Math.round(v * K)), op = reg.P.map(v => Math.round(v * K)), oy = reg.Y.map(v => Math.round(v * K));
+  const TB = THR.B, TP = THR.P, TY = THR.Y, MB = MOD.B[variant], MP = MOD.P[variant], MY = MOD.Y[variant];
+  const [Br, Bg, Bb] = TAB.B, [Pr, Pg, Pb] = TAB.P, [Yr, Yg, Yb] = TAB.Y, ks = KSOFT, W1 = PW - 1, H1 = PH - 1;
+  for (let y = y0; y < y1; y++) {
+    let yb = y - ob[1], yp = y - op[1], yy = y - oy[1];
+    yb = yb < 0 ? 0 : yb > H1 ? H1 : yb; yp = yp < 0 ? 0 : yp > H1 ? H1 : yp; yy = yy < 0 ? 0 : yy > H1 ? H1 : yy;
+    const rb = yb * PW, rp = yp * PW, ry = yy * PW, row = y * PW;
+    for (let x = x0; x < x1; x++) {
+      const i = row + x;
+      let xb = x - ob[0], xp = x - op[0], xy = x - oy[0];
+      xb = xb < 0 ? 0 : xb > W1 ? W1 : xb; xp = xp < 0 ? 0 : xp > W1 ? W1 : xp; xy = xy < 0 ? 0 : xy > W1 ? W1 : xy;
+      const vb = src[(rb + xb) << 2], vp = src[((rp + xp) << 2) + 1], vy = src[((ry + xy) << 2) + 2];
+      let ab = 0, ap = 0, ay = 0;
+      if (vb) { let c = (vb - TB[i]) * ks + 128; c = c < 0 ? 0 : c > 255 ? 255 : c; ab = (c * MB[i]) >> 8; }
+      if (vp) { let c = (vp - TP[i]) * ks + 128; c = c < 0 ? 0 : c > 255 ? 255 : c; ap = (c * MP[i]) >> 8; }
+      if (vy) { let c = (vy - TY[i]) * ks + 128; c = c < 0 ? 0 : c > 255 ? 255 : c; ay = (c * MY[i]) >> 8; }
+      const o = i << 2;
+      out[o] = PR[i] * Br[ab] * Pr[ap] * Yr[ay];
+      out[o + 1] = PG[i] * Bg[ab] * Pg[ap] * Yg[ay];
+      out[o + 2] = PB[i] * Bb[ab] * Pb[ap] * Yb[ay];
+      out[o + 3] = 255;
+    }
+  }
+  outg.putImageData(OUT, 0, 0, x0, y0, x1 - x0, y1 - y0);
+}
+
+// 套准：固定的小错位 + 第 6 拍踢一下：顶住 60 毫秒，再阻尼弹回（跟 t 连续走）
+function registration(t) {
+  const r = {}, d = t - T_KICK;
+  const e = d < 0 ? 0 : Math.exp(-Math.max(0, d - .06) / .14) * Math.cos(Math.max(0, d - .06) * TAU / .4);
+  for (const pl of ['B', 'P', 'Y']) r[pl] = [REG[pl][0] + KICK[pl][0] * e, REG[pl][1] + KICK[pl][1] * e];
+  return r;
+}
+
+// ───────────────────────── 猫：白猫、靛蓝花斑，侧面朝右 ─────────────────────────
+// 局部坐标：原点在脚底中间，朝 +x。外面先挖一圈纸白（rim），错版时彩边露在纸白里
+const RIM = 9;
+const CAT = { fur: tone(0, .1, .24), shade: tone(.4, .1), patch: tone(.95, .4), pink: tone(0, .85, .15), eye: tone(0, 0, 1), pupil: tone(1, .35) };
+function catShapes(P) {
+  // 返回这一张的各块形状：身子、头、耳、腿、尾巴（都在局部坐标里）
+  const S = {};
+  if (P.pose === 'sit') {
+    const body = new Path2D();
+    body.addPath(ell(-22, -52, 60, 52));
+    body.addPath(ell(26, -104, 40, 64, .12));
+    S.body = body; S.belly = ell(40, -60, 30, 52, .1);
+    S.head = [44 + P.hx, -182 + P.hy]; S.patch = ell(-30, -86, 40, 26, -.3);
+    S.legs = [[[46, -70], [48, 0], 'fur'], [[24, -70], [26, 0], 'shade']];
+    const tl = new Path2D(); const sw = P.tail;
+    tl.moveTo(-72, -16); tl.bezierCurveTo(-110, -10 + sw * 20, -120 + sw * 40, -60 - sw * 30, -96 + sw * 70, -118 - sw * 20); S.tail = tl;
+  } else {
+    const c = P.crouch || 0, bob = P.bob || 0;
+    const by = -70 + 20 * c + bob;
+    const body = new Path2D();
+    body.addPath(ell(0, by, 90, 36 - 6 * c));
+    body.addPath(ell(56, by - 6, 40, 38));
+    body.addPath(ell(-60, by + 2, 44, 40 - 4 * c));
+    S.body = body; S.belly = ell(0, by + 30, 88, 16);
+    S.head = [106 + 6 * c + P.hx, by - 52 + 24 * c + P.hy]; S.patch = ell(-18, by - 24, 50, 18, .05);
+    const sw = P.swing || 0, ext = P.ext || 0;     // 走路：腿前后摆；腾空：前腿往前伸、后腿往后蹬
+    const fy = 0;
+    S.legs = [
+      [[50, by + 10], [60 + sw + 70 * ext, fy - 40 * ext], 'shade'],
+      [[-58, by + 14], [-56 - sw - 80 * ext, fy - 20 * ext], 'shade'],
+      [[64, by + 10], [64 - sw + 60 * ext, fy - 30 * ext], 'fur'],
+      [[-66, by + 14], [-64 + sw - 70 * ext, fy - 10 * ext], 'fur'],
+    ];
+    const tl = new Path2D(); const tw = P.tail;
+    tl.moveTo(-96, by - 12); tl.bezierCurveTo(-140, by - 30 + tw * 20, -150 + tw * 20, by - 90, -126 + tw * 30, by - 130 - tw * 10); S.tail = tl;
+  }
+  return S;
+}
+function headPath(cx, cy) {
+  const p = new Path2D();
+  p.addPath(ell(cx, cy, 40, 35));
+  p.addPath(ell(cx + 26, cy + 10, 22, 16));                                        // 嘴套
+  p.addPath(poly([[cx - 30, cy - 18], [cx - 22, cy - 62], [cx - 2, cy - 30]]));     // 后耳
+  p.addPath(poly([[cx - 2, cy - 30], [cx + 14, cy - 64], [cx + 30, cy - 20]]));     // 前耳
+  return p;
+}
+function drawCat(g, P, setCam) {
+  setCam(g); g.translate(P.x, P.y); g.rotate(P.rot || 0); g.scale(P.s * (P.sx || 1), P.s * (P.sy || 1));
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const S = catShapes(P), [hx, hy] = S.head, head = headPath(hx, hy);
+  for (const rim of [true, false]) {
+    const legW = 17, tailW = 15;
+    if (rim) {
+      g.fillStyle = g.strokeStyle = PAPER_T; g.lineWidth = RIM * 2 / P.s;
+      for (const p of [S.body, head]) { g.fill(p); g.stroke(p); }
+      g.lineWidth = legW + RIM * 2 / P.s; for (const [a, b] of S.legs) { const l = new Path2D(); l.moveTo(...a); l.lineTo(...b); g.stroke(l); }
+      g.lineWidth = tailW + RIM * 2 / P.s; g.stroke(S.tail);
+      continue;
+    }
+    g.lineWidth = tailW; g.strokeStyle = CAT.shade; g.stroke(S.tail);
+    for (const [a, b, c] of S.legs) { const l = new Path2D(); l.moveTo(...a); l.lineTo(...b); g.lineWidth = legW; g.strokeStyle = CAT[c]; g.stroke(l); }
+    fill(g, S.body, CAT.fur);
+    g.save(); g.clip(S.body); fill(g, S.belly, CAT.shade); fill(g, S.patch, CAT.patch); g.restore();
+    fill(g, head, CAT.fur);
+    g.save(); g.clip(head);
+    fill(g, poly([[hx - 30, hy - 18], [hx - 22, hy - 62], [hx - 2, hy - 30]]), CAT.patch);   // 后耳是靛蓝的花斑
+    fill(g, ell(hx - 10, hy + 26, 40, 14), CAT.shade);                                      // 下巴的阴影
+    g.restore();
+    fill(g, poly([[hx + 6, hy - 34], [hx + 14, hy - 54], [hx + 22, hy - 26]]), CAT.pink);     // 耳朵里
+    fill(g, ell(hx + 47, hy + 4, 5, 4), CAT.pink);                                         // 鼻头
+    if (P.blink) { const m = new Path2D(); m.moveTo(hx + 8, hy - 6); m.quadraticCurveTo(hx + 17, hy + 1, hx + 26, hy - 6); g.lineWidth = 4; g.strokeStyle = CAT.pupil; g.stroke(m); }
+    else { fill(g, ell(hx + 17, hy - 6, 10, 8, -.2), CAT.eye); fill(g, ell(hx + 19, hy - 6, 3.2, 7), CAT.pupil); }
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// 猫在镜头 1 里的动作：按张排（一秒 12 张，张的边界对齐第 4 拍，落地那张正好在拍上）
+const WALK_END = B(3) - .02, CROUCH_END = B(3.5);
+const LEDGE_Y = 760, LID = [1442, 478];
+function catPose1(t) {
+  const tq = T_LAND + Math.floor((t - T_LAND) * PRINTS + 1e-6) / PRINTS, p = Math.round(tq * PRINTS);
+  const P = { x: 0, y: LEDGE_Y, s: .82, rot: 0, hx: 0, hy: 0, tail: Math.sin(tq * 5.2), swing: 0, ext: 0, crouch: 0, bob: 0, pose: 'walk' };
+  if (tq < WALK_END) {
+    P.x = lerp(330, 1110, tq / WALK_END);
+    const ph = ((p % 4) + 4) % 4;
+    P.swing = [20, 6, -20, -6][ph]; P.bob = [0, -4, 0, -4][ph];
+  } else if (tq < CROUCH_END) {                    // 压低身子、屁股扭两下
+    P.x = 1118; P.crouch = 1; P.hy = 6; P.tail = (p & 1) ? .6 : -.2; P.rot = -.04;
+  } else if (tq < T_LAND) {                        // 腾空：沿抛物线跳上水箱盖
+    const u = seg(tq, CROUCH_END, T_LAND);
+    P.x = lerp(1118, LID[0], u); P.y = lerp(LEDGE_Y, LID[1], u) - 230 * u * (1 - u) * 1.6;
+    P.ext = u < .6 ? 1 : .4; P.rot = u < .5 ? -.42 : -.1; P.tail = -.8;
+  } else {
+    const d = tq - T_LAND;
+    P.x = LID[0]; P.y = LID[1];
+    if (d < 1 / PRINTS - 1e-6) { P.crouch = 1; P.sx = 1.08; P.sy = .9; }          // 落地压一下
+    else if (d < 2 / PRINTS - 1e-6) { P.crouch = .5; P.sy = 1.03; }
+    else { P.pose = 'sit'; P.tail = Math.sin(tq * 4.4) * .9; P.hx = 0; P.hy = (Math.floor(MV.beat(tq)) & 1) ? 3 : 0; P.blink = MV.beatPhase(tq) > .82 && Math.floor(MV.beat(tq)) === 5; }
+  }
+  return P;
+}
+
+// ───────────────────────── 镜头 1：天台远景 ─────────────────────────
+// 一个镜头一种慢动作：很慢地往右移（远近几层移的多少不同）；网点和纸纹钉在纸上，不跟镜头走
+let CAM1 = 0;
+function cam1(g, depth) { g.setTransform(K, 0, 0, K, -CAM1 * depth * K, 0); }
+const SKY1 = [[0, [.5, .05, 0]], [120, [.36, .12, 0]], [235, [.22, .22, 0]], [340, [.07, .36, 0]], [440, [0, .42, .14]], [530, [0, .32, .34]], [610, [0, .2, .52]]];
+function steps(g, list, x0, x1, ybot, key) {
+  for (let i = 0; i < list.length; i++) {
+    const y0 = list[i][0], y1 = i + 1 < list.length ? list[i + 1][0] : ybot, p = new Path2D();
+    p.moveTo(x0, i ? y0 : -300);
+    if (i) for (let x = x0; x <= x1; x += 60) p.lineTo(x, y0 + MV.noise(key + i, x / 260) * 7);   // 台阶的边是手剪的，带一点起伏
+    else p.lineTo(x1, -300);
+    p.lineTo(x1, y1 + 30); p.lineTo(x0, y1 + 30); p.closePath();
+    fill(g, p, tone(...list[i][1]));
+  }
+}
+const SUN1 = (t) => [1700, 500 + 110 * ease.smooth(clamp(t / 4.2))];
+const SKYLINE = (() => {   // 远处的楼：一排剪影，窗是挖空印黄
+  const r = rng('skyline'), out = [];
+  for (let x = -80; x < W + 120;) {
+    const w = 70 + r() * 120, top = x > 1500 && x < 1900 ? 640 + r() * 30 : 470 + r() * 170;
+    out.push({ x, w, top, tn: r() < .55 ? [.68, .2] : [.52, .36], win: r(), roof: r() });
+    x += w + 4 + r() * 18;
+  }
+  return out;
+})();
+function drawSkyline(g) {
+  for (const [i, b] of SKYLINE.entries()) {
+    rect(g, b.x, b.top, b.w, 820 - b.top, tone(...b.tn));
+    if (b.roof < .3) rect(g, b.x + b.w * .3, b.top - 34, 6, 34, tone(...b.tn));               // 天线
+    else if (b.roof < .5) rect(g, b.x + 10, b.top - 16, b.w * .4, 16, tone(...b.tn));         // 屋顶小房子
+    const r = rng('win' + i);
+    for (let y = b.top + 18; y < 760; y += 30) for (let x = b.x + 12; x < b.x + b.w - 18; x += 24) {
+      const q = r(); if (q < .16 + .2 * b.win) rect(g, x, y, 10, 14, tone(0, 0, .9));        // 亮着的窗：挖空，只印黄
+    }
+  }
+}
+function drawViaduct(g, t) {
+  rect(g, -200, 682, W + 400, 20, tone(.72, .5));
+  for (let x = -100; x < W + 200; x += 210) rect(g, x, 700, 22, 100, tone(.66, .46));
+  // 电车：三节，从右往左开过去（按张走）
+  const tq = Math.floor(t * PRINTS) / PRINTS, x0 = lerp(2150, -900, seg(tq, .2, 3.4));
+  for (let k = 0; k < 3; k++) {
+    const x = x0 + k * 238, y = 612;
+    rect(g, x + 110, y - 22, 4, 22, tone(.9, .5)); fill(g, poly([[x + 90, y - 22], [x + 112, y - 34], [x + 134, y - 22]]), PAPER_T);
+    fill(g, poly([[x, y + 8], [x + 10, y], [x + 222, y], [x + 230, y + 8], [x + 230, y + 70], [x, y + 70]]), tone(.12, .92, .1));
+    rect(g, x, y + 46, 230, 8, tone(.85, .5));
+    for (let w = 0; w < 5; w++) rect(g, x + 16 + w * 42, y + 14, 28, 24, tone(0, 0, .85));
+  }
+}
+function drawClothes(g, t, shadow) {
+  // 晾衣绳：两根杆，绳子下垂；衣服绕夹子摆：拍点上摆到最边，左右交替
+  const tq = Math.floor(t * PRINTS) / PRINTS, beat = MV.beat(tq);
+  const sway = (k) => (.2 + .03 * (k % 3)) * Math.cos(Math.PI * (beat + .12 * k));
+  const L0 = [150, 236], L1 = [1000, 220], ropeY = (x) => lerp(L0[1], L1[1], (x - L0[0]) / (L1[0] - L0[0])) + 64 * Math.sin(Math.PI * clamp((x - L0[0]) / (L1[0] - L0[0])));
+  const items = [
+    { x: 260, w: 150, h: 170, kind: 'shirt', tn: [0, .9, .05] },
+    { x: 440, w: 120, h: 230, kind: 'dress', tn: [.85, .25] },
+    { x: 600, w: 140, h: 120, kind: 'towel', tn: [0, .15, .95] },
+    { x: 770, w: 110, h: 150, kind: 'tee', tn: [.35, .05] },
+    { x: 905, w: 46, h: 84, kind: 'sock', tn: [0, .9, .45] },
+  ];
+  if (shadow) {   // 衣服在地上的影子：太阳在对面，影子往镜头这边拉长，跟着衣服摆
+    for (const [k, it] of items.entries()) {
+      const a = sway(k), cx = it.x + it.w / 2 - a * 260 - 120;
+      fill(g, poly([[cx - it.w * .45, 850], [cx + it.w * .45, 850], [cx + it.w * .6 - 90, 1100], [cx - it.w * .6 - 90, 1100]]), tone(.5, .18));
+    }
+    return;
+  }
+  for (const px of [L0[0], L1[0]]) rect(g, px - 8, 200, 16, 790, tone(.85, .55));
+  const rope = new Path2D(); rope.moveTo(L0[0], L0[1]);
+  for (let x = L0[0]; x <= L1[0]; x += 20) rope.lineTo(x, ropeY(x));
+  g.lineWidth = 4; g.strokeStyle = tone(.9, .5); g.stroke(rope);
+  for (const [k, it] of items.entries()) {
+    const ax = it.x + it.w / 2, ay = ropeY(ax), a = sway(k);
+    g.save(); g.translate(ax, ay); g.rotate(a);
+    let p;
+    const w = it.w, h = it.h;
+    if (it.kind === 'shirt' || it.kind === 'tee') {
+      const sl = it.kind === 'shirt' ? .5 : .32;
+      p = poly([[-w / 2, 0], [w / 2, 0], [w / 2 + w * sl, h * .32], [w / 2 + w * sl * .6, h * .44], [w / 2, h * .3], [w / 2, h], [-w / 2, h], [-w / 2, h * .3], [-w / 2 - w * sl * .6, h * .44], [-w / 2 - w * sl, h * .32]]);
+    } else if (it.kind === 'dress') p = poly([[-w * .28, 0], [w * .28, 0], [w * .36, h * .3], [w * .62, h], [-w * .62, h], [-w * .36, h * .3]]);
+    else if (it.kind === 'sock') p = poly([[-w / 2, 0], [w / 2, 0], [w / 2, h * .62], [w * 1.25, h * .78], [w * 1.2, h], [-w / 2, h]]);
+    else p = poly([[-w / 2, 0], [w / 2, 0], [w / 2, h], [-w / 2, h]]);
+    fill(g, p, tone(...it.tn));
+    g.save(); g.clip(p);
+    if (it.kind === 'towel') for (let y = 18; y < h; y += 30) rect(g, -w, y, 2 * w, 9, tone(0, .75, .95));     // 毛巾的条纹：粉 + 黄
+    if (it.kind === 'shirt') rect(g, -3, 0, 6, h, tone(0, .5, .05));
+    rect(g, -w, h * .62, 2 * w, h, tone(it.tn[0] ? it.tn[0] + .15 : 0, it.tn[1] * .8 + .12, it.tn[2] * .7));   // 下半截背光，深一级
+    g.restore();
+    for (const s of [-1, 1]) rect(g, s * w * .3 - 5, -10, 10, 22, tone(0, .55));                                      // 夹子
+    g.restore();
+  }
+}
+function shot1(g, t) {
+  CAM1 = 40 * ease.inOut(clamp(t / (T_SWAP + .3)));
+  cam1(g, .05); steps(g, SKY1, -100, W + 200, 820, 'sky1');
+  const [sx, sy] = SUN1(t);
+  cam1(g, .12);
+  fill(g, ell(sx, sy, 250, 250), tone(0, .44, .4)); fill(g, ell(sx, sy, 175, 175), tone(0, .42, .64)); fill(g, ell(sx, sy, 112, 112), tone(0, .38, 1));
+  cam1(g, .25); drawSkyline(g);
+  cam1(g, .4); drawViaduct(g, t);
+  cam1(g, 1);
+  // 护栏：女儿墙后面一排细杆
+  rect(g, -100, 636, W + 300, 9, tone(.85, .55)); rect(g, -100, 700, W + 300, 5, tone(.85, .55));
+  for (let x = -40; x < W + 200; x += 128) rect(g, x, 636, 8, 130, tone(.85, .55));
+  // 女儿墙：顶面被夕阳照着（粉 + 黄），正面背光（蓝 + 粉）
+  rect(g, -100, LEDGE_Y, W + 300, 24, tone(0, .5, .6)); rect(g, -100, LEDGE_Y + 24, W + 300, 70, tone(.66, .36));
+  // 天台地面：浅的蓝 + 粉，地砖缝，护栏和衣服的长影子
+  rect(g, -100, LEDGE_Y + 94, W + 300, 400, tone(.24, .14));
+  for (let y = 900; y < 1100; y += 70) rect(g, -100, y, W + 300, 4, tone(.36, .18));
+  drawClothes(g, t, true);
+  fill(g, poly([[1290, 936], [1590, 936], [1420, 1100], [1010, 1100]]), tone(.5, .18));                                // 水箱的影子，往镜头这边、往左拖
+  // 水箱：架子 + 圆桶 + 锥顶；向着太阳的一边亮
+  const tx = 1442;
+  for (const lx of [-120, -40, 40, 120]) rect(g, tx + lx - 7, 640, 14, 300, tone(.8, .5));
+  rect(g, tx - 132, 700, 264, 10, tone(.8, .5));
+  rect(g, tx - 140, 520, 280, 140, tone(.72, .3));
+  for (let x = -120; x < 140; x += 40) rect(g, tx + x, 520, 4, 140, tone(.86, .4));
+  rect(g, tx + 70, 520, 70, 140, tone(0, .45, .7));
+  for (const y of [548, 620]) rect(g, tx - 140, y, 280, 7, tone(.95, .55));
+  fill(g, poly([[tx - 152, 524], [tx, LID[1] - 4], [tx + 152, 524]]), tone(.9, .5));
+  for (const lx of [-178, -152]) rect(g, tx + lx, 528, 6, 410, tone(.85, .55));                                        // 爬梯
+  for (let y = 556; y < 930; y += 34) rect(g, tx - 178, y, 32, 5, tone(.85, .55));
+  drawCat(g, catPose1(t), (gg) => cam1(gg, 1));
+  cam1(g, 1); drawClothes(g, t, false);
+}
+
+// ───────────────────────── 镜头 2：近景，猫蹲在水箱上，背后大夕阳，衣服的影子扫过 ─────────────────────────
+// 一种慢动作：从辊子起步开始很慢地推近（1.0 → 1.04），推的中心在猫身上
+const PIV2 = [760, 600];
+let ZOOM2 = 1;
+function cam2(g, depth) {
+  const z = 1 + (ZOOM2 - 1) * depth;
+  g.setTransform(K * z, 0, 0, K * z, K * PIV2[0] * (1 - z), K * PIV2[1] * (1 - z));
+}
+const SKY2 = [[0, [.42, .08, 0]], [130, [.26, .18, 0]], [260, [.1, .32, 0]], [390, [0, .44, .16]], [520, [0, .38, .32]], [660, [0, .28, .48]]];
+const SUN2 = (t) => [1180, 560 + 70 * ease.smooth(seg(t, T_ROLL0, DUR))];
+const CAT2 = { x: 700, y: 872, s: 2.45 };
+const SKY2LINE = (() => {
+  const r = rng('skyline2'), out = [];
+  for (let x = -80; x < W + 120;) { const w = 90 + r() * 150; out.push({ x, w, top: 735 + r() * 70, tn: r() < .55 ? [.7, .24] : [.56, .38], win: r() }); x += w + 6 + r() * 20; }
+  return out;
+})();
+// 镜头外面晾着的衣服（只露下摆）和它们投下的影子：拍点上摆到最边，左右交替
+function sway2(t, k) { const tq = Math.floor(t * PRINTS) / PRINTS; return Math.cos(Math.PI * (MV.beat(tq) + .15 * k)); }
+function clothShadows(t) {
+  const p = new Path2D(), a = sway2(t, 0), b = sway2(t, 1);
+  const sx = 430 + 250 * a, dx = 1060 + 220 * b;
+  p.addPath(poly([[sx - 100, 290], [sx + 100, 282], [sx + 190, 380], [sx + 140, 410], [sx + 104, 380], [sx + 120, 640], [sx - 120, 656], [sx - 108, 390], [sx - 150, 420], [sx - 200, 390]]));   // 衬衫的影子
+  p.addPath(poly([[dx - 110, 420], [dx + 110, 410], [dx + 150, 760], [dx - 80, 776]]));                                                                                                   // 毛巾的影子
+  return p;
+}
+function drawCat2Clip(g, P) {   // 猫的轮廓当遮罩（身子 + 头），影子只落在猫和水箱上
+  const S = catShapes(P), [hx, hy] = S.head, m = new DOMMatrix().translate(P.x, P.y).scale(P.s, P.s), p = new Path2D();
+  p.addPath(S.body, m); p.addPath(headPath(hx, hy), m);
+  return p;
+}
+function catPose2(t) {
+  const tq = Math.floor(t * PRINTS + 1e-6) / PRINTS, bt = MV.beat(tq), b = Math.floor(bt);
+  const P = { pose: 'sit', x: CAT2.x, y: CAT2.y, s: CAT2.s, hx: 0, hy: 0, tail: Math.sin(tq * 4.4) * .9 };
+  if (b >= 9) { P.hx = -6; P.hy = -10; }                          // 第 9 拍：抬头看太阳
+  P.blink = b === 9 && bt - b < .3;                               // 抬头那一下眯一眼
+  return P;
+}
+function shot2(g, t) {
+  ZOOM2 = 1 + .04 * ease.inOut(seg(t, T_ROLL0, DUR));
+  cam2(g, .1); steps(g, SKY2, -200, W + 200, 900, 'sky2');
+  const [sx, sy] = SUN2(t);
+  cam2(g, .2);
+  fill(g, ell(sx, sy, 540, 540), tone(0, .48, .4)); fill(g, ell(sx, sy, 460, 460), tone(0, .44, .62)); fill(g, ell(sx, sy, 385, 385), tone(0, .36, 1));
+  cam2(g, .35);
+  for (const [i, b] of SKY2LINE.entries()) {
+    rect(g, b.x, b.top, b.w, 400, tone(...b.tn));
+    const r = rng('win2' + i);
+    for (let y = b.top + 20; y < 900; y += 34) for (let x = b.x + 14; x < b.x + b.w - 20; x += 28) if (r() < .14 + .2 * b.win) rect(g, x, y, 11, 15, tone(0, 0, .9));
+  }
+  // 远处的电车：一小列剪影从夕阳前面开过（按张走），窗是挖空印黄
+  const tq = Math.floor(t * PRINTS) / PRINTS, ex = lerp(380, 1900, seg(tq, T_ROLL0, DUR + .4));
+  rect(g, -200, 742, W + 400, 12, tone(.8, .6));
+  for (let k = 0; k < 3; k++) {
+    const x = ex - k * 128;
+    fill(g, poly([[x, 708], [x + 6, 702], [x + 116, 702], [x + 122, 708], [x + 122, 742], [x, 742]]), tone(.7, .72));
+    for (let w = 0; w < 4; w++) rect(g, x + 10 + w * 27, 710, 17, 13, tone(0, 0, .9));
+    g.lineWidth = 3; g.strokeStyle = tone(.7, .72); g.beginPath(); g.moveTo(x + 50, 702); g.lineTo(x + 62, 688); g.lineTo(x + 74, 702); g.stroke();
+  }
+  cam2(g, 1);
+  // 水箱盖：宽的锥顶，被夕阳斜照着（粉 + 黄），离太阳远的一边暗（蓝 + 粉）
+  const lid = poly([[-200, 1100], [-200, 930], [CAT2.x, 858], [W + 200, 930], [W + 200, 1100]]);
+  fill(g, lid, tone(0, .4, .46));
+  g.save(); g.clip(lid);
+  for (let x = -200; x < W + 200; x += 90) fill(g, poly([[CAT2.x, 858], [x, 1100], [x + 22, 1100]]), tone(0, .62, .5));      // 锥顶的接缝
+  fill(g, poly([[CAT2.x, 858], [-200, 930], [-200, 1100], [CAT2.x - 380, 1100]]), tone(.5, .3));                          // 背光的一边
+  fill(g, ell(CAT2.x - 140, 896, 230, 24, -.06), tone(.62, .34));                                                         // 猫的影子，往镜头左边拖
+  g.restore();
+  const P = catPose2(t);
+  drawCat(g, P, (gg) => cam2(gg, 1));
+  // 衣服的影子：扫过猫和水箱盖（只印蓝 + 一点粉，把黄挖掉，不叠成绿）
+  cam2(g, 1);
+  const sh = clothShadows(t);
+  g.save(); g.clip(drawCat2Clip(g, P)); fill(g, sh, tone(.42, .14)); g.restore();
+  g.save(); g.clip(lid); fill(g, sh, tone(.72, .34)); g.restore();
+  // 镜头上沿露出来的衣服下摆（绳子在画面外），跟影子一起摆
+  const a = sway2(t, 0), b = sway2(t, 1);
+  g.save(); g.translate(360, -300); g.rotate(-.1 * a);
+  const shirt = new Path2D(); shirt.moveTo(-150, 0); shirt.lineTo(150, 0); shirt.lineTo(150, 420); shirt.quadraticCurveTo(80, 470, 0, 440); shirt.quadraticCurveTo(-80, 470, -150, 420); shirt.closePath();
+  fill(g, shirt, tone(0, .9, .05));
+  g.save(); g.clip(shirt); rect(g, -8, 0, 16, 480, tone(0, .9, .4)); for (const y of [330, 400]) fill(g, ell(14, y, 5, 5), PAPER_T); g.restore();
+  fill(g, poly([[150, 230], [236, 300], [210, 330], [150, 300]]), tone(0, .9, .05));                                   // 袖口
+  g.restore();
+  g.save(); g.translate(1480, -330); g.rotate(-.08 * b);                                                                // 毛巾：黄底粉条，下沿一排穗子
+  const towel = poly([[-130, 0], [130, 0], [130, 440], [-130, 440]]);
+  fill(g, towel, tone(0, .15, .95));
+  g.save(); g.clip(towel); for (let y = 300; y < 440; y += 46) rect(g, -140, y, 280, 16, tone(0, .8, .95)); g.restore();
+  for (let x = -124; x < 124; x += 18) rect(g, x, 440, 9, 22, tone(0, .15, .95));
+  g.restore();
+}
+
+// ───────────────────────── 转场：错版一跳 → 辊子从上往下刷上新的一版 ─────────────────────────
+// 辊子的线：略斜，边上带毛（固定种子），线上方是刚印上的第二个镜头，紧贴线的一条是刚压上去的浓墨
+const TILT = .02;
+const rollerY = (t) => lerp(-90, H + 90, ease.smooth(seg(t, T_ROLL0, T_SWAP)));
+function rollerEdge(g, ry, off = 0) {
+  g.moveTo(-200, -300); g.lineTo(W + 200, -300);
+  for (let x = W + 200; x >= -200; x -= 8) g.lineTo(x, ry - off + (x - W / 2) * TILT + MV.noise('roll-edge' + off, x / 120) * 4 + MV.noise('roll-fray' + off, x / 6) * 2.5);
+  g.closePath();
+}
+
+// ───────────────────────── 歌词 ─────────────────────────
+let LY = null;
+function layoutLyric() {
+  const m = tg; m.setTransform(1, 0, 0, 1, 0, 0);
+  const size = 80, sp = 6; m.font = `${size}px ${FONT}`;
+  const xs = [], ws = []; let x = 0;
+  for (const ch of LYRIC) { const w = m.measureText(ch).width; xs.push(x); ws.push(w); x += w + sp; }
+  const tw = x - sp, pad = 64, cx = 960, cy = 990;
+  LY = { size, xs, ws, tw, x0: cx - tw / 2, cy, sx0: cx - tw / 2 - pad, sx1: cx + tw / 2 + pad, h: 104 };
+}
+function drawLyricPlates(g, t) {
+  const L = LY, start = GROUPS[0][2] - .05;
+  if (t < start) return false;
+  g.setTransform(K, 0, 0, K, 0, 0);
+  const k = seg(t, start, start + .1), xr = lerp(L.sx0 - 30, L.sx1 + 30, k);
+  g.save(); g.beginPath(); g.rect(-200, 0, xr + 200, H + 200); g.clip();
+  const y0 = L.cy - L.h / 2, y1 = L.cy + L.h / 2, n = 22;
+  fill(g, poly([[L.sx0 - n, y0], [L.sx1 + n, y0], [L.sx1 - 4, L.cy], [L.sx1 + n, y1], [L.sx0 - n, y1], [L.sx0 + 4, L.cy]]), PAPER_T);
+  g.restore();
+  g.font = `${L.size}px ${FONT}`; g.textBaseline = 'middle'; g.fillStyle = g.strokeStyle = tone(1); g.lineWidth = 2.6; g.lineJoin = 'round';
+  const chars = [...LYRIC];
+  for (const [a, b, ts] of GROUPS) {
+    if (t < ts) continue;
+    const gx0 = L.x0 + L.xs[a] - 6, gx1 = L.x0 + L.xs[b - 1] + L.ws[b - 1] + 10, q = seg(t, ts, ts + .08);
+    g.save(); g.beginPath(); g.rect(gx0, 0, (gx1 - gx0) * q, H); g.clip();
+    for (let i = a; i < b; i++) { g.fillText(chars[i], L.x0 + L.xs[i], L.cy + 4); g.strokeText(chars[i], L.x0 + L.xs[i], L.cy + 4); }
+    g.restore();
+  }
+  return true;
+}
+
+// ───────────────────────── 一帧 ─────────────────────────
+const variantAt = (t) => Math.floor(MV.beat(t) + 1e-6) % VARIANTS;
+function ensureSize(g) {
+  const T = g.getTransform(), pw = Math.round(W * T.a), ph = Math.round(H * T.d);
+  if (pw !== PW || ph !== PH) { bake(pw, ph); layoutLyric(); }
+}
+function blit(g) {
+  g.save(); g.imageSmoothingEnabled = false; g.drawImage(OUTC, 0, 0, W, H); g.restore();
+}
+// 第二个镜头自己的套准：新印的一版，错位小一点；落到第 7 拍时轻轻弹一下
+const REG2 = { B: [1, -1], P: [-3, 2], Y: [3, -1] }, LAND = { B: [0, 0], P: [-6, 3], Y: [5, -4] };
+function registration2(t) {
+  const r = {}, d = t - T_SWAP, e = d < 0 ? 0 : Math.exp(-d / .1) * Math.cos(d * TAU / .3);
+  for (const pl of ['B', 'P', 'Y']) r[pl] = [REG2[pl][0] + LAND[pl][0] * e, REG2[pl][1] + LAND[pl][1] * e];
+  return r;
+}
+// 按辊子的线分上下两块印：线上方是第二个镜头（新版的套准），下方是第一个镜头（还在错版里弹）
+function pressRegion(t, x0, y0, x1, y1) {
+  const v = variantAt(t);
+  if (t < T_ROLL0) return press(registration(t), v, x0, y0, x1, y1);
+  if (t >= T_SWAP) return press(registration2(t), v, x0, y0, x1, y1);
+  const yr = clamp(Math.round(rollerY(t) * K), y0, y1);
+  if (yr > y0) press(registration2(t), v, x0, y0, x1, yr);
+  if (yr < y1) press(registration(t), v, x0, yr, x1, y1);
+}
+function drawFrame(g, t) {
+  ensureSize(g);
+  if (tg.reset) tg.reset();                         // 每帧从干净的状态画起：上一帧没 restore 的裁剪不会带过来
+  tg.setTransform(1, 0, 0, 1, 0, 0); tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over';
+  tg.fillStyle = PAPER_T; tg.fillRect(0, 0, PW, PH);
+  if (t < T_ROLL0) shot1(tg, t);
+  else if (t >= T_SWAP) shot2(tg, t);
+  else {
+    shot1(tg, t);
+    const ry = rollerY(t);
+    tg.save(); tg.setTransform(K, 0, 0, K, 0, 0); tg.beginPath(); rollerEdge(tg, ry); tg.clip();
+    shot2(tg, t);
+    tg.setTransform(K, 0, 0, K, 0, 0);
+    // 刚压上去的浓墨：贴着辊子的一条粉 + 黄实地，再上面一条淡一点，边都是毛的
+    const band = (off, tn) => { tg.beginPath(); rollerEdge(tg, ry, 0); tg.save(); tg.clip(); tg.beginPath(); tg.rect(-200, -300, W + 400, H + 600); rollerEdge(tg, ry, off); tg.clip('evenodd'); tg.fillStyle = tn; tg.fillRect(-200, -300, W + 400, H + 600); tg.restore(); };
+    band(64, tone(0, .5, .46));
+    band(30, tone(0, 1, .85));
+    // 浓墨里一道道没吃饱墨的竖条（走纸方向）
+    tg.beginPath(); rollerEdge(tg, ry, 0); tg.save(); tg.clip(); tg.beginPath(); tg.rect(-200, -300, W + 400, H + 600); rollerEdge(tg, ry, 64); tg.clip('evenodd');
+    const sr = rng('roll-streak');
+    for (let i = 0; i < 36; i++) { tg.fillStyle = tone(0, .3 + .3 * sr(), .3 + .2 * sr()); tg.fillRect(sr() * W, ry - 120, 3 + sr() * 9, 240); }
+    tg.restore();
+    tg.restore();
+  }
+  pressRegion(t, 0, 0, PW, PH);
+  blit(g);
+}
+// 歌词：最上层、不跟镜头动。挖空的纸条和字画进同一套版（盖在画面的版上），只把这一条重印一遍
+function overlay(g, t) {
+  if (!drawLyricPlates(tg, t)) return;
+  const L = LY, pad = 30;
+  const x0 = Math.max(0, Math.floor((L.sx0 - 40 - pad) * K)), x1 = Math.min(PW, Math.ceil((L.sx1 + 40 + pad) * K));
+  const y0 = Math.max(0, Math.floor((L.cy - L.h / 2 - pad) * K)), y1 = Math.min(PH, Math.ceil((L.cy + L.h / 2 + pad) * K));
+  pressRegion(t, x0, y0, x1, y1);
+  blit(g);
+}
+
+MV.page({ W, H, fps: FPS, duration: DUR, draw: drawFrame, overlay,
+  ready: async () => {
+    await MV.font(`80px ${FONT_NAME}`, LYRIC);   // 没下到：出片时报错停下，预览时写在播放条上
+    const out = document.querySelector('canvas'), k = Math.min(out.width / W, out.height / H);
+    bake(Math.round(W * k), Math.round(H * k));
+    layoutLyric();
+  } });
+</script></body></html>

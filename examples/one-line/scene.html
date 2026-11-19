@@ -1,0 +1,646 @@
+<!doctype html>
+<!--
+  一笔画（continuous line drawing / one-line animation）· 一根不离纸的线：窗台上的种子发芽开花，一片花瓣被风带走、变成鸟飞出窗外，落在一只伸出来的手上
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。
+
+  关键画法（Canvas 2D，不靠画图库；页面接口是 templates/mv/kit.js 的 MV.page）：
+  1. 工具：一支笔、一种墨、一个粗细。所有线都是 6.6 px（1920 宽时，640 宽的 GIF 里约 2.2 px）的圆头线，不按笔速变粗细。
+     推镜头时只放大点的位置、线宽不变（先把点换到画面坐标再描），推到 3 倍还是同一支笔。
+  2. 拓扑先行，线只有两个头：落笔处（窗框右下角）和此刻的笔尖。笔的路线按一笔画排：窗框右边往上（中途鼓出右边那朵云）→ 窗框顶
+     （中途垂下上面那朵云）→ 左边往下 → 窗台一圈 → 花盆 → 盆口里的土 → 种子。奇数度的结点只能有起点、终点两个，多出来的用回描补
+     （窗台上 122 px、花盆右边 131 px，沿旧线再走一遍，看不出来）。云是窗框上鼓出去的一段线：窗框挡住了它的另一半，所以挂在框上不算另起一根。
+     之后笔尖往上长成茎和叶，绕出花心和五片花瓣；最后画的那片花瓣在线的末端，所以它能被风带走、拖着线飞。
+     镜头二里窗框推到了画外，云和手的线都从画框外接进来（画框外面可以连）。
+  3. 分层：一张墨层（所有线一个颜色、一次描完，回描和交叉都不会更黑）、一张颜色层、纸；合成 = 纸 × 颜色 × 洇 × 墨（multiply）。
+     笔头一个小点（直径约两倍线宽）跟着笔尖，看得出「正在画」；花瓣变鸟时这个点滑到鸟头上当眼睛，从此鸟就是笔，它飞过的路就是新画的线。
+  4. 纸和纹理：暖白纸是开页面时烤的一张（值噪声浆斑 + 细颗粒 + 纤维 + 轻暗角），固定在画面上、不跟镜头推（纸不动，纸上的画在变）；
+     墨层缩到 1/4 再放大垫在下面当一点洇（22%），再用一张平铺噪声把墨挖淡 12%（吃纸不匀）。
+     手抖：沿弧长两层平滑噪声（波长 110 px、21 px，幅度 1.5 px）往法线方向推，两头收到 0，接头才对得上；墨在纸上不会自己动，线不 boil。
+     噪声格点来自 MV.rng 固定种子、查表插值。镜头二里的东西（云、手、鸟拖的线）按镜头二的大小定抖动，推近了不会抖得太粗。
+  5. 颜色：只有墨，加一块淡淡的珊瑚红（花的颜色）。开花那一下在花瓣后面晕开，飞走的那片花瓣带着自己那一块，变形时这块颜色
+     MV.morph 成鸟胸口的红。色块比线错开几像素、边缘糊 2.5 px、边上深一点，像水彩随手刷的，不是填色。
+  6. 光：不画光和阴影，明暗只有墨和纸。
+  7. 动起来的手感：30 fps 连续动。生长和变形都按弧长：茎是笔尖往上画出来的；花苞 = 五片挤在一起的窄花瓣，拍上用弹性缓动
+     （1–2 帧内弹开、冲过头 35% 再摆回）转到五个方向、拉长变宽。风是一根函数：平时茎尖晃 2–3 px，起风时 0.16 秒弯到 18 px 再衰减着摆回；
+     花瓣在风里打转、翻面、卷一个小圈。两朵云沿窗框慢慢漂、鼓包一胀一缩。鸟每拍扇两下翅膀（落地那一下正好翅膀在上）；
+     落在手上时手往下一沉再弹回，鸟收翅、点两下头。
+  8. 转场 = 花瓣变鸟 + 跟着鸟推出窗外（穿越推进）：
+     花瓣 → 鸟用 MV.morph（两个闭合形状按弧长各取 160 点、对齐起点再插值）。两个形状都在「挂线点为原点、朝前是 +x」的局部坐标里，
+     对齐只算一次，挂线点（花瓣根 = 鸟尾尖）一直接在线上。
+     镜头绕一个不动点 F 推：镜头一慢推 1.0 → 1.2（镜头一唯一的慢动作），第 4 拍前 0.28 秒起变成推窗（log 缩放 = 慢推的线性项 +
+     smoothstep 的大推，速度连续），第 5 拍落在 3 倍：窗洞右上那块天（世界里 640×360）正好占满画面；之后按更慢的速度接着推（3 → 3.24）。
+     镜头二的云、手在「镜头二坐标」（1920×1080）里设计，缩成 1/3 放进那块天，推满时 1:1；花在那块天的左边，推完正好出画。
+     鸟的路线写在画面坐标里，它留下的线按「当时的镜头」换回世界坐标，所以推镜头时旧线跟着世界放大、从画框边出去，
+     镜头二里看到的是一根从左下升上来、绕一圈的线。落地前 0.2 秒，这根线按弧长对齐、收进手的轮廓（和手的线重合），手心里只剩一只鸟。
+     推窗那几帧开动态模糊：子帧间隔不超过 1.5 px 才糊成一片，间隔大了 6.6 px 的线会裂成几根残影。
+  9. 歌词：hanzi-writer-data 的笔画中线按笔顺写，笔画之间用 1.7 px 的细连笔（牵丝）连成一根线：上一笔的出笔方向接下一笔的入笔方向
+     （三次贝塞尔），起笔 0.8 倍粗、收笔收到 0.5 倍，笔画 6.6 px、字号 84 px。笔尖也带一个点，写完收进线头。
+     歌词在 overlay（最上层、不跟镜头动），放右下：镜头二里线和手都在左下。写到哪，后面就垫一块羽化的纸（就是那张纸本身），线不压字。
+     时间来自 window.LYRICS + MV.lyricAt；笔画用 MV.glyphs 取（网络问题取不到时出片报错停下），数据里没有的字才退回系统字体。
+
+  时间线（BPM 70，一拍 0.857 秒，第 0 拍在 0 秒；全片 7 拍）：
+    开片前 0.8 秒落笔（第一帧已经有窗框右边、窗框顶和两朵云），0–1.62 秒画完窗、窗台、花盆、土、种子；1.62 起歌词开始写（2 秒写完）
+    第 2 拍（1.71）种子冒出两片子叶 → 笔尖往上长成茎和两片叶，2.36–2.52 绕出花苞
+    第 3 拍（2.57）花苞弹开成五瓣花，后面晕开珊瑚红
+    2.84 起风，2.95 最后画的那片花瓣被带走，卷一个小圈往右上飞；3.15 起花瓣变鸟、镜头开始推窗
+    第 4 拍（3.43）变成鸟、开始扇翅膀；第 5 拍（4.29）推出窗外，落在镜头二（window.PLAN）
+    4.15–4.9 鸟在天上绕一圈；4.48–5.0 手从左下伸上来；4.93 起鸟拖的线收进手的轮廓
+    第 6 拍（5.14）落在手心，手往下一沉再弹回，鸟收翅、5.42 和 5.72 点头；第 7 拍（6.0）结束
+
+  画面只由 t 决定：没有 Math.random()、Date、performance.now()；随机数都是 MV.rng（「元素名 + 序号」做种子），不存上一帧，
+  鸟拖的线每帧都从花瓣飞走那一刻按 1/120 秒重新采样一遍。
+  速度（4 核、无独显的机器，render_frames.mjs 实测）：开页面约 1.8 秒（从 jsDelivr 取 10 个字的笔画数据、烤纸）；
+  1920×1080 一帧连存 PNG 约 0.2 秒，推窗那几帧开了动态模糊（最多 24 个子帧）约 0.45 秒。静止的窗框、窗台、花盆线开页面时就抖好存着，每帧只换算点、描一遍。
+  出 GIF：render_frames.mjs --page examples/one-line/scene.html --fps 12 --width 1280 --height 720 --format png --workers 1 --out <临时目录> →
+  ffmpeg -framerate 12 -i <临时目录>/%06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];
+  [b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" -loop 0（72 帧，约 1.6 MB）。纸固定在画面上，GIF 每帧只存变了的那块，颜色给到 128 也不大。
+  外部资源：hanzi-writer-data@2.0.1（jsDelivr 按字取 JSON 的 medians，Arphic Public License）。
+  坑：
+  - 只有墨的时候小圈容易被看成眼睛：花心那一圈要小，鸟的眼睛用笔头那个实心点
+  - 一笔画的帧差小：新画出来的一段细线只占几百个像素，video_rhythm 会把「笔在画」量成几乎不动。镜头一要有一个一直在走的慢推
+    （这里 1.0 → 1.2），歌词也在种子画完那一刻就开写，长茎那一秒才不会被量成大轮廓没动
+  - 按飞行方向镜像的鸟，竖着飞时会压成一条线（像在转身）：拍上「变成鸟」那一刻要让它斜着飞
+  - MV.morph 自己找对齐的起点：花瓣对鸟时转走了 8 个点，所以挂线点不用它输出的第 0 点，固定在局部原点（差 3 px，被线宽盖住）
+  - 云的一串鼓包用半个正弦，高低随机会变成锯齿；挂在窗框顶上的云沿框滑时，框顶那两段的端点也要跟着滑，不然线会断开
+  - 沿旧线回描的那段也要算进笔的路线（只走笔、不多出墨），不然笔尖接不上
+  - 歌词后面垫的纸会盖掉经过的线：歌词放在线和手都不去的那一角
+-->
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; padding: 0; overflow: hidden; background: #F5EFE3; }</style>
+</head><body><script>
+// ======================= 画面、拍子、时间线 =======================
+const W = 1920, H = 1080, FPS = 30, DUR = 6, BPM = 70;
+MV.tempo(BPM, 0);                                  // 第 0 拍在 0 秒，一拍 0.857 秒，片长正好 7 拍
+const { clamp, lerp, seg, ease } = MV;
+const TAU = Math.PI * 2, BT = MV.beatTime;
+const T = {
+  route0: -0.8, route1: 1.62,                      // 笔画窗、云、窗台、花盆、土和种子（开片前就落笔了，第一帧不是白纸）
+  sprout: BT(2),                                   // 1.71 拍上：种子冒出两片子叶
+  stem1: 2.36, bud1: 2.52,                         // 笔尖往上长成茎和叶，顶上绕出花苞
+  bloom: BT(3),                                    // 2.57 拍上：花苞弹开
+  gust: 2.84, detach: 2.95,                        // 起风，最后画的那片花瓣被带走
+  morph0: 3.15, morph1: BT(4),                     // 3.43 拍上：花瓣变成鸟
+  push0: 3.15, push1: BT(5),                       // 4.29 拍上：推出窗外，落在镜头二（转场落点）
+  loop: 4.15,                                      // 鸟在天上绕一圈从这里开始
+  hand0: 4.48, hand1: 5.0,                         // 手从下面伸上来
+  wrap0: 4.93,                                     // 鸟拖的线在落地前 0.2 秒收进手的轮廓
+  land: BT(6),                                     // 5.14 拍上：落在手心
+  lyric0: 1.62, lyricLen: 2.0,                     // 歌词开写（种子画完那一刻）、写多久
+};
+window.PLAN = [+T.push1.toFixed(3)];
+const LYRIC = '窗台那朵花，飞到你指尖';
+window.LYRICS = [[T.lyric0, DUR, LYRIC]];
+
+const INK = '#2B2420', LW = 6.6, DOT_R = 6.3;      // 一种墨、一个粗细；笔头的点直径约两倍线宽
+const PAPER = [245, 239, 227];
+const ACC = '228,112,86';                          // 唯一的颜色：花的珊瑚红
+
+// ======================= 小工具 =======================
+const add = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+const lp = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
+const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+const unit = (v) => { const d = Math.hypot(v[0], v[1]) || 1; return [v[0] / d, v[1] / d]; };
+const rot = (v, a) => { const c = Math.cos(a), s = Math.sin(a); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c]; };
+const lerpAng = (a, b, u) => a + ((((b - a) % TAU) + TAU * 1.5) % TAU - Math.PI) * u;   // 走近的那边转
+const smooth = ease.smooth;
+const elastic = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : Math.pow(2, -9 * u) * Math.sin((u * 9 - 0.75) * TAU / 3) + 1);
+const mix = (P, Q, m) => P.map((p, i) => lp(p, Q[i], m));
+// 平滑噪声（-1→1）：格点值来自 MV.rng（固定种子）先存成表，每个点查表插值，比每次现算快
+const LAT = new Map();
+function nz(key, x) {
+  let a = LAT.get(key);
+  if (!a) { const r = MV.rng(key); a = new Float32Array(1024); for (let i = 0; i < 1024; i++) a[i] = r() * 2 - 1; LAT.set(key, a); }
+  const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f);
+  return lerp(a[i & 1023], a[(i + 1) & 1023], u);
+}
+// 同一帧里算过的几何（花、鸟、手）存一下，下一帧换 t 就清掉；画面仍只由 t 决定
+let MEMO_T = NaN, MEMO = {};
+function memo(t, key, fn) { if (t !== MEMO_T) { MEMO_T = t; MEMO = {}; } return key in MEMO ? MEMO[key] : (MEMO[key] = fn()); }
+
+// ======================= 线的几何 =======================
+function cum(p) { const L = new Float64Array(p.length); for (let i = 1; i < p.length; i++) L[i] = L[i - 1] + dist(p[i - 1], p[i]); return L; }
+function plen(p) { let s = 0; for (let i = 1; i < p.length; i++) s += dist(p[i - 1], p[i]); return s; }
+function dense(pts, step) {                        // 每段等分加点（拐角留着）
+  const o = [pts[0].slice()];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], n = Math.max(1, Math.ceil(dist(a, b) / step));
+    for (let k = 1; k <= n; k++) o.push([lerp(a[0], b[0], k / n), lerp(a[1], b[1], k / n)]);
+  }
+  return o;
+}
+function resampleN(p, n) {                         // 开放的线按弧长取 n 个点（两头都在）
+  if (p.length < 2) return Array.from({ length: n }, () => p[0].slice());
+  const L = cum(p), tot = L[L.length - 1] || 1, o = [];
+  for (let k = 0, j = 1; k < n; k++) {
+    const s = tot * k / (n - 1);
+    while (j < p.length - 1 && L[j] < s) j++;
+    const d = L[j] - L[j - 1];
+    o.push(lp(p[j - 1], p[j], d > 0 ? clamp((s - L[j - 1]) / d) : 0));
+  }
+  return o;
+}
+function cr(pts, n = 8, closed = false) {          // Catmull-Rom：几个控制点连成顺滑的线（同一个点写两遍就是尖角）
+  const m = pts.length, o = [];
+  const at = closed ? (i) => pts[((i % m) + m) % m] : (i) => pts[Math.max(0, Math.min(m - 1, i))];
+  for (let i = 0; i < (closed ? m : m - 1); i++) {
+    const a = at(i - 1), b = at(i), c = at(i + 1), d = at(i + 2);
+    for (let k = 0; k < n; k++) {
+      const u = k / n, u2 = u * u, u3 = u2 * u;
+      o.push([0, 1].map((j) => 0.5 * (2 * b[j] + (-a[j] + c[j]) * u + (2 * a[j] - 5 * b[j] + 4 * c[j] - d[j]) * u2 + (-a[j] + 3 * b[j] - 3 * c[j] + d[j]) * u3)));
+    }
+  }
+  if (!closed) o.push(pts[m - 1].slice());
+  return o;
+}
+// 手抖：沿弧长的平滑噪声，往法线方向推开；两头 taper 长度内收到 0，接头才对得上
+function wob(p, key, amp, wl, taper = 24) {
+  if (!amp || p.length < 3) return p;
+  const L = cum(p), tot = L[L.length - 1];
+  return p.map((q, i) => {
+    const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1;
+    const o = amp * Math.min(1, L[i] / taper, (tot - L[i]) / taper) * (nz(key, L[i] / wl) + 0.35 * nz(key + '~', L[i] / (wl * 0.19)));
+    return [q[0] - dy / d * o, q[1] + dx / d * o];
+  });
+}
+function cutPoly(p, s) {                           // 从头量 s 长的一段；tip 是笔尖
+  if (s <= 0) return { pts: [p[0]], tip: p[0] };
+  for (let i = 1, acc = 0; i < p.length; i++) {
+    const d = dist(p[i - 1], p[i]);
+    if (acc + d >= s) { const tip = lp(p[i - 1], p[i], d ? (s - acc) / d : 0); return { pts: [...p.slice(0, i), tip], tip }; }
+    acc += d;
+  }
+  return { pts: p, tip: p[p.length - 1] };
+}
+function trace(g, p, closed = false) {             // 往当前路径里加一条线（整片一个粗细，一次 stroke 画完）
+  if (p.length < 2) return;
+  g.moveTo(p[0][0], p[0][1]);
+  for (let i = 1; i < p.length; i++) g.lineTo(p[i][0], p[i][1]);
+  if (closed) g.closePath();
+}
+
+// ======================= 镜头：绕一个不动点推 =======================
+// 镜头二（窗外的天）按 1920×1080 设计，缩成 1/3 放进窗洞右上（世界里 640×360，花在它左边、不进镜头二）。绕 F 推到 3 倍时它正好占满画面
+const F = [1200, 135], BS = 1 / 3, BO = [800, 90], ZB = 3;
+const bw = (p) => [BO[0] + BS * p[0], BO[1] + BS * p[1]];                 // 镜头二坐标 → 世界
+const toS = (p, z) => [F[0] + (p[0] - F[0]) * z, F[1] + (p[1] - F[1]) * z];  // 世界 → 画面
+const toW = (p, z) => [F[0] + (p[0] - F[0]) / z, F[1] + (p[1] - F[1]) / z];  // 画面 → 世界
+// log 缩放 = 慢推（镜头一 A1、镜头二 A2，转场里线性过渡）+ 转场的大推（smoothstep）。两头的速度都接得上
+const A1 = Math.log(1.2) / T.push0, A2 = 0.045, PD = T.push1 - T.push0;
+const LPUSH = Math.log(ZB) - A1 * T.push0 - PD * (A1 + A2) / 2;
+function zoomAt(t) {
+  if (t <= T.push0) return Math.exp(A1 * t);
+  const u = Math.min(1, (t - T.push0) / PD);
+  let v = A1 * T.push0 + PD * (A1 * u + (A2 - A1) * u * u / 2) + LPUSH * smooth(u);
+  if (t > T.push1) v += A2 * (t - T.push1);
+  return Math.exp(v);
+}
+
+// ======================= 窗、云、窗台、花盆：笔的路线 =======================
+const WBR = [1480, 750], WTR = [1480, 70], WTL = [460, 70], WBL = [460, 750];
+const SLT = [420, 750], SLB = [420, 784], SRB = [1520, 784], SRT = [1520, 750];
+const POT = { cx: 640, y: 622, rx: 86, ry: 16 };
+const P1 = [582, 750], P2 = [698, 750], R1 = [554, 622], R2 = [726, 622], SEED = [640, 628];   // 种子在盆口里的土上
+const CRB = bw([2040, 330]), CRT = bw([2040, 150]);   // 右边那朵云挂在窗框上的两个点
+function bump(a, b, h, n = 12) {                   // a → b 一个鼓包，鼓向行进方向的左手边（顺时针绕的云就是朝外）
+  const d = unit(sub(b, a)), nr = [d[1], -d[0]], o = [];
+  for (let i = 1; i <= n; i++) { const u = i / n; o.push(add(lp(a, b, u), nr, h * Math.pow(Math.sin(Math.PI * u), 0.85))); }
+  return o;
+}
+// 两朵云在镜头二坐标里画（推满时 1:1），一串鼓包 + 平底；慢慢往窗里漂，鼓包一胀一缩
+function cloudRB(t) {                              // 右边：窗框上的下挂点 → 平底往左 → 绕过左头 → 鼓包往右 → 上挂点
+  const d = 12 * t, b = 1 + 0.04 * Math.sin(1.3 * t);
+  const vl = [1420 - d, 330], v1 = [1460 - 0.8 * d, 240], v2 = [1600 - 0.5 * d, 180], v3 = [1760 - 0.25 * d, 145], v4 = [1920 - 0.08 * d, 128], e = [2040, 150];
+  return [[2040, 330], vl, ...bump(vl, v1, 44 * b), ...bump(v1, v2, 62 * b), ...bump(v2, v3, 60 * b), ...bump(v3, v4, 48 * b), ...bump(v4, e, 34 * b)];
+}
+const cloudLAt = (t) => 10 * t;                    // 上面那朵沿窗框顶往右滑多远
+function cloudLB(t) {                              // 上面：挂在窗框顶上、只露出下半截（右挂点 → 右边两个鼓包 → 三个往下鼓的底 → 左边两个鼓包 → 左挂点）
+  const d = cloudLAt(t), b = 1 + 0.04 * Math.sin(1.1 * t + 2), P = (x, y) => [x + d, y];
+  const pts = [P(660, -60), P(700, 70), P(640, 172), P(500, 192), P(350, 198), P(212, 178), P(150, 70), P(170, -60)], hs = [40, 46, 24, 24, 24, 46, 38];
+  return [pts[0], ...hs.flatMap((h, i) => bump(pts[i], pts[i + 1], h * b))];
+}
+const cloudW = (fn, t, key) => wob(dense(fn(t).map(bw), 2), key, 1.5 * BS, 110 * BS, 24 * BS);   // 抖动按镜头二的大小
+const RIM = (a0, a1) => Array.from({ length: 25 }, (_, i) => { const a = lerp(a0, a1, i / 24); return [POT.cx + POT.rx * Math.cos(a), POT.y + POT.ry * Math.sin(a)]; });
+const quad = (a, c, b, n = 14) => Array.from({ length: n + 1 }, (_, i) => { const u = i / n; return [0, 1].map((j) => (1 - u) * (1 - u) * a[j] + 2 * u * (1 - u) * c[j] + u * u * b[j]); });
+const SEED_LOOP = Array.from({ length: 21 }, (_, i) => { const a = Math.PI / 2 + TAU * i / 20; return [SEED[0] + 8 * Math.cos(a), SEED[1] - 5.5 + 5.5 * Math.sin(a)]; });
+
+const ROUTE = [];
+function buildRoute() {
+  const P = {};
+  const S = (key, pts, amp = 1.5) => (P[key] = { key, pts: wob(dense(pts, 3), 'r-' + key, amp, 110) });
+  const D = (key, fn) => ({ key, fn: (t) => wob(dense(fn(t), 3), 'r-' + key, 1.5, 110) });     // 端点会滑的直线（窗框顶跟着云走）
+  const back = (key) => ({ key: key + '-back', pts: P[key].pts.slice().reverse(), back: true });   // 回描：沿旧线走回去
+  ROUTE.push(
+    S('winR', [WBR, CRB]), { key: 'cloudR', fn: (t) => cloudW(cloudRB, t, 'cR') }, S('winR2', [CRT, WTR]),
+    D('winTopA', (t) => [WTR, bw([660 + cloudLAt(t), -60])]), { key: 'cloudL', fn: (t) => cloudW(cloudLB, t, 'cL') },
+    D('winTopB', (t) => [bw([170 + cloudLAt(t), -60]), WTL]), S('winL', [WTL, WBL]),
+    S('sillA', [WBL, P1]), back('sillA'), S('sillB', [WBL, SLT]), S('sillC', [SLT, SLB]), S('sillD', [SLB, SRB]), S('sillE', [SRB, SRT]),
+    S('sillF', [SRT, WBR, P2]), S('potR', [P2, R2], 1), S('rimBack', RIM(0, -Math.PI), 0.8), S('rimFront', RIM(Math.PI, 0), 0.8),
+    back('potR'), S('potBase', [P2, P1], 1), S('potL', [P1, R1], 1), S('soil', quad(R1, [592, 628], SEED), 0.6), S('seed', SEED_LOOP, 0),
+  );
+  // 每段用时 ∝ 长度^0.75：短的相对慢，每段两头笔慢一点（拐角）；回描走得快
+  const wts = ROUTE.map((p) => Math.pow(plen(p.pts || p.fn(0)), 0.75) * (p.back ? 0.5 : 1)), tot = wts.reduce((a, b) => a + b, 0);
+  let acc = T.route0;
+  ROUTE.forEach((p, i) => { p.t0 = acc; acc += (T.route1 - T.route0) * wts[i] / tot; p.t1 = acc; });
+}
+const rEase = (u) => 0.55 * u + 0.45 * smooth(u);
+function routeAt(t) {                              // 画到哪了：画完的几段 + 正在画的那段，笔尖（世界坐标）
+  const lines = [];
+  let tip = null;
+  for (const p of ROUTE) {
+    if (t <= p.t0) break;
+    const pts = p.pts || p.fn(t);
+    if (t >= p.t1) { lines.push(pts); tip = pts[pts.length - 1]; continue; }
+    const c = cutPoly(pts, rEase(seg(t, p.t0, p.t1)) * plen(pts));
+    lines.push(c.pts); tip = c.tip;
+    break;
+  }
+  return { lines, tip };
+}
+
+// ======================= 植物：茎、叶、花（笔尖往上长） =======================
+const STEM0 = [SEED, [638, 604], [643, 576], [636, 543], [644, 510]], C0 = [648, 462];
+const D2R = Math.PI / 180;
+const PA_OPEN = [126, 198, 270, 414, 342].map((d) => d * D2R);   // 五片花瓣按画的顺序（花心那圈上的角度）；最后一片在右上，它会飞走
+const PA_BUD = [252, 261, 270, 288, 279].map((d) => d * D2R);    // 花苞时五片挤在朝上的一小块
+// 花瓣：根在原点、朝 +x，一边鼓一边平，和鸟的轮廓同一个绕向（MV.morph 才好对齐）
+const PETAL_U = cr([[0, 0], [0.22, 0.13], [0.5, 0.18], [0.78, 0.12], [1, 0], [0.93, -0.17], [0.76, -0.29], [0.55, -0.31], [0.34, -0.25], [0.15, -0.13]], 6, true);
+const PETAL_WASH_U = PETAL_U.map(([x, y]) => [0.05 + x * 0.92, 0.04 + y * 0.9]);
+function bend(t) {                                 // 风：茎尖往右偏多少像素
+  let g = 0;
+  if (t > T.gust) { const u = t - T.gust; g = u < 0.16 ? 18 * smooth(u / 0.16) : 18 * Math.exp(-(u - 0.16) * 2.6) * Math.cos((u - 0.16) * 8); }
+  return 2.6 * Math.sin(1.7 * t + 0.4) + g;
+}
+const swayPt = (p, b) => { const h = Math.max(0, SEED[1] - p[1]) / 150; return [p[0] + b * Math.pow(h, 1.7), p[1] + Math.abs(b) * 0.06 * h * h]; };
+const bloomK = (t) => (t < T.bloom ? 0 : elastic(seg(t, T.bloom, T.bloom + 0.5)));
+function almond(base, dir, len, wid, n = 9) {      // 叶子：从 base 出去、绕到尖、再回到 base 的一个圈
+  const d = unit(dir), nn = [-d[1], d[0]], o = [base.slice()], w = (u) => wid / 2 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.8)), 0.9);
+  for (let i = 1; i <= n; i++) o.push(add(add(base, d, len * i / n), nn, w(i / n)));
+  for (let i = n - 1; i >= 0; i--) o.push(add(add(base, d, len * i / n), nn, -w(i / n)));
+  return o;
+}
+function plantGeo(t) {
+  return memo(t, 'plant', () => {
+    const b = bend(t), k = bloomK(t), tilt = b * 0.012, sw = (p) => swayPt(p, b);
+    const c = sw(C0), rc = lerp(6, 13, k), ringPt = (a) => [c[0] + rc * Math.cos(a), c[1] + rc * Math.sin(a)], a0 = Math.PI / 2 + tilt;
+    const stem = dense(cr([...STEM0.map(sw), ringPt(a0)], 8), 3), Ls = cum(stem), tot = Ls[Ls.length - 1];
+    const idx = (f) => { let i = 0; while (i < stem.length - 1 && Ls[i] < f * tot) i++; return i; };
+    const pop = t < T.sprout ? 0 : ease.back(seg(t, T.sprout, T.sprout + 0.22), 2.4);   // 子叶拍上弹出来
+    const lf = (t0) => 0.62 + 0.38 * smooth(seg(t, t0, t0 + 0.35));                     // 叶子画完再舒展一点
+    const tl = (v) => rot(v, b * 0.01), ic = idx(0.07), il = idx(0.3), ir = idx(0.62);
+    const loops = {
+      [ic]: [...almond(stem[ic], tl([-0.86, -0.5]), 20 * pop, 13 * pop), ...almond(stem[ic], tl([0.86, -0.5]), 20 * pop, 13 * pop).slice(1)],
+      [il]: almond(stem[il], tl([-0.9, -0.42]), 56 * lf(1.95), 21 * lf(1.95)),
+      [ir]: almond(stem[ir], tl([0.92, -0.36]), 58 * lf(2.2), 21 * lf(2.2)),
+    };
+    const path = [];
+    let iCot = 0;
+    stem.forEach((p, i) => { path.push(p); if (loops[i]) path.push(...loops[i].slice(1)); if (i === ic) iCot = path.length - 1; });
+    const iStem = path.length - 1;
+    // 花：花心一圈 → 沿花心走到每片花瓣的根 → 出去绕一圈回来（花心上的那几段是回描）
+    const arcTo = (from, to) => { const n = Math.max(1, Math.ceil(Math.abs(to - from) * rc / 3)); for (let j = 1; j <= n; j++) path.push(ringPt(lerp(from, to, j / n))); };
+    arcTo(a0, a0 + TAU);
+    const Lp = lerp(38, 66, k), ws = lerp(0.42, 1, Math.min(k, 1.15)), petals = [];
+    let cur = a0;
+    for (let i = 0; i < 5; i++) {
+      const th = lerp(PA_BUD[i], PA_OPEN[i], k) + tilt, base = ringPt(th), tf = ([x, y]) => add(base, rot([x * Lp, y * Lp * ws], th));
+      arcTo(cur, th); cur = th;
+      petals.push({ base, th, loop: PETAL_U.map(tf), wash: PETAL_WASH_U.map(tf) });
+      if (i < 4 || t < T.detach) path.push(...petals[i].loop.slice(1), base);   // 飞走以后线停在这片花瓣的根上
+    }
+    const pw = wob(path, 'plant', 0.9, 70);
+    return { path: pw, L: cum(pw), iCot, iStem, petals, base4: petals[4].base, th4: petals[4].th };
+  });
+}
+function plantReveal(t, g) {                       // 笔画到植物路线的哪里（长度）
+  const sCot = g.L[g.iCot], sStem = g.L[g.iStem], sEnd = g.L[g.L.length - 1];
+  if (t < T.sprout + 0.07) return sCot * smooth(seg(t, T.sprout, T.sprout + 0.07));
+  if (t < T.stem1) return lerp(sCot, sStem, smooth(seg(t, T.sprout + 0.07, T.stem1)));
+  return lerp(sStem, sEnd, smooth(seg(t, T.stem1, T.bud1)));
+}
+
+// ======================= 手（镜头二坐标）：从左下伸上来，掌心朝上 =======================
+const HAND_B = [
+  [255, 1185], [320, 1070], [405, 955], [480, 872], [560, 828], [658, 798], [760, 772], [845, 750],     // 小臂、手掌、手指的下沿
+  [878, 745], [893, 737], [884, 728], [903, 721], [895, 713], [914, 704], [911, 689], [896, 679],       // 指尖：几个手指头叠着露出来
+  [866, 680], [830, 684], [770, 694], [715, 705], [658, 713], [602, 708], [560, 694],                  // 手指上沿 → 掌心 → 拇指根
+  [554, 650], [563, 612], [552, 588], [527, 590], [513, 622], [500, 668],                              // 大拇指
+  [468, 712], [412, 770], [318, 872], [218, 978], [125, 1090], [80, 1185],                             // 手背、小臂上沿
+].map(([x, y]) => [600 + (x - 600) * 0.88, 1185 + (y - 1185) * 0.88]);   // 整只手缩一点，鸟显得大些
+const ELBOW = [-60, 1380];
+let HAND = null;
+function buildHand() {
+  const pts = wob(dense(cr(HAND_B, 8), 4), 'hand', 1.5, 110);
+  const near = (q) => pts.reduce((bi, p, i) => (dist(p, q) < dist(pts[bi], q) ? i : bi), 0);
+  const at = (x, y) => near([600 + (x - 600) * 0.88, 1185 + (y - 1185) * 0.88]);
+  HAND = { pts, tail: at(800, 689), thumb: at(560, 694) };   // 鸟尾巴搭在手指上沿；掌心到拇指根是鸟脚站的地方
+}
+function handPose(t) {
+  const e = seg(t, T.hand0, T.hand1), r = e <= 0 ? 0 : ease.back(e, 1.25), u = seg(t, T.land, T.land + 0.75);
+  const dip = u > 0 && u < 1 ? 22 * Math.sin(TAU * u) * Math.exp(-3.2 * u) : 0;     // 鸟落上来：往下一沉再弹回
+  return { dy: 620 * (1 - r) + dip, ang: -(0.17 * (1 - r) + dip * 0.0007 + 0.012 * Math.sin(2.1 * t) * smooth(e)) };
+}
+function handGeo(t) {
+  return memo(t, 'hand', () => {
+    const ps = handPose(t), z = zoomAt(t);
+    const pts = HAND.pts.map((p) => toS(bw(add(add(ELBOW, rot(sub(p, ELBOW), ps.ang)), [0, ps.dy])), z));
+    return { pts, perch: pts[HAND.tail] };
+  });
+}
+
+// ======================= 花瓣 → 鸟：它就是笔，飞过的路就是线 =======================
+// 鸟：原点是尾尖（挂线的地方），朝 +x，单位长度；wing 0 翅膀在上、1 在下，fold 1 收起；hb 是头的偏移（点头）
+function birdU(wing, fold, hb = [0, 0]) {
+  const tip = lp([lerp(0.53, 0.42, wing), lerp(-0.74, 0.4, wing)], [0.14, -0.08], fold), rf = [0.7, -0.2], rb = [0.38, -0.19];
+  const d = sub(tip, rf), L = Math.hypot(d[0], d[1]) || 1;
+  let n = [-d[1] / L, d[0] / L]; if (n[0] < 0) n = [-n[0], -n[1]];                       // 翅膀前缘往头那边鼓
+  const m1 = add(lp(rf, tip, 0.5), n, 0.07 * Math.min(1, L / 0.55)), h = (p) => add(p, hb);
+  return cr([[0, 0], [0.17, 0.06], [0.36, 0.12], [0.56, 0.165], [0.75, 0.15], [0.9, 0.08], [0.99, -0.02],
+    h([1.06, -0.075]), h([1.22, -0.105]), h([1.22, -0.105]), h([1.06, -0.15]), h([1.02, -0.215]), h([0.93, -0.265]), h([0.82, -0.25]),
+    rf, m1, tip, lp(tip, rb, 0.5), rb, [0.24, -0.11], [0.1, -0.04]], 5, true);
+}
+const BIRD_M = birdU(0, 0), BIRD_EYE = [0.93, -0.18], LEG_U = [[0.55, 0.16], [0.66, 0.15]];
+const PERCH_ANG = Math.PI + 0.26, PERCH_FY = -1;   // 停在手上：朝左（朝着拇指）、抬头
+const BREAST_U = Array.from({ length: 40 }, (_, i) => { const a = TAU * i / 40, v = rot([0.25 * Math.cos(a), 0.11 * Math.sin(a)], -0.22); return [0.7 + v[0], 0.035 + v[1]]; });
+// 飞的路线：挂线点在画面上的位置（Hermite，过这些关键点；第一点是那片花瓣的根，最后一点是手心）
+let FLY = null;
+function buildFly() {
+  const g = plantGeo(T.detach), q = toS(g.base4, zoomAt(T.detach)), perch = handGeo(T.land).perch;
+  const K = [[T.detach, q], [3.03, [630, 478]], [3.1, [690, 452]], [3.16, [726, 470]], [3.21, [712, 498]], [3.26, [684, 482]],   // 被风卷了一个小圈
+    [3.31, [694, 446]], [3.43, [850, 345]], [3.6, [950, 300]], [3.8, [995, 312]], [4.0, [985, 360]], [4.15, [1040, 425]],
+    [4.3, [1170, 440]], [4.43, [1250, 310]], [4.55, [1130, 180]], [4.66, [930, 200]], [4.78, [830, 340]], [4.9, [840, 500]], [5.02, [800, 610]], [T.land, perch]];
+  const M = K.map((k, i) => (i === 0 || i === K.length - 1 ? [0, 0]
+    : [0, 1].map((j) => (K[i + 1][1][j] - K[i - 1][1][j]) / (K[i + 1][0] - K[i - 1][0]))));   // 起飞、落地时速度为 0
+  FLY = { K, M, th4: g.th4 };
+}
+function flyAt(t) {
+  const { K, M } = FLY;
+  t = clamp(t, K[0][0], K[K.length - 1][0]);
+  let i = 0;
+  while (i < K.length - 2 && t > K[i + 1][0]) i++;
+  const h = K[i + 1][0] - K[i][0], s = (t - K[i][0]) / h, s2 = s * s, s3 = s2 * s, p0 = K[i][1], p1 = K[i + 1][1], m0 = M[i], m1 = M[i + 1];
+  const pos = [0, 1].map((j) => (2 * s3 - 3 * s2 + 1) * p0[j] + (s3 - 2 * s2 + s) * h * m0[j] + (-2 * s3 + 3 * s2) * p1[j] + (s3 - s2) * h * m1[j]);
+  const vel = [0, 1].map((j) => ((6 * s2 - 6 * s) * p0[j] + (3 * s2 - 4 * s + 1) * h * m0[j] + (-6 * s2 + 6 * s) * p1[j] + (3 * s2 - 2 * s) * h * m1[j]) / h);
+  return { pos, vel };
+}
+const hump = (t, t0, d) => Math.sin(Math.PI * seg(t, t0, t0 + d));
+function flyerGeo(t) {
+  return memo(t, 'flyer', () => {
+    if (t < T.detach) return null;
+    const landed = t >= T.land, f = flyAt(Math.min(t, T.land)), att = landed ? handGeo(t).perch : f.pos;
+    const angV = Math.atan2(f.vel[1], f.vel[0]), um = smooth(seg(t, T.morph0, T.morph1)), tau = t - T.detach;
+    // 朝向：刚离开时还是花瓣原来的方向，0.16 秒转到飞的方向；花瓣在风里打转、翻面；落地前 0.2 秒抬头
+    let ang = lerpAng(FLY.th4, angV, smooth(seg(t, T.detach, T.detach + 0.16))) + (1 - um) * 0.3 * Math.sin(tau * 19) * smooth(clamp(tau / 0.12));
+    const flare = smooth(seg(t, T.land - 0.2, T.land)), uL = seg(t, T.land, T.land + 0.75);
+    const settle = uL > 0 && uL < 1 ? 0.07 * Math.sin(TAU * uL) * Math.exp(-3 * uL) : 0;
+    ang = lerpAng(ang, PERCH_ANG - settle, flare);
+    const tumble = lerp(1, Math.cos(tau * 15), smooth(clamp(tau / 0.15)));
+    const flip = clamp(Math.cos(angV) * 3.5, -1, 1);                   // 往左飞时镜像；竖着飞时压扁，像在转身
+    const fy = lerp(lerp(tumble, flip, um), PERCH_FY, flare);
+    const S0 = 66 * zoomAt(T.detach);                                   // 画面上的大小：花瓣 → 鸟 → 推镜头时长大 → 镜头二里跟着世界
+    const S = t < T.morph0 ? S0 * (1 + 0.1 * smooth(seg(t, T.detach, T.morph0))) : t < T.morph1 ? lerp(S0 * 1.1, 95, um)
+      : t < T.push1 ? lerp(95, 150, smooth(seg(t, T.morph1, T.push1))) : 150 * zoomAt(t) / ZB;
+    // 翅膀：每拍扇两下（第 4 拍起，落地那一下正好在上），落地后 0.25 秒收起
+    const wing = 0.5 - 0.5 * Math.cos(TAU * 2 * (Math.min(t, T.land) - T.morph1) / (60 / BPM)), fold = smooth(seg(t, T.land, T.land + 0.25));
+    const hb = add([0.05 * hump(t, 5.42, 0.18), 0.06 * hump(t, 5.42, 0.18)], [-0.04 * hump(t, 5.72, 0.18), 0.05 * hump(t, 5.72, 0.18)]);   // 落定后点两下头
+    let shape, wash;
+    if (t < T.morph0) { shape = PETAL_U; wash = PETAL_WASH_U; }
+    else if (t < T.morph1) { shape = MV.morph(PETAL_U, BIRD_M, um, 160); wash = MV.morph(PETAL_WASH_U, BREAST_U, um, 72); }
+    else { shape = birdU(wing, fold, hb); wash = BREAST_U.map((p) => add(p, hb, 0.4)); }
+    const X = (p) => add(att, rot([p[0] * S, p[1] * S * fy], ang));
+    const legs = [], ext = smooth(seg(t, T.land - 0.25, T.land));
+    if (ext > 0) {
+      const hg = handGeo(t), cup = hg.pts.slice(HAND.tail, HAND.thumb + 1);
+      for (const lu of LEG_U) {
+        const top = X(lu), dangle = [top[0], top[1] + 0.2 * S * ext];
+        const pc = cup.reduce((a, p) => (Math.abs(p[0] - top[0]) < Math.abs(a[0] - top[0]) ? p : a), cup[0]);
+        legs.push([top, lp(dangle, [top[0], Math.max(top[1] + 2, pc[1])], flare)]);
+      }
+    }
+    return { loop: shape.map(X), wash: wash.map(X), att, legs, dot: t < T.morph0 ? att : lp(att, X(add(BIRD_EYE, hb)), um) };
+  });
+}
+// 鸟拖的线：从花心上那片花瓣的根出发，按 1/120 秒采样挂线点。每个点按「当时的镜头」换回世界坐标，推镜头时跟着世界放大
+const TR_DT = 1 / 120, TR_SPLIT = 3.07;
+function trailGeo(t) {
+  return memo(t, 'trail', () => {
+    if (t < T.detach) return null;
+    const z = zoomAt(t), fl = flyerGeo(t), pg = plantGeo(t), w = [pg.base4];
+    for (let k = 0; T.detach + k * TR_DT < Math.min(t, T.land); k++) { const tau = T.detach + k * TR_DT; w.push(toW(flyAt(tau).pos, zoomAt(tau))); }
+    w.push(toW(fl.att, z));
+    // 手抖按镜头二的大小（世界里 1/3），两头收到 0
+    const L = cum(w), tot = L[L.length - 1], amp = 1.5 / ZB, wl = 110 / ZB, tp = 24 / ZB;
+    let pts = w.map((q, i) => {
+      const a = w[Math.max(0, i - 1)], b = w[Math.min(w.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1;
+      const o = amp * Math.min(1, L[i] / tp, (tot - L[i]) / tp) * (nz('trail', L[i] / wl) + 0.35 * nz('trail~', L[i] / (wl * 0.19)));
+      return toS([q[0] - dy / d * o, q[1] + dx / d * o], z);
+    });
+    // 落地前：这根线按弧长对齐、贴到手的轮廓上。前一半（推镜头时留下的弧线）→ 画外绕到手腕 → 沿手的下沿、指尖、手指上沿到鸟尾；
+    // 后一半（绕的那一圈）收成手心到鸟尾的一小段，落地时长度为 0
+    const iS = 1 + Math.round((TR_SPLIT - T.detach) / TR_DT), iL = 1 + Math.round((T.loop - T.detach) / TR_DT);
+    if (t > T.wrap0 && pts.length > iL + 2) {
+      const m = ease.inOut(seg(t, T.wrap0, T.land)), hg = handGeo(t), hp = hg.pts.slice(0, HAND.tail + 1), a = pts[iS], h0 = hp[0], yb = Math.max(a[1], h0[1]) + 60;
+      const tgtA = [...dense([a, [a[0], yb], [h0[0], yb], h0], 12), ...hp.slice(1)], tgtB = [hg.perch, pts[pts.length - 1]];
+      const mA = mix(resampleN(pts.slice(iS, iL + 1), 280), resampleN(tgtA, 280), m), mB = mix(resampleN(pts.slice(iL), 160), resampleN(tgtB, 160), m);
+      pts = [...pts.slice(0, iS), ...mA, ...mB.slice(1)];
+    }
+    return pts;
+  });
+}
+
+// ======================= 歌词：一根线按笔顺写出来 =======================
+const MED = {};
+const COMMA = [[[330, 300], [370, 268], [372, 210], [322, 140]]];
+const LY = { x: 820, cy: 990, size: 84, adv: 92, comma: 52, ws: 6.6, wl: 1.7 };   // 放在右下：镜头二里线从左下来、手也在左下
+let LYR = null;
+function buildLyric() {
+  const strokes = [], fb = [];
+  let x = LY.x;
+  [...LYRIC].forEach((ch, i) => {
+    const r = MV.rng('lyric' + i), ang = (r() - 0.5) * 0.06, cx = x + LY.size / 2, cy = LY.cy + (r() - 0.5) * 6;
+    const meds = ch === '，' ? COMMA : MED[ch];
+    if (meds) for (const m of meds) {
+      const tp = m.map(([mx, my]) => add([cx, cy], rot([(mx / 1024 - 0.5) * LY.size, ((900 - my) / 1024 - 0.5) * LY.size], ang)));
+      strokes.push(dense(tp.length > 2 ? cr(tp, 6) : tp, 2));
+    }
+    else fb.push({ ch, x: cx, y: cy, at: strokes.length });
+    x += ch === '，' ? LY.comma : LY.adv;
+  });
+  const pts = [], wd = [], cost = [], WS = LY.ws, WL = LY.wl;
+  strokes.forEach((s, si) => {
+    if (si) {                                      // 连笔：上一笔的出笔方向接这一笔的入笔方向，细细一根
+      const pv = strokes[si - 1], A = pv[pv.length - 1], B = s[0], D = dist(A, B);
+      const c1 = add(A, unit(sub(A, pv[Math.max(0, pv.length - 4)])), D * 0.35), c2 = add(B, unit(sub(s[Math.min(3, s.length - 1)], B)), -D * 0.35);
+      const n = Math.max(4, Math.ceil(D / 3));
+      for (let j = 1; j < n; j++) {
+        const u = j / n, v = 1 - u;
+        pts.push([0, 1].map((k) => v * v * v * A[k] + 3 * v * v * u * c1[k] + 3 * v * u * u * c2[k] + u * u * u * B[k]));
+        wd.push(u < 0.2 ? lerp(0.5 * WS, WL, smooth(u / 0.2)) : u > 0.8 ? lerp(WL, 0.8 * WS, smooth((u - 0.8) / 0.2)) : WL);
+        cost.push(1 / 2.6);                        // 连笔走得快
+      }
+    }
+    const Ls = cum(s), tot = Ls[Ls.length - 1];
+    s.forEach((p, j) => { pts.push(p); wd.push(WS * Math.min(1, 0.8 + 0.2 * Ls[j] / 8) * lerp(0.5, 1, Math.min(1, (tot - Ls[j]) / 12))); cost.push(1); });
+  });
+  const tm = [0], xm = [pts.length ? pts[0][0] : LY.x];
+  for (let i = 1; i < pts.length; i++) { tm.push(tm[i - 1] + dist(pts[i - 1], pts[i]) * cost[i]); xm.push(Math.max(xm[i - 1], pts[i][0])); }
+  const k = T.lyricLen / (tm[tm.length - 1] || 1);
+  LYR = { pts, wd, tm: tm.map((v) => v * k), xm, fb, nStroke: strokes.length, x0: LY.x - 50, x1: x + 60, y0: LY.cy - 64, y1: LY.cy + 64 };
+}
+function inkW(g, p, w) {                           // 变宽的线：宽度按 0.5 px 一档，同一档的连续几段一次 stroke
+  let i = 0;
+  while (i < p.length - 1) {
+    const q = Math.round(w[i] * 2) / 2;
+    g.lineWidth = q; g.beginPath(); g.moveTo(p[i][0], p[i][1]);
+    let j = i;
+    while (j < p.length - 1 && Math.round(w[j] * 2) / 2 === q) { j++; g.lineTo(p[j][0], p[j][1]); }
+    g.stroke(); i = j;
+  }
+}
+
+// ======================= 纸、墨层 =======================
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; };
+function grid(r, n) { const a = new Float32Array(n * n); for (let i = 0; i < a.length; i++) a[i] = r(); return { a, n }; }
+function gn(gr, x, y) {
+  const n = gr.n, i = Math.floor(x), j = Math.floor(y), sx = smooth(x - i), sy = smooth(y - j);
+  const at = (ii, jj) => gr.a[(((jj % n) + n) % n) * n + (((ii % n) + n) % n)];
+  return lerp(lerp(at(i, j), at(i + 1, j), sx), lerp(at(i, j + 1), at(i + 1, j + 1), sx), sy);
+}
+function bakePaper(cw, ch, Tm) {                   // 暖白纸：大块浆斑 + 细颗粒 + 纤维 + 轻暗角（按画面坐标烤，大小变了也一样）
+  const c = mk(cw, ch), g = c.getContext('2d'), r = MV.rng('paper'), big = grid(r, 32), mid = grid(r, 128), fine = grid(r, 256);
+  const img = g.createImageData(cw, ch), d = img.data, k = Tm.a, ox = Tm.e, oy = Tm.f;
+  for (let y = 0; y < ch; y++) {
+    const wy = (y - oy) / k;
+    for (let x = 0; x < cw; x++) {
+      const wx = (x - ox) / k, m = gn(big, wx / 120, wy / 120) * 0.6 + gn(mid, wx / 28, wy / 28) * 0.4, f = gn(fine, wx / 2.1, wy / 1.5);
+      const vx = (wx - W / 2) / (W * 0.6), vy = (wy - H / 2) / (H * 0.6), v = Math.max(0, vx * vx + vy * vy - 0.3);
+      const tone = 0.985 + (m - 0.5) * 0.05 - Math.max(0, f - 0.68) * 0.1 - v * 0.1, i = (y * cw + x) * 4;
+      d[i] = PAPER[0] * tone; d[i + 1] = PAPER[1] * tone; d[i + 2] = PAPER[2] * tone * 0.992; d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  g.setTransform(Tm); g.lineCap = 'round';
+  for (let i = 0; i < 520; i++) {
+    const x = r() * W, y = r() * H, a = r() * TAU, L = 6 + r() * 22, dark = r() < 0.6;
+    g.strokeStyle = dark ? `rgba(125,105,78,${(0.05 + r() * 0.07).toFixed(3)})` : `rgba(255,252,244,${(0.25 + r() * 0.3).toFixed(3)})`;
+    g.lineWidth = 0.5 + r() * 0.8;
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 0.6) * L * 0.5, y + Math.sin(a + 0.6) * L * 0.5, x + Math.cos(a) * L, y + Math.sin(a) * L); g.stroke();
+  }
+  return c;
+}
+let MOTTLE_C = null;
+function bakeMottle() {                            // 墨吃纸不匀：挖淡墨用的噪声（256 一块，平铺）
+  const s = 256, c = mk(s, s), g = c.getContext('2d'), r = MV.rng('mottle'), gr = grid(r, 64), img = g.createImageData(s, s);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) { const n = gn(gr, x / 4, y / 4) * 0.65 + r() * 0.35; img.data[(y * s + x) * 4 + 3] = 255 * clamp((n - 0.42) * 2.2); }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+let LAYERS = null;
+function layers(g) {                               // 跟着输出画布的大小建一次：纸、墨层、颜色层、洇、歌词垫纸
+  const cw = g.canvas.width, ch = g.canvas.height, Tm = g.getTransform();
+  if (LAYERS && LAYERS.cw === cw && LAYERS.ch === ch && LAYERS.k === Tm.a && LAYERS.ox === Tm.e && LAYERS.oy === Tm.f) return LAYERS;
+  const L = { cw, ch, k: Tm.a, ox: Tm.e, oy: Tm.f, Tm, paper: bakePaper(cw, ch, Tm), ink: mk(cw, ch), wash: mk(cw, ch), halo: mk(cw / 4, ch / 4) };
+  L.mottle = L.ink.getContext('2d').createPattern(MOTTLE_C, 'repeat');
+  if (LYR) {                                       // 歌词后面垫的纸：就是这张纸，边缘羽化
+    const bx = Math.floor(L.ox + LYR.x0 * L.k), by = Math.floor(L.oy + LYR.y0 * L.k), pw = Math.ceil((LYR.x1 - LYR.x0) * L.k), ph = Math.ceil((LYR.y1 - LYR.y0) * L.k), fe = 22 * L.k;
+    const mask = mk(pw, ph), mg = mask.getContext('2d');
+    mg.filter = `blur(${fe / 2}px)`; mg.fillStyle = '#000'; mg.fillRect(fe, fe, pw - 2 * fe, ph - 2 * fe);
+    L.pad = { bx, by, mask, tmp: mk(pw, ph) };
+  }
+  return (LAYERS = L);
+}
+
+// ======================= 一帧 =======================
+function drawFrame(g, t) {
+  const L = layers(g), z = zoomAt(t), S = (p) => toS(p, z);
+  const ig = L.ink.getContext('2d');
+  ig.setTransform(1, 0, 0, 1, 0, 0); ig.globalCompositeOperation = 'source-over'; ig.globalAlpha = 1; ig.clearRect(0, 0, L.cw, L.ch);
+  ig.setTransform(L.Tm); ig.strokeStyle = ig.fillStyle = INK; ig.lineWidth = LW; ig.lineCap = 'round'; ig.lineJoin = 'round';
+  ig.beginPath();
+  const rt = routeAt(t);                            // 1 窗、云、窗台、花盆、种子
+  for (const p of rt.lines) trace(ig, p.map(S));
+  let tip = t < T.route1 ? rt.tip : SEED;
+  const pg = plantGeo(t);                           // 2 植物（笔尖往上长）
+  if (t >= T.sprout) { const c = cutPoly(pg.path, plantReveal(t, pg)); trace(ig, c.pts.map(S)); tip = c.tip; }
+  const fl = flyerGeo(t), tr = trailGeo(t);         // 3 花瓣 / 鸟，和它拖着的线
+  if (tr) trace(ig, tr);
+  if (fl) { trace(ig, fl.loop, true); for (const lg of fl.legs) trace(ig, lg); }
+  if (t >= T.hand0) trace(ig, handGeo(t).pts);      // 4 手
+  ig.stroke();
+  const dot = fl ? fl.dot : S(tip);                 // 笔头的点
+  ig.beginPath(); ig.arc(dot[0], dot[1], DOT_R, 0, TAU); ig.fill();
+  ig.setTransform(1, 0, 0, 1, 0, 0); ig.globalCompositeOperation = 'destination-out'; ig.globalAlpha = 0.12; ig.fillStyle = L.mottle; ig.fillRect(0, 0, L.cw, L.ch);
+  // 颜色：花瓣后面一块珊瑚红，飞走的那片带着自己那块，变成鸟胸口
+  const wg = L.wash.getContext('2d');
+  wg.setTransform(1, 0, 0, 1, 0, 0); wg.globalCompositeOperation = 'source-over'; wg.globalAlpha = 1; wg.filter = 'none'; wg.clearRect(0, 0, L.cw, L.ch);
+  const shapes = [];
+  if (t >= T.bloom) pg.petals.forEach((p, i) => { if (i < 4 || t < T.detach) shapes.push(p.wash.map((q) => S(add(q, [3, 2])))); });
+  if (fl) shapes.push(fl.wash);
+  if (shapes.length) {
+    wg.setTransform(L.Tm);
+    wg.globalAlpha = smooth(seg(t, T.bloom, T.bloom + 0.12));
+    wg.filter = `blur(${(2.5 * L.k).toFixed(2)}px)`; wg.fillStyle = `rgba(${ACC},0.5)`;
+    for (const s of shapes) { wg.beginPath(); trace(wg, s, true); wg.fill(); }
+    wg.filter = `blur(${L.k.toFixed(2)}px)`; wg.strokeStyle = 'rgba(196,78,58,0.3)'; wg.lineWidth = 2.4; wg.lineJoin = 'round';
+    for (const s of shapes) { wg.beginPath(); trace(wg, s, true); wg.stroke(); }
+    wg.filter = 'none'; wg.setTransform(1, 0, 0, 1, 0, 0); wg.globalCompositeOperation = 'destination-out'; wg.globalAlpha = 0.22; wg.fillStyle = L.mottle; wg.fillRect(0, 0, L.cw, L.ch);
+  }
+  // 合成：纸 → 颜色（multiply）→ 洇（墨层缩小再放大）→ 墨
+  const hg = L.halo.getContext('2d');
+  hg.setTransform(1, 0, 0, 1, 0, 0); hg.clearRect(0, 0, L.halo.width, L.halo.height); hg.imageSmoothingQuality = 'high'; hg.drawImage(L.ink, 0, 0, L.halo.width, L.halo.height);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(L.paper, 0, 0);
+  g.globalCompositeOperation = 'multiply';
+  if (shapes.length) g.drawImage(L.wash, 0, 0);
+  g.imageSmoothingQuality = 'high'; g.globalAlpha = 0.22; g.drawImage(L.halo, 0, 0, L.cw, L.ch);
+  g.globalAlpha = 1; g.drawImage(L.ink, 0, 0);
+  g.restore();
+}
+// 歌词（最上层、不跟镜头动）：写到哪，后面垫的纸就铺到哪
+function drawOverlay(g, t) {
+  const lr = MV.lyricAt(t, { tail: 1, gap: 0 });
+  if (!lr || !LYR || !LYR.pts.length) return;
+  const L = layers(g), age = lr.age, tm = LYR.tm, n = LYR.pts.length;
+  let i = 0, lo = 0, hi = n - 1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (tm[m] <= age) { i = m; lo = m + 1; } else hi = m - 1; }
+  const f = i < n - 1 ? clamp((age - tm[i]) / ((tm[i + 1] - tm[i]) || 1)) : 0, tip = i < n - 1 ? lp(LYR.pts[i], LYR.pts[i + 1], f) : LYR.pts[n - 1];
+  const P = [...LYR.pts.slice(0, i + 1), tip], Wd = [...LYR.wd.slice(0, i + 1), LYR.wd[Math.min(n - 1, i + 1)]];
+  if (L.pad) {
+    const { bx, by, mask, tmp } = L.pad, pg2 = tmp.getContext('2d'), xr = (Math.max(LYR.xm[i], tip[0]) + 40 - LYR.x0) * L.k;
+    pg2.setTransform(1, 0, 0, 1, 0, 0); pg2.globalCompositeOperation = 'source-over'; pg2.clearRect(0, 0, tmp.width, tmp.height);
+    pg2.drawImage(mask, 0, 0);
+    pg2.globalCompositeOperation = 'source-in'; pg2.drawImage(L.paper, -bx, -by);
+    pg2.globalCompositeOperation = 'destination-in';
+    const gr = pg2.createLinearGradient(xr, 0, xr + 70 * L.k, 0); gr.addColorStop(0, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    pg2.fillStyle = gr; pg2.fillRect(0, 0, tmp.width, tmp.height);
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(tmp, bx, by); g.restore();
+  }
+  g.save();
+  g.strokeStyle = g.fillStyle = INK; g.lineCap = 'round'; g.lineJoin = 'round';
+  if (P.length > 1) inkW(g, P, Wd);
+  const done = age >= tm[n - 1], r = done ? lerp(DOT_R * 0.82, 0, smooth(seg(age, tm[n - 1], tm[n - 1] + 0.3))) : DOT_R * 0.82;
+  if (r > 0.3) { g.beginPath(); g.arc(tip[0], tip[1], r, 0, TAU); g.fill(); }
+  g.font = `500 ${LY.size * 0.9}px "Kaiti SC","STKaiti","KaiTi","PingFang SC","Microsoft YaHei",sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const fb of LYR.fb) {                         // 笔画数据没取到的字
+    const si = fb.at < LYR.nStroke ? LYR.pts.length * fb.at / LYR.nStroke : n;
+    if (i >= si - 1) g.fillText(fb.ch, fb.x, fb.y);
+  }
+  g.restore();
+}
+// 动态模糊：推窗那几帧，按画面角上（离不动点约 1300 px）这一帧走了多少像素给子帧。细线怕残影：
+// 子帧间隔要小于 1.5 px 才糊成一片（4 px 一个时 6.6 px 的线会分成几根），最多 24 个
+function blur(t) {
+  if (t < T.push0 || t > T.push1 + 0.05) return 1;
+  const px = 1300 * Math.abs(zoomAt(t) / zoomAt(t - 1 / FPS) - 1);
+  return Math.max(1, Math.min(24, Math.ceil(px * 0.5 / 1.5)));
+}
+
+MV.page({ W, H, fps: FPS, duration: DUR, draw: drawFrame, overlay: drawOverlay, blur,
+  ready: async () => {
+    // 笔画数据：先用本地的 glyphs.js（scripts/glyphs.py 存的，页面里引了就用），缺的从 jsDelivr 取；网络问题取不到时出片报错停下，不会有的帧有字、有的退回系统字体
+    Object.assign(MED, await MV.glyphs(LYRIC));
+    MOTTLE_C = bakeMottle();
+    buildRoute(); buildHand(); buildFly(); buildLyric();
+  } });
+</script></body></html>

@@ -1,101 +1,158 @@
 <!doctype html>
 <!--
-  纸艺拼贴绘本（cut & torn paper collage）· music-mv 画风示例：雪夜街角的小螃蟹（5 秒，BPM 120，第 6 拍 = 2.5 秒路灯亮）
+  纸艺拼贴绘本（cut & torn paper collage）· 赶早班：闹钟在床头柜上跳、吐司弹起来、女孩冲出门跑过斑马线、公交车门在她面前打开
+  示范场景只为展示画法，做 MV 时场景、角色、构图从你的歌来。
+  这一页示范「拼贴快切」整片方案：四张拼好的纸卡在拍上一张换一张，三次换法各不一样（滑进来、撕开、翻过去），
+  每张卡看得清的时候停 0.9–1.7 秒，卡里还有卡在拍上的动作。6 秒 = 140 BPM 的 14 拍，用 kit.js 的 MV.page 搭，浏览器直接打开就能看。
 
-  这不是"插画 + 纸纹滤镜"。画面里每样东西都是一张单独剪 / 撕出来的纸片，像在桌上贴好、一张一张拍下来：
-  1. 纸片：每张纸片画一次，缓存成离屏画布（piece()）。房子 = 墙一张纸 + 屋顶一张纸 + 窗户一块块小方纸贴上去 + 窗格细纸条；
-     路灯 = 杆一条纸 + 灯头几块纸；长椅 = 几根纸条；雪地 = 撕开的白纸条；天 = 一整张深蓝卡纸；星星 = 剪的小星星和打孔器打的圆点
-  2. 纸的纹理按纸种用代码生成（makeSheet）：卡纸 = 斑驳 + 纤维 + 杂点；牛皮纸 = 暖棕 + 深色碎屑 + 长纤维；旧报纸 = 米白 + 灰色小字行和网点图；
-     花纸 = 圆点 / 条纹；薄棉纸 = 半透明 + 皱痕；横格纸 = 蓝横线 + 红边线。每种纸先做一大张，纸片从大张上随机位置"剪"下来。
-     纹理只在纸片里，从不在整个画面上叠一层
-  3. 边（outline()）：剪刀边 = 每 24–66 px 一个小折角的折线，轻微抖；撕纸边 = 噪声推出来的毛边，下面露一圈宽窄不一的白色纸芯，
-     再加几根纤维毛刺。剪的纸片外面多一圈手剪的暖白边（宽窄不匀，粗剪成小段直线）；纸片里沿右下有一点纸厚的暗线、左上一点亮线
-  4. 层次：每张纸片往右下投一小块软影子（灯在左上），影子烘进纸片的缓存里；螃蟹整个垫高一层，在雪地上另有一块影子
-  5. 定格：画面一秒只更新 12 次（STEP = floor(t*12)），每次每张纸片按"名字 + 第几张"抖 1–2 px、±0.5°（绕纸片自己的中心，大纸片转得少）；
-     大张底纸（天、远山、雪地）是粘死的不抖；背景纸片还各有一点固定的歪（手贴的不正）。雪、星星按 STEP 走，镜头推近每 4 次更新挪一小格。
-     螃蟹是纸偶：零件是硬纸片，绕关节转（肩上钉着铜脚钉），不压扁不拉伸；"压缩"靠腿张开、身子放低；走过的雪地上一格一格多出小脚印
-  6. 路灯亮（2.5 秒）= 灯罩换成黄纸 + 黄色薄棉纸光锥和锯齿光晕"啪"地贴上 + 雪地上贴一块黄纸 + 拍照的灯打暖（world 里一次径向光）
-  7. 歌词印在撕下来的横格纸条上，3.0 秒卡拍"啪"地贴上（放大回弹），两条半透明纸胶带随后一张一张贴住。画面上除了歌词不放别的字
-  画面只由 t 决定：随机数全用"元素名 + 序号"做种子，不用 Math.random()，不存上一帧的状态。
-  速度：Canvas 2D，开页面生成纸和纸片约 1–2 秒，之后一帧约 0.1 秒（1920×1080），走路线 A / B 都行。
-  出 README 动图时：纹理多、每帧都在抖，sierra2_4a 抖动的 GIF 约 4.9 MB；paletteuse 换 dither=bayer:bayer_scale=4 约 3.8 MB，看着差不多。
+  这不是「插画 + 纸纹滤镜」。画面里每样东西都是一张单独剪 / 撕出来的纸片，像在桌上贴好、一张一张拍下来：
+  1. 工具：Canvas 2D。每张纸片开页面时画一次，缓存成离屏画布（piece()），每帧只是把纸片「贴」上去（put()）。
+     闹钟 = 红卡纸圆 + 铜色圈 + 奶油色表盘 + 12 根小纸条刻度（没有数字）+ 三根纸条指针 + 中心一颗铜脚钉 + 两只铜铃 + 两只脚；
+     吐司 = 金棕色的边一张 + 奶油色的心一张（上面刷一点烤色）；公交车 = 奶油色上身 + 青绿下身 + 一条红纸条 + 一格格薄棉纸车窗
+  2. 纸（makeSheet()）：按纸种用代码生成一大张，纸片从大张上随机位置「剪」下来，纹理只在纸片里，从不整屏叠一层。
+     牛皮纸 = 暖棕 + 深色碎屑 + 长纤维（床头柜、地板再画几道木纹）；格子布纹纸 = 横竖两组半透明色条，交叉处最深，细斜纹像织出来的；
+     旧报纸 = 米白 + 一栏栏灰色短横条当字、两行粗块当标题、网点块当图（没有一个真字）；薄棉纸 = 半透明 + 皱痕（窗帘、车窗、热气、灯光）；
+     圆点花纸、条纹花纸（被子上一块块拼布，沿边压一圈虚线针脚）；横格纸（歌词纸条）；纸胶带 = 半透明 + 细皱纹。都叠斑驳、细颗粒、杂点、纤维。
+     点缀：纸胶带（歌词纸条两头）、订书钉（窗帘、擦手巾、太阳、站牌上各钉一颗）、铜脚钉（纸偶关节、钟心、车轮）
+  3. 边（outline()）：剪刀边 = 每 24–66 px 一个小折角的折线；撕纸边 = 噪声推出来的毛边，下面露一圈宽窄不一的白纸芯和纤维毛刺。
+     剪的纸片外面多一圈手剪的暖白边（宽窄不匀，粗剪成小段直线）；纸片里沿右下一点纸厚的暗线、左上一点亮线
+  4. 分层：每张纸片往右下投一小块软影子（灯在左上），影子烘进纸片的缓存里；大张底纸（墙、天、路）粘死不抖，
+     别的纸片每张有一点固定的歪（手贴的不正，端点最多偏 3 px）；女孩腾空时脚下贴一块软影子，跳得越高越小
+  5. 颜色：暖的早晨：奶油、牛皮纸、番茄红、芥末黄、青绿、浅天蓝、桃色。不用深色底配亮色、不用紫色渐变
+  6. 动起来：画面一拍只更新 5 次（140 BPM 下一秒 11.7 次，STEP = floor(拍 × 5)），拍点永远是某一张的第一帧，卡拍不会差半张。
+     每张纸片每次按「名字 + 第几张」抖 1–1.4 px、转零点几度（绕自己的中心，大纸片转得少）。动作是一张张摆出来的关键姿势，不是补间：
+     闹钟拍前三张抬起来、左右轮流歪，拍上落回桌面，脚边贴两道小纸条，铃边两套弧形纸条轮流换；吐司拍上弹出去；
+     女孩是纸偶（头、头发、马尾、身子、裙子、书包、上下臂、手、大腿、小腿、袜子、鞋都是单独的纸片，肩、肘、胯、膝钉铜脚钉），
+     零件是硬纸片，绕关节转，不压扁不拉伸，蹲、跳靠关节角度和身子高低；跑步一拍一大步、拍上落地，马尾跟着上下甩；
+     公交车门打开 = 换成越来越窄的门片（定格动画的替换片），不是把一张门片压扁；热气每张换一缕剪好的形状
+  7. 光：拍照的灯在左上：overlay 最后叠一层暖色 soft-light、一圈暖灰暗角，歌词纸条也吃到同样的光。
+     车里的灯 = 一块黄色薄棉纸「啪」地贴进门里 + 一块更淡的落到人行道上；红绿灯亮 = 换一张绿纸片 + 后面一圈黄薄棉纸
+  8. 转场（都是这画风自己的手法，落点卡在拍上，window.PLAN 写了三个落点）：
+     第 3 拍「滑进来」：新卡从右边 3 张滑进来，旧卡被推着往左走（走 55% 的路），新卡左边一圈手剪白边、往旧卡上投影；
+       滑动那几张拍的时候纸在动，照片上糊出一小段拖影（这一张那段路取 12 个位置平均，见 slideIn），卡边的白边和影子最后清楚地贴一次；
+       拍上那张落位，再往回弹 12 px
+     第 6 拍「撕开」：吐司那张先从上往下裂一道缝（缝里露出下一张），再撕到底、两半绕撕口下端往两边转开甩出画面，
+       撕口露白纸芯和纤维，两半往下面那张投影；拍上正好甩干净
+     第 10 拍「翻过去」：右下角掀起来往左上翻（折线以外沿折线翻到上面），背面是素纸，靠折线一侧暗、中间亮，影子落在下面那张上
+  9. 歌词：一句原创歌词手写在撕下来的横格纸条上（霞鹜文楷粗体，1920 宽时 66 px，每个字各歪一点、大一点小一点、上下错一点，
+     描两遍、再吃掉一些墨点像笔没水），第 4 拍「啪」地贴上（放大回弹），下一张、下下张两条纸胶带一条一条贴住。
+     纸条在 overlay 里画，最上层、不跟卡走；歌词出来以后的三张卡，上面那一条（y 50–200、x 350–1170）都留空，纸条不压东西。
+     画面上除了歌词不放别的字：表盘只有刻度，车上没有线路号，站牌只是一块圆纸，报纸用横条代替字
+  时间线（拍从 0 数，一拍 0.4286 秒，一拍 5 张）：
+     0–2 拍 闹钟一拍一跳（第 1、2 拍落地），秒针一张一格走，窗外太阳一格格升；第 2 拍被窝里的女孩睁眼
+     第 3 拍（1.286 s）吐司那张滑进来落位    第 4 拍 歌词纸条贴上，吐司机开始抖    第 5 拍 吐司弹起来
+     第 6 拍（2.571 s）撕开，露出街口那张     第 7 拍 门被撞开、女孩叼着吐司冲出来、红灯换绿灯   第 8、9 拍 跑过斑马线、拍上落地
+     第 10 拍（4.286 s）翻页露出公交车，女孩急刹、喘气    第 11 拍 车门打开、车里的灯亮    第 12 拍 起跳
+     第 13 拍 落在车门台阶上、车身一沉，举起手、小臂往后摆一下到片尾
+  速度（4 核、无独显的 Windows，render_frames 报的数）：开页面先下字体、烤纸和纸片，1920×1080 约 6 秒（1280×720 约 3 秒）；
+     之后 1920×1080 一帧约 0.07 秒，转场那几张两张卡都画、约 0.1 秒。
+  出 README 动图（6 秒，12 fps 共 72 张）：
+     node scripts/render_frames.mjs --page examples/collage/scene.html --fps 12 --width 1280 --height 720 --format png --out <临时目录> --workers 1
+     ffmpeg -framerate 12 -i <临时目录>/%06d.png -vf "scale=640:360:flags=lanczos,split[a][b];[a]palettegen=max_colors=176:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" -loop 0 docs/style-collage.gif
+     4.1 MB（640×360、72 帧）。纹理多、每张都在抖：同样 176 色换 sierra2_4a 抖动是 6.1 MB；bayer 抖动看着差不多
+  外部资源：霞鹜文楷 LXGW WenKai（字体 OFL-1.1，网页字体包 lxgw-wenkai-webfont 是 MIT，jsDelivr 加载）
+  坑：
+  - 拍照的灯、暗角放在 overlay 里最后叠，歌词纸条也要吃到同样的光，不然像贴在镜头上
+  - 「每张照片曝光差一点点」的闪只差 1% 亮度，看不太出来，却让 GIF 每帧整屏都变（bayer 点阵整屏翻）：同样 192 色从 4.3 MB 涨到 6.0 MB。
+    这版不闪，定格感靠纸片抖
+  - 拍子和定格要对齐：按「一秒 12 张」取整，140 BPM 的拍点落在两张中间，落位会早或晚半张；改成按拍取整（一拍 5 张）
+  - 整张卡滑进来，一张就挪 600 多 px。拖影取的路太长（取一张走的一半）就成了一叠重影、整屏发虚；取 6% 的路、12 个位置刚好，
+    位置太少，竖边会出一道道分开的残影；卡边的白边和影子要另外清楚地贴，不然糊得看不出是一张卡
+  - 卡比画面每边宽 40 px（出血），落位往回弹、撕开时两半转起来，边上才不会露出黑底
+  - 撕开的两半是同一条撕口：先在准备时算好一条撕线，两半各自往里缩一点露白纸芯，不然两边的毛边对不上；
+    拍前那一张两半还要挂在画面两边，拍上才甩干净，不然看着早落位一张
+  - 侧面的纸偶，近侧的手一抬就挡脸：举手就举过头、往后斜一点（压着后脑勺），往前伸的手放在下巴以下；远侧的手举起来会藏在头后面
+  - 全角标点画在字框的左下角：按字框居中画，逗号会缩进前一个字里看不见；标点按格子左边对齐
+  - 只给小纸片用的纸别烤 1100 见方的大张（按大小分 600、1100 两档共用），开页面能省三分之一的时间
 -->
 <html lang="zh-CN"><head><meta charset="UTF-8" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-bold.css">
-<style>html, body { margin: 0; padding: 0; overflow: hidden; background: #1f2f55; } canvas { display: block; }</style>
-</head><body><canvas id="c"></canvas>
-<script>
+<script src="../../templates/mv/kit.js"></script>
+<style>html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }</style>
+</head><body><script>
 'use strict';
-// ───────────────────────── 基础 ─────────────────────────
-const LW = 1920, LH = 1080;              // 逻辑坐标（画面按 1920×1080 设计，实际画布按窗口大小缩放）
-const UPS = 12;                          // 定格：一秒更新 12 次
-const LIT_T = 2.5, LYRIC_T = 3.0, HEART_T = 3.5;
-const LYRIC = '把今天的星星，都留给你';
-const FONT = '"LXGW WenKai","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif';
-const D2R = Math.PI / 180;
-const cv = document.getElementById('c');
-const PW = Math.max(320, Math.round(window.innerWidth || LW)), PH = Math.max(180, Math.round(window.innerHeight || LH));
-cv.width = PW; cv.height = PH;
-const K = Math.max(PW / LW, PH / LH);    // 逻辑 px → 物理 px
-const OX = (PW - LW * K) / 2, OY = (PH - LH * K) / 2;
-const ctx = cv.getContext('2d');
-let STEP = 0;
-let HOLD = 1;                            // 抖动隔几次更新换一次（背景纸片 BG_HOLD，角色 1）
-let TILT = false;                        // 背景纸片贴得不正：每张固定歪一点（端点最多偏 3 px）
-const BG_HOLD = 1, CAM_HOLD = 4;         // 镜头推近也是一格一格的：每 4 次更新挪一小格
+// ───────────────────────── 拍子、镜头表 ─────────────────────────
+const W = 1920, H = 1080, FPS = 30, DURATION = 6;
+MV.tempo(140, 0);                                    // 一拍 60/140 = 0.4286 秒，6 秒正好 14 拍
+const UPB = 5;                                       // 定格：一拍拍 5 张（一秒 11.7 张），拍点永远是某一张的第一帧
+const stepOf = (t) => Math.floor(MV.beat(t) * UPB + 1e-6);
+const at = (beat) => beat * UPB;                     // 第几拍 → 第几张
+let STEP = 0;                                        // 现在是第几张（drawFrame、overlay 一开头设好）
+// 四张卡。land：在第几拍完全落位；len：转场占落位前几张；trans：怎么接上一张；settle：落位后头两张往回弹多少 px
+const SHOTS = [
+  { name: '闹钟在床头柜上跳', land: 0, draw: card1 },
+  { name: '吐司从吐司机里弹起来', land: 3, len: 3, trans: slideIn, settle: [-12, 3], draw: card2 },
+  { name: '女孩冲出门、跑过斑马线', land: 6, len: 4, trans: tearOpen, draw: card3 },
+  { name: '公交车门在她面前打开', land: 10, len: 4, trans: pageTurn, draw: card4 },
+];
+window.PLAN = SHOTS.slice(1).map((s) => +MV.beatTime(s.land).toFixed(3));     // 转场落点（成片秒）
+const LYRIC_BEAT = 4;
+window.LYRICS = [[MV.beatTime(LYRIC_BEAT), DURATION, '一路小跑，追上早晨']];      // 原创的一句：第 4 拍贴上，留到片尾
 
-// 种子随机数：同一个名字永远拿到同一串数
-function hstr(s) { s = String(s); let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function mul(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-const R = (k) => mul(hstr(k));
-function lat(seed, i) { let h = (seed ^ Math.imul(i | 0, 0x27d4eb2d)) >>> 0; h = Math.imul(h ^ (h >>> 15), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296 * 2 - 1; }
-function n1(seed, x) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return lat(seed, i) * (1 - u) + lat(seed, i + 1) * u; }
-function fbm1(seed, x) { return 0.62 * n1(seed, x) + 0.27 * n1(seed + 101, x * 2.13) + 0.11 * n1(seed + 211, x * 4.37); }
-function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
-function hex2(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
-function rgba(h, a) { const c = hex2(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
-function shade(h, f) { return '#' + hex2(h).map(v => Math.max(0, Math.min(255, Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f))))).map(v => v.toString(16).padStart(2, '0')).join(''); }
+// ───────────────────────── 小工具 ─────────────────────────
+const D2R = Math.PI / 180;
+const R = (key) => MV.rng(key);                      // 同一个名字永远拿到同一串随机数
+const fbm = (key, x) => 0.62 * MV.noise(key, x) + 0.27 * MV.noise(key + '2', x * 2.13) + 0.11 * MV.noise(key + '3', x * 4.37);
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; };
+const hex2 = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const rgba = (h, a) => { const c = hex2(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+const shade = (h, f) => '#' + hex2(h).map((v) => Math.max(0, Math.min(255, Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f)))).toString(16).padStart(2, '0')).join('');
+let K = 1;                                           // 逻辑 px → 物理 px：纸和纸片按出图的分辨率烤（ready 里定）
 
 // ───────────────────────── 纸 ─────────────────────────
-// kind: card 卡纸 / kraft 牛皮纸 / news 旧报纸 / dots 圆点花纸 / stripes 条纹花纸 / tissue 薄棉纸 / tape 纸胶带
+// kind：card 卡纸 / kraft 牛皮纸 / news 旧报纸 / gingham 格子布纹纸 / dots 圆点花纸 / stripes 条纹花纸 / tissue 薄棉纸 / tape 纸胶带
 const PAPER = {
-  sky:     { base: '#233868', mot: 0.10, grain: 0.05, fibN: 1500, spkN: 2600 },
-  sky2:    { base: '#29406F', mot: 0.10, grain: 0.05, fibN: 1500, spkN: 2600 },
-  hill:    { base: '#3A5487', mot: 0.09, grain: 0.05 },
-  print:   { base: '#A9B7CD', mot: 0.05 },
-  snowB:   { base: '#D6DEEA', mot: 0.05, grain: 0.03, fib: [['#FFFFFF', 0.55], ['#A3B2C9', 0.3]], spk: [['#A9B6CB', 0.4]] },
-  snowF:   { base: '#F4F0E7', mot: 0.04, grain: 0.028, fib: [['#FFFFFF', 0.6], ['#C9C0B0', 0.3]], spk: [['#CEC4B2', 0.4]], spkN: 900 },
   white:   { base: '#FFF9EE', mot: 0.03, grain: 0.022, fib: [['#E0D6C4', 0.35]], spk: [['#D8CEBC', 0.35]], spkN: 600 },
-  kraft:   { base: '#B5875A', kind: 'kraft', mot: 0.10, grain: 0.06, fib: [['#7A5533', 0.4], ['#D8B68C', 0.35]], spk: [['#583A1E', 0.75], ['#E2C6A0', 0.5]], spkN: 5200, fibN: 2400 },
-  kraftD:  { base: '#8A6340', kind: 'kraft', mot: 0.10, grain: 0.06, fib: [['#5A3E25', 0.4], ['#B48D64', 0.35]], spk: [['#3E2814', 0.7], ['#C29C72', 0.45]], spkN: 4200, fibN: 2000 },
-  news:    { base: '#E5DFCF', kind: 'news', mot: 0.06, grain: 0.035, fib: [['#C7BEA9', 0.3]], spk: [['#9E9686', 0.35]], spkN: 900 },
-  brick:   { base: '#9C4537' },
-  slate:   { base: '#4C6087' },
-  teal:    { base: '#3D7470', kind: 'dots', dot: '#EBDFC3' },
-  stripe:  { base: '#E8DCC2', kind: 'stripes', stripe: '#B4584A', mot: 0.05 },
-  pine:    { base: '#2E5A4F' },
-  char:    { base: '#2C3140', mot: 0.08 },
-  door:    { base: '#394A69' },
-  win:     { base: '#F4C452', mot: 0.06, grain: 0.035 },
-  winDim:  { base: '#D9A442', mot: 0.06, grain: 0.035 },
-  winD:    { base: '#36405A' },
-  glass:   { base: '#8B9AB4' },
-  glassLit:{ base: '#FFDA62', mot: 0.05, grain: 0.03 },
-  tissue:  { base: '#FFD45E', kind: 'tissue', mot: 0.16, grain: 0.03 },
-  patch:   { base: '#F9DF92', mot: 0.06, grain: 0.03 },
-  crab:    { base: '#E3603A', mot: 0.08 },
-  crabD:   { base: '#C14A2D', mot: 0.08 },
-  belly:   { base: '#F8DBB5', mot: 0.05, grain: 0.03 },
-  spot:    { base: '#F39060' },
-  cheek:   { base: '#F4A08E', mot: 0.05 },
-  heart:   { base: '#E4524A', mot: 0.08 },
-  cream:   { base: '#F3E8CB', mot: 0.05, grain: 0.03 },
+  back:    { base: '#EDE3CE', mot: 0.06, grain: 0.03, fib: [['#D0C1A4', 0.45], ['#FFFFFF', 0.3]], spk: [['#B5A589', 0.45]], spkN: 1100 },
+  cream:   { base: '#F4E9CF', mot: 0.05, grain: 0.03 },
+  kraft:   { base: '#BC8D5E', kind: 'kraft', mot: 0.10, grain: 0.06, fib: [['#7E5835', 0.4], ['#DBB98E', 0.35]], spk: [['#5B3C20', 0.7], ['#E4C8A2', 0.5]], spkN: 5000, fibN: 2300 },
+  kraftD:  { base: '#8F6643', kind: 'kraft', mot: 0.10, grain: 0.06, fib: [['#5C4027', 0.4], ['#B68F66', 0.35]], spk: [['#402A16', 0.7], ['#C59E74', 0.45]], spkN: 4200, fibN: 2000 },
+  news:    { base: '#E8E2D2', kind: 'news', mot: 0.06, grain: 0.035, fib: [['#C9C0AB', 0.3]], spk: [['#A0988A', 0.35]], spkN: 900 },
+  gingB:   { base: '#F6F1E4', kind: 'gingham', ink: '#86AAD0', cell: 40, mot: 0.05, grain: 0.03 },
+  gingR:   { base: '#F8EFE0', kind: 'gingham', ink: '#D9584A', cell: 22, mot: 0.05, grain: 0.03 },
+  dotsY:   { base: '#E8B443', kind: 'dots', dot: '#FFF4D8', mot: 0.06 },
+  dotsT:   { base: '#4F978D', kind: 'dots', dot: '#E8EFDC', mot: 0.06 },
+  stripe:  { base: '#F0E4CB', kind: 'stripes', stripe: '#D96A52', mot: 0.05 },
+  tissueY: { base: '#FFD66A', kind: 'tissue', mot: 0.16, grain: 0.03 },
+  tissueW: { base: '#FFFDF6', kind: 'tissue', mot: 0.10, grain: 0.02 },
+  tissueC: { base: '#F4A08C', kind: 'tissue', mot: 0.14, grain: 0.03 },
+  tissueB: { base: '#BFE2EE', kind: 'tissue', mot: 0.10, grain: 0.02 },
+  tissueR: { base: '#E5544A', kind: 'tissue', mot: 0.12, grain: 0.03 },
+  tissueG: { base: '#B4B9BF', kind: 'tissue', mot: 0.10, grain: 0.02 },
+  tape:    { base: '#E9DAB0', kind: 'tape', mot: 0.08, grain: 0.03 },
   ruled:   { base: '#FBF6EA', mot: 0.03, grain: 0.02, fib: [['#E2D9C8', 0.3]], spk: [['#D6CCBA', 0.3]], spkN: 500 },
-  tape:    { base: '#E7D8AE', kind: 'tape', mot: 0.08, grain: 0.03 },
-  brass:   { base: '#C7A04A', mot: 0.05 },
+  red:     { base: '#E05B3F' },
+  redD:    { base: '#B9442F' },
+  mustard: { base: '#E8B240', mot: 0.07 },
+  mustD:   { base: '#C48F2A', mot: 0.07 },
+  teal:    { base: '#4F9B91' },
+  tealD:   { base: '#3B7A72' },
+  navy:    { base: '#2F3A57' },
+  sky:     { base: '#B7DCEA', mot: 0.06, grain: 0.03 },
+  sky2:    { base: '#CBE5EC', mot: 0.06, grain: 0.03 },
+  haze:    { base: '#9DB8CB', mot: 0.07 },
+  peach:   { base: '#F7C49B', mot: 0.06, grain: 0.03 },
+  dawn:    { base: '#FBE3A6', mot: 0.06, grain: 0.03 },
+  sun:     { base: '#F29A3A', mot: 0.07 },
+  sunY:    { base: '#F4BE3E', mot: 0.07 },
+  green:   { base: '#6FA45B', mot: 0.09 },
+  greenD:  { base: '#4E7F45', mot: 0.09 },
+  road:    { base: '#8D939E', mot: 0.09, grain: 0.05 },
+  stone:   { base: '#CFCBC1', mot: 0.07 },
+  stoneD:  { base: '#A9A59D', mot: 0.07 },
+  lamp:    { base: '#5D5A57', mot: 0.06 },
+  skin:    { base: '#F3C6A3', mot: 0.04, grain: 0.03 },
+  skinD:   { base: '#DDA985', mot: 0.04, grain: 0.03 },
+  cheek:   { base: '#EE9887', mot: 0.05 },
+  hair:    { base: '#4A2E23' },
+  brass:   { base: '#C9A24C', mot: 0.05 },
+  crust:   { base: '#C88A45' },
+  bread:   { base: '#F7E5BC', mot: 0.05, grain: 0.03 },
+  brownD:  { base: '#5A3D2E' },
+  steel:   { base: '#B9BFC7', mot: 0.03, grain: 0.02 },
 };
 
-function blot(g, w, h, r, amp, cell) {            // 斑驳：小图随机明暗 → 放大 + 模糊
+function blot(g, w, h, r, amp, cell) {               // 斑驳：小图随机明暗 → 放大 + 模糊
   if (amp <= 0) return;
   const sw = Math.ceil(w / cell) + 3, sh = Math.ceil(h / cell) + 3;
   const s = mk(sw, sh), sg = s.getContext('2d'), id = sg.createImageData(sw, sh), d = id.data;
@@ -104,19 +161,19 @@ function blot(g, w, h, r, amp, cell) {            // 斑驳：小图随机明暗
   g.save(); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.filter = `blur(${(cell * 0.4).toFixed(1)}px)`;
   g.drawImage(s, -cell * 1.5, -cell * 1.5, sw * cell, sh * cell); g.restore();
 }
-function grain(g, w, h, r, amp) {                 // 逐像素的细颗粒
+function grain(g, w, h, r, amp) {                    // 逐像素的细颗粒
   const id = g.getImageData(0, 0, w, h), d = id.data;
   for (let i = 0; i < d.length; i += 4) { const v = (r() - 0.5) * 2 * amp * 255, c = (r() - 0.5) * amp * 80; d[i] += v + c; d[i + 1] += v; d[i + 2] += v - c; }
   g.putImageData(id, 0, 0);
 }
-function specks(g, wL, hL, r, list, n) {         // 纸里的杂点、碎屑
+function specks(g, wL, hL, r, list, n) {             // 纸里的杂点、碎屑
   for (let i = 0; i < n; i++) {
     const [c, a] = list[(r() * list.length) | 0], rr = (0.35 + r() * r() * 1.7) * K;
     g.fillStyle = rgba(c, a * (0.35 + 0.65 * r())); g.beginPath();
     g.ellipse(r() * wL * K, r() * hL * K, rr, rr * (0.45 + r() * 0.55), r() * 3.14, 0, 6.283); g.fill();
   }
 }
-function fibers(g, wL, hL, r, list, n, len0, len1) {   // 纤维：短弯线
+function fibers(g, wL, hL, r, list, n, len0, len1) { // 纤维：短弯线
   g.lineCap = 'round';
   for (let i = 0; i < n; i++) {
     const [c, a] = list[(r() * list.length) | 0];
@@ -131,36 +188,45 @@ function makeSheet(name, wL, hL, key) {
   const w = Math.ceil(wL * K), h = Math.ceil(hL * K), area = wL * hL / 1e6;
   const c = mk(w, h), g = c.getContext('2d'), r = R('sheet:' + name + ':' + key);
   g.fillStyle = base; g.fillRect(0, 0, w, h);
-  if (kind === 'news') {                        // 旧报纸：一栏栏灰色小字、标题、网点图
+  if (kind === 'news') {                             // 旧报纸：一栏栏灰色短横条当字、两行粗块当标题、网点块当图，没有一个真字
     const colW = 150 + r() * 40, gut = 16;
     for (let cx0 = -r() * 60; cx0 < wL; cx0 += colW + gut) {
       let y = 6 + r() * 20;
       while (y < hL) {
         const q = r();
         if (q < 0.035) {
-          g.fillStyle = 'rgba(40,38,36,0.78)';
+          g.fillStyle = 'rgba(40,38,36,0.62)';
           for (let l = 0; l < 2; l++) { let x = cx0; const end = cx0 + colW * (0.6 + r() * 0.4); while (x < end) { const wl = 12 + r() * 30; g.fillRect(x * K, (y + l * 13) * K, Math.min(wl, end - x) * K, 8.5 * K); x += wl + 6; } }
           y += 34;
         } else if (q < 0.055) {
-          const bh = 50 + r() * 40, sd = hstr('ht' + y + cx0);
+          const bh = 50 + r() * 40, sd = 'ht' + Math.round(y) + ':' + Math.round(cx0);
+          g.fillStyle = 'rgba(50,48,46,0.5)';
           for (let yy = 0; yy < bh; yy += 5) for (let xx = 0; xx < colW; xx += 5) {
-            const v = 0.5 + 0.5 * n1(sd, xx / 40 + yy / 70) * n1(sd + 9, yy / 30);
-            g.fillStyle = 'rgba(50,48,46,0.6)'; g.beginPath(); g.arc((cx0 + xx + 2.5) * K, (y + yy + 2.5) * K, Math.max(0.2, v * 2.2) * K, 0, 6.283); g.fill();
+            const v = 0.5 + 0.5 * MV.noise(sd, xx / 40 + yy / 70) * MV.noise(sd + 'b', yy / 30);
+            g.beginPath(); g.arc((cx0 + xx + 2.5) * K, (y + yy + 2.5) * K, Math.max(0.2, v * 2.2) * K, 0, 6.283); g.fill();
           }
           y += bh + 10;
         } else {
           let x = cx0; const end = cx0 + colW * (r() < 0.12 ? 0.3 + r() * 0.6 : 1);
-          while (x < end - 4) { const wl = 5 + r() * 26; g.fillStyle = `rgba(58,56,54,${0.42 + r() * 0.2})`; g.fillRect(x * K, y * K, Math.min(wl, end - x) * K, 2.7 * K); x += wl + 3 + r() * 2.5; }
+          while (x < end - 4) { const wl = 5 + r() * 26; g.fillStyle = `rgba(58,56,54,${0.32 + r() * 0.18})`; g.fillRect(x * K, y * K, Math.min(wl, end - x) * K, 2.7 * K); x += wl + 3 + r() * 2.5; }
           y += 12.5;
         }
       }
     }
-  } else if (kind === 'dots') {                 // 圆点花纸（印刷的点，略微套不准）
+  } else if (kind === 'gingham') {                   // 格子布纹纸：横竖两组半透明色条，交叉处叠两层最深；细斜纹像织出来的
+    const cl = sp.cell, hw = cl / 2;
+    g.fillStyle = rgba(sp.ink, 0.5);
+    for (let x = -r() * cl; x < wL + cl; x += cl) g.fillRect(x * K, 0, hw * K, h);
+    for (let y = -r() * cl; y < hL + cl; y += cl) g.fillRect(0, y * K, w, hw * K);
+    g.save(); g.lineWidth = 0.7 * K; g.strokeStyle = 'rgba(255,255,255,0.14)'; g.beginPath();
+    for (let d = -hL; d < wL; d += 3.2) { g.moveTo(d * K, 0); g.lineTo((d + hL) * K, h); }
+    g.stroke(); g.restore();
+  } else if (kind === 'dots') {                      // 圆点花纸（印刷的点，略微套不准）
     const s2 = 19;
     for (let row = 0, y = 4; y < hL + s2; y += s2 * 0.866, row++) for (let x = (row % 2) * s2 / 2 - 4; x < wL + s2; x += s2) {
       g.fillStyle = rgba(sp.dot, 0.8 + r() * 0.15); g.beginPath(); g.arc((x + (r() - 0.5) * 0.8) * K, (y + (r() - 0.5) * 0.8) * K, (3.7 + (r() - 0.5) * 0.5) * K, 0, 6.283); g.fill();
     }
-  } else if (kind === 'stripes') {              // 竖条纹花纸
+  } else if (kind === 'stripes') {                   // 竖条纹花纸
     for (let x = 0; x < wL; x += 28) { g.fillStyle = rgba(sp.stripe, 0.88); g.fillRect(x * K, 0, 7 * K, h); g.fillStyle = rgba(sp.stripe, 0.55); g.fillRect((x + 12) * K, 0, 2 * K, h); }
   }
   const mot = sp.mot ?? 0.08;
@@ -170,7 +236,7 @@ function makeSheet(name, wL, hL, key) {
   const spk = sp.spk || [[shade(base, -0.38), 0.5], [shade(base, 0.32), 0.4]];
   specks(g, wL, hL, r, spk, (sp.spkN ?? 2200) * area);
   fibers(g, wL, hL, r, fib, (sp.fibN ?? 1100) * area, 5, kind === 'kraft' ? 42 : 24);
-  if (kind === 'tissue') {                      // 薄棉纸：皱痕
+  if (kind === 'tissue') {                           // 薄棉纸：皱痕
     for (let i = 0; i < 260 * area + 20; i++) {
       const light = r() < 0.55; g.strokeStyle = light ? `rgba(255,250,225,${0.12 + r() * 0.16})` : rgba(shade(base, -0.28), 0.08 + r() * 0.12);
       g.lineWidth = (0.8 + r() * 3.5) * K; let x = r() * w, y = r() * h, an = r() * Math.PI; g.beginPath(); g.moveTo(x, y);
@@ -178,14 +244,15 @@ function makeSheet(name, wL, hL, key) {
       g.stroke();
     }
   }
-  if (kind === 'tape') {                        // 纸胶带：细皱纹
+  if (kind === 'tape') {                             // 纸胶带：细皱纹
     for (let i = 0; i < 900 * area + 40; i++) { g.strokeStyle = r() < 0.5 ? 'rgba(255,255,255,0.18)' : 'rgba(150,120,70,0.12)'; g.lineWidth = (0.6 + r()) * K; const x = r() * w, y = r() * h, L = (4 + r() * 14) * K, an = 1.1 + r() * 0.9; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(an) * L, y + Math.sin(an) * L); g.stroke(); }
   }
   return c;
 }
 const SHEETS = {};
-function sheetFor(name, wL, hL, key) {
-  if (wL <= 1000 && hL <= 1000) { const k = 'S:' + name; if (!SHEETS[k]) SHEETS[k] = makeSheet(name, 1100, 1100, 'shared'); return { c: SHEETS[k], shared: true }; }
+function sheetFor(name, wL, hL, key) {               // 小纸片共用一大张，从随机位置「剪」：500 以内的共用 600 见方的，1000 以内的共用 1100 见方的；更大的单独做一张
+  const m = Math.max(wL, hL), S = m <= 500 ? 600 : m <= 1000 ? 1100 : 0;   // 只给小纸片用的纸不烤大张：准备时间省一半
+  if (S) { const k = 'S' + S + ':' + name; if (!SHEETS[k]) SHEETS[k] = makeSheet(name, S, S, 'shared' + S); return { c: SHEETS[k], shared: true }; }
   return { c: makeSheet(name, wL + 4, hL + 4, key), shared: false };
 }
 
@@ -197,7 +264,7 @@ function outline(pts, torn, key, o) {
   const n = pts.length, sg = polyArea(pts) >= 0 ? 1 : -1;
   const isT = (i) => torn === true || (Array.isArray(torn) && !!torn[i]);
   const amp = o.amp ?? 4.2, jag = o.jag ?? 1.8, core = o.core ?? 4;
-  const r = R(key + ':ol'), sA = hstr(key + ':a'), sB = hstr(key + ':b');
+  const r = R(key + ':ol');
   let start = 0;
   if (Array.isArray(torn)) for (let i = 0; i < n; i++) if (isT(i) !== isT((i - 1 + n) % n)) { start = i; break; }
   const runs = [];
@@ -210,33 +277,32 @@ function outline(pts, torn, key, o) {
     for (const i of run.e) {
       const p = pts[i], q = pts[(i + 1) % n], dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1e-6;
       const ux = dx / L, uy = dy / L, nx = sg * uy, ny = -sg * ux;
-      if (run.t) {                                // 撕边：沿边走，按弧长取噪声往外 / 往里推
+      if (run.t) {                                   // 撕边：沿边走，按弧长取噪声往外 / 往里推
         const N = Math.max(1, Math.round(L / 2.2));
         for (let k = 0; k < N; k++) {
           const s = k / N, a = arc + s * L, env = closedTorn ? Math.min(1, a / 8, (len - a) / 8) : Math.min(1, a / 9, (len - a) / 9);
-          const off = env * (amp * fbm1(sA, a / 36) + jag * fbm1(sB, a / 6.5) + 0.55 * (r() - 0.5));
+          const off = env * (amp * fbm(key + ':a', a / 36) + jag * fbm(key + ':b', a / 6.5) + 0.55 * (r() - 0.5));
           A.push({ x: p[0] + ux * s * L + nx * off, y: p[1] + uy * s * L + ny * off, nx, ny, t: true, arc: a });
         }
-      } else if (o.punch || L < 22) {             // 打孔 / 弯边上的短段：只轻微抖一下顶点（剪弯边是一小刀一小刀的折线）
+      } else if (o.punch || L < 22) {                // 打孔 / 弯边上的短段：只轻微抖一下顶点（剪弯边是一小刀一小刀的折线）
         const j = o.punch ? 0.1 : 0.45;
         A.push({ x: p[0] + (r() - 0.5) * j, y: p[1] + (r() - 0.5) * j, nx, ny, t: false, arc: 0 });
-      } else {                                    // 剪刀边：每 24–66 px 一个小折角，偏一点点
+      } else {                                       // 剪刀边：每 24–66 px 一个小折角，偏一点点
         const m = Math.max(1, Math.round(L / (24 + r() * 42))); let w = 0;
         for (let k = 0; k < m; k++) { const s = k / m; if (k > 0) { w += (r() - 0.5) * 1.3; w = Math.max(-1.6, Math.min(1.6, w)); } A.push({ x: p[0] + ux * s * L + nx * w, y: p[1] + uy * s * L + ny * w, nx, ny, t: false, arc: 0 }); }
       }
       arc += L;
     }
   }
-  const sC = hstr(key + ':c'), sD = hstr(key + ':d'), sE = hstr(key + ':e');
   const B = A.map((p) => {
     if (!p.t || core <= 0) return p;
-    const d = core * Math.max(0, Math.min(1.7, 0.55 + 0.9 * fbm1(sC, p.arc / 20) + 0.35 * fbm1(sD, p.arc / 4.2)));
-    const j = 0.5 * fbm1(sE, p.arc / 2.3);
+    const d = core * Math.max(0, Math.min(1.7, 0.55 + 0.9 * fbm(key + ':c', p.arc / 20) + 0.35 * fbm(key + ':d', p.arc / 4.2)));
+    const j = 0.5 * fbm(key + ':e', p.arc / 2.3);
     return { x: p.x - p.nx * (d - j), y: p.y - p.ny * (d - j), nx: p.nx, ny: p.ny, t: true, arc: p.arc };
   });
   let M = null;
-  if (o.margin > 0) {                             // 手剪白边：往外推 margin（宽窄不匀），再粗剪成一小段一小段直线
-    const N = A.length, sF = hstr(key + ':m'), off = []; let per = 0;
+  if (o.margin > 0) {                                // 手剪白边：往外推 margin（宽窄不匀），再粗剪成一小段一小段直线
+    const N = A.length, off = []; let per = 0;
     for (let i = 0; i < N; i++) {
       const cur = A[i]; if (i > 0) per += Math.hypot(cur.x - A[i - 1].x, cur.y - A[i - 1].y);
       let nx, ny, mit = 1;
@@ -247,7 +313,7 @@ function outline(pts, torn, key, o) {
         let bx = sg * (nx2.y - cur.y), by = -sg * (nx2.x - cur.x); const lb = Math.hypot(bx, by) || 1; bx /= lb; by /= lb;
         nx = ax + bx; ny = ay + by; const ln = Math.hypot(nx, ny) || 1; nx /= ln; ny /= ln; mit = 1 / Math.max(0.45, nx * ax + ny * ay);
       }
-      const m = o.margin * (0.78 + 0.44 * (0.5 + 0.5 * fbm1(sF, per / 60))) * Math.min(mit, 2.2);
+      const m = o.margin * (0.78 + 0.44 * (0.5 + 0.5 * fbm(key + ':m', per / 60))) * Math.min(mit, 2.2);
       off.push({ x: cur.x + nx * m, y: cur.y + ny * m });
     }
     M = [off[0]]; let acc = 0, target = 12 + r() * 18;
@@ -260,10 +326,11 @@ function outline(pts, torn, key, o) {
   return { A, B, M, anyTorn: runs.some((x) => x.t) };
 }
 function tracePath(g, P) { g.beginPath(); g.moveTo(P[0].x, P[0].y); for (let i = 1; i < P.length; i++) g.lineTo(P[i].x, P[i].y); g.closePath(); }
+function polyPath(g, P) { g.beginPath(); g.moveTo(P[0][0], P[0][1]); for (let i = 1; i < P.length; i++) g.lineTo(P[i][0], P[i][1]); g.closePath(); }
 
 // ───────────────────────── 一张纸片 = 一张缓存画布 ─────────────────────────
 // o: pts, torn, paper, margin（白边宽）, core（撕边白芯宽）, amp/jag（撕边起伏）, punch（打孔，边很圆）, alpha（薄棉纸）,
-//    shadow {x,y,b,a}, draw(g,r)（画在纸上的字、线，裁在纸里）, over(g,r)（盖在纸片上面的东西，如订书钉）, edge（纸厚线，默认有）
+//    shadow {x,y,b,a}, draw(g,r)（画在纸上的线、色，裁在纸里）, over(g,r)（盖在纸片上面的东西，如钉子的高光）, edge（纸厚线，默认有）
 function piece(name, o) {
   const ol = outline(o.pts, o.torn, name, o);
   const sh = Object.assign({ x: 3, y: 4, b: 6, a: 0.34 }, o.shadow || {});
@@ -272,20 +339,20 @@ function piece(name, o) {
   for (const p of all) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
   const pad = 6 + (o.margin || 0) + sh.b * 1.6 + Math.max(Math.abs(sh.x), Math.abs(sh.y));
   const bx = x0 - pad, by = y0 - pad, bw = x1 - x0 + 2 * pad, bh = y1 - y0 + 2 * pad;
-  const W = Math.ceil(bw * K), H = Math.ceil(bh * K);
+  const Wp = Math.ceil(bw * K), Hp = Math.ceil(bh * K);
   const tf = (g) => g.setTransform(K, 0, 0, K, -bx * K, -by * K);
   const r = R(name + ':pc');
   const core = o.core ?? 4;
   // 1) 白：手剪白边 + 撕边露出来的纸芯
-  const L1 = mk(W, H), g1 = L1.getContext('2d'); let white = false; tf(g1);
+  const L1 = mk(Wp, Hp), g1 = L1.getContext('2d'); let white = false; tf(g1);
   g1.fillStyle = '#fff'; g1.strokeStyle = '#fff'; g1.lineJoin = 'round';
   if (ol.M) { tracePath(g1, ol.M); g1.fill(); g1.lineWidth = o.margin * 0.9; tracePath(g1, ol.A); g1.stroke(); white = true; }
   if (ol.anyTorn && core > 0) { tracePath(g1, ol.A); g1.fill(); white = true; }
   if (white) {
     g1.setTransform(1, 0, 0, 1, 0, 0); g1.globalCompositeOperation = 'source-in';
-    const ws = sheetFor('white', bw, bh, name + 'w'); g1.drawImage(ws.c, ws.shared ? -r() * (ws.c.width - W) : 0, ws.shared ? -r() * (ws.c.height - H) : 0);
+    const ws = sheetFor('white', bw, bh, name + 'w'); g1.drawImage(ws.c, ws.shared ? -r() * Math.max(0, ws.c.width - Wp) : 0, ws.shared ? -r() * Math.max(0, ws.c.height - Hp) : 0);
     g1.globalCompositeOperation = 'source-over'; tf(g1);
-    if (ol.anyTorn && core > 0) {                 // 纸芯上的纤维毛刺
+    if (ol.anyTorn && core > 0) {                    // 纸芯上的纤维毛刺
       g1.lineCap = 'round'; g1.lineWidth = 0.55;
       for (const p of ol.A) if (p.t && r() < 0.3) {
         const L = 1.2 + r() * 3.6, an = Math.atan2(p.ny, p.nx) + (r() - 0.5) * 1.4;
@@ -293,483 +360,775 @@ function piece(name, o) {
       }
     }
   }
-  // 2) 颜色层：从这种纸的大张上"剪"下来
-  const L2 = mk(W, H), g2 = L2.getContext('2d'); tf(g2);
+  // 2) 颜色层：从这种纸的大张上「剪」下来
+  const L2 = mk(Wp, Hp), g2 = L2.getContext('2d'); tf(g2);
   tracePath(g2, ol.B); g2.fillStyle = '#000'; g2.fill();
   g2.setTransform(1, 0, 0, 1, 0, 0); g2.globalCompositeOperation = 'source-in';
   const ps = sheetFor(o.paper, bw, bh, name);
   if (ps.shared) {
     const rot = PAPER[o.paper].kind === 'news' && bw < 600 && bh < 600 ? (r() - 0.5) * 0.3 : 0;
-    g2.save(); g2.translate(W / 2, H / 2); g2.rotate(rot);
-    g2.drawImage(ps.c, -W / 2 - r() * Math.max(0, ps.c.width - W * 1.15), -H / 2 - r() * Math.max(0, ps.c.height - H * 1.15)); g2.restore();
+    g2.save(); g2.translate(Wp / 2, Hp / 2); g2.rotate(rot);
+    g2.drawImage(ps.c, -Wp / 2 - r() * Math.max(0, ps.c.width - Wp * 1.15), -Hp / 2 - r() * Math.max(0, ps.c.height - Hp * 1.15)); g2.restore();
   } else g2.drawImage(ps.c, 0, 0);
   g2.globalCompositeOperation = 'source-atop';
-  // 纸不完全平：一张纸一个方向的轻微明暗
-  const la = -2.3 + (r() - 0.5) * 0.8, lg = g2.createLinearGradient(W / 2 - Math.cos(la) * W / 2, H / 2 - Math.sin(la) * H / 2, W / 2 + Math.cos(la) * W / 2, H / 2 + Math.sin(la) * H / 2);
-  lg.addColorStop(0, 'rgba(0,0,0,0.07)'); lg.addColorStop(1, 'rgba(255,255,255,0.06)'); g2.fillStyle = lg; g2.fillRect(0, 0, W, H);
+  const la = -2.3 + (r() - 0.5) * 0.8, lg = g2.createLinearGradient(Wp / 2 - Math.cos(la) * Wp / 2, Hp / 2 - Math.sin(la) * Hp / 2, Wp / 2 + Math.cos(la) * Wp / 2, Hp / 2 + Math.sin(la) * Hp / 2);
+  lg.addColorStop(0, 'rgba(0,0,0,0.07)'); lg.addColorStop(1, 'rgba(255,255,255,0.06)'); g2.fillStyle = lg; g2.fillRect(0, 0, Wp, Hp);   // 纸不完全平：一个方向的轻微明暗
   tf(g2);
-  if (o.edge !== false) {                         // 纸厚：右下一点暗线、左上一点亮线
+  if (o.edge !== false) {                            // 纸厚：右下一点暗线、左上一点亮线
     g2.lineJoin = 'round';
     g2.save(); g2.translate(1.0, 1.2); tracePath(g2, ol.B); g2.lineWidth = 2.2; g2.strokeStyle = 'rgba(30,20,10,0.20)'; g2.stroke(); g2.restore();
     g2.save(); g2.translate(-0.9, -1.0); tracePath(g2, ol.B); g2.lineWidth = 1.8; g2.strokeStyle = 'rgba(255,255,255,0.22)'; g2.stroke(); g2.restore();
   }
   if (o.draw) { g2.save(); o.draw(g2, R(name + ':draw')); g2.restore(); }
   g2.globalCompositeOperation = 'source-over';
-  if (ol.anyTorn && core <= 0) {                  // 薄纸撕边的毛
+  if (ol.anyTorn && core <= 0) {                     // 薄纸撕边的毛
     g2.lineCap = 'round'; g2.lineWidth = 0.7;
     for (const p of ol.A) if (p.t && r() < 0.35) { const L = 1.5 + r() * 4, an = Math.atan2(p.ny, p.nx) + (r() - 0.5) * 1.3; g2.strokeStyle = rgba(PAPER[o.paper].base, 0.35 + r() * 0.3); g2.beginPath(); g2.moveTo(p.x, p.y); g2.lineTo(p.x + Math.cos(an) * L, p.y + Math.sin(an) * L); g2.stroke(); }
   }
-  // 3) 合起来
-  const T = mk(W, H), gt = T.getContext('2d');
+  // 3) 合起来，4) 投影烘进缓存（灯在左上，影子往右下）
+  const T = mk(Wp, Hp), gt = T.getContext('2d');
   gt.drawImage(L1, 0, 0); gt.globalAlpha = o.alpha ?? 1; gt.drawImage(L2, 0, 0); gt.globalAlpha = 1;
   if (o.over) { tf(gt); o.over(gt, R(name + ':over')); }
-  // 4) 投影烘进缓存（灯在左上，影子往右下）
-  const S = mk(W, H), gs = S.getContext('2d');
-  if (sh.a > 0) { gs.shadowColor = `rgba(18,16,34,${sh.a})`; gs.shadowBlur = sh.b * K; gs.shadowOffsetX = sh.x * K; gs.shadowOffsetY = sh.y * K; }
+  const S = mk(Wp, Hp), gs = S.getContext('2d');
+  if (sh.a > 0) { gs.shadowColor = `rgba(34,24,20,${sh.a})`; gs.shadowBlur = sh.b * K; gs.shadowOffsetX = sh.x * K; gs.shadowOffsetY = sh.y * K; }
   gs.drawImage(T, 0, 0);
-  return { cv: S, x: bx, y: by, w: W / K, h: H / K, size: Math.max(x1 - x0, y1 - y0) };
+  return { cv: S, x: bx, y: by, w: Wp / K, h: Hp / K, size: Math.max(x1 - x0, y1 - y0) };
 }
 
-// 定格抖动：每张纸片每次更新按"名字 + STEP"偏 1–2 px、转 ±0.5°（大纸片转得少）
+// 定格抖动：每张纸片每次更新按「名字 + 第几张」偏 1–1.4 px、转零点几度（大纸片转得少），再加一点固定的歪（手贴的不正）
 function jit(key, amp, rmax, size) {
-  const r = R(key + '#' + Math.floor(STEP / HOLD));
-  const rm = Math.min(rmax, Math.atan(2.0 / Math.max(4, size * 0.5)) / D2R);
-  const tilt = TILT ? (R(key + ':tilt')() * 2 - 1) * Math.min(1.6 * D2R, Math.atan(3 / Math.max(4, size * 0.5))) : 0;
-  return [(r() * 2 - 1) * amp, (r() * 2 - 1) * amp, (r() * 2 - 1) * rm * D2R + tilt];
+  const r = R(key + '#' + STEP), half = Math.max(4, size * 0.5);
+  const rm = Math.min(rmax * D2R, Math.atan(2 / half));
+  const tilt = (R(key + ':tilt')() * 2 - 1) * Math.min(1.6 * D2R, Math.atan(3 / half));
+  return [(r() * 2 - 1) * amp, (r() * 2 - 1) * amp, (r() * 2 - 1) * rm + tilt];
 }
-function put(p, x, y, rot = 0, sc = 1, key = null, amp = 1.4, rmax = 0.5) {
+// 贴一张纸片：key 为 null 的是粘死的大底纸，不抖
+function put(g, p, x = 0, y = 0, rot = 0, sc = 1, key = null, amp = 1.4, rmax = 0.5) {
   let jx = 0, jy = 0, jr = 0;
   if (key !== null) [jx, jy, jr] = jit(key, amp, rmax, p.size * sc);
-  ctx.save(); ctx.translate(x + jx, y + jy); if (rot) ctx.rotate(rot); if (sc !== 1) ctx.scale(sc, sc);
-  if (jr) { const cx = p.x + p.w / 2, cy = p.y + p.h / 2; ctx.translate(cx, cy); ctx.rotate(jr); ctx.translate(-cx, -cy); }   // 抖动绕纸片自己的中心转
-  ctx.drawImage(p.cv, p.x, p.y, p.w, p.h); ctx.restore();
+  g.save(); g.translate(x + jx, y + jy); if (rot) g.rotate(rot); if (sc !== 1) g.scale(sc, sc);
+  if (jr) { const cx = p.x + p.w / 2, cy = p.y + p.h / 2; g.translate(cx, cy); g.rotate(jr); g.translate(-cx, -cy); }   // 抖动绕纸片自己的中心转
+  g.drawImage(p.cv, p.x, p.y, p.w, p.h); g.restore();
+}
+function softShadow(rx, ry, a, blur) {               // 地上的软影子（角色腾空时缩小）
+  const c = mk((rx + blur * 2) * 2 * K, (ry + blur * 2) * 2 * K), g = c.getContext('2d');
+  g.filter = `blur(${blur * K}px)`; g.fillStyle = `rgba(30,24,36,${a})`; g.beginPath(); g.ellipse(c.width / 2, c.height / 2, rx * K, ry * K, 0, 0, 6.283); g.fill();
+  return { cv: c, x: -c.width / K / 2, y: -c.height / K / 2, w: c.width / K, h: c.height / K, size: rx * 2 };
 }
 
 // ───────────────────────── 形状 ─────────────────────────
 const rectP = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+function rrectP(x, y, w, h, r, step = 7) {           // 圆角矩形，r 可以是 [左上, 右上, 右下, 左下]
+  const rs = Array.isArray(r) ? r : [r, r, r, r], out = [];
+  const corner = (cx, cy, rr, a0) => { if (rr <= 0) { out.push([cx, cy]); return; } const n = Math.max(2, Math.round(rr * Math.PI / 2 / step)); for (let i = 0; i <= n; i++) { const a = a0 + (Math.PI / 2) * i / n; out.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]); } };
+  corner(x + w - rs[1], y + rs[1], rs[1], -Math.PI / 2); corner(x + w - rs[2], y + h - rs[2], rs[2], 0);
+  corner(x + rs[3], y + h - rs[3], rs[3], Math.PI / 2); corner(x + rs[0], y + rs[0], rs[0], Math.PI);
+  return out;
+}
 function ellP(cx, cy, rx, ry, step = 9, a0 = 0, a1 = Math.PI * 2, closed = true) {
   const per = Math.PI * (rx + ry) * Math.abs(a1 - a0) / (Math.PI * 2), N = Math.max(10, Math.round(per / step)), out = [];
   for (let i = 0; i < (closed ? N : N + 1); i++) { const a = a0 + (a1 - a0) * i / N; out.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]); }
   return out;
 }
 function starP(cx, cy, ro, ri, n, rot) { const out = []; for (let i = 0; i < n * 2; i++) { const a = rot + i * Math.PI / n, rr = i % 2 ? ri : ro; out.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]); } return out; }
-function stripP(line, widths) {                   // 一条折线 → 有宽度的纸条
+function stripP(line, widths) {                      // 一条折线 → 有宽度的纸条
   const Lf = [], Rt = [];
   for (let i = 0; i < line.length; i++) {
     const a = line[Math.max(0, i - 1)], b = line[Math.min(line.length - 1, i + 1)];
     let dx = b[0] - a[0], dy = b[1] - a[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
-    const w = widths[i] / 2; Lf.push([line[i][0] - dy * w, line[i][1] + dx * w]); Rt.push([line[i][0] + dy * w, line[i][1] - dx * w]);
+    const w = (Array.isArray(widths) ? widths[i] : widths) / 2; Lf.push([line[i][0] - dy * w, line[i][1] + dx * w]); Rt.push([line[i][0] + dy * w, line[i][1] - dx * w]);
   }
   return Lf.concat(Rt.reverse());
 }
-const mirror = (pts, s) => (s > 0 ? pts : pts.map(([x, y]) => [-x, y]).reverse());
-function heartP(sc) { const out = []; for (let i = 0; i < 64; i++) { const t = i / 64 * Math.PI * 2; out.push([16 * Math.pow(Math.sin(t), 3) * sc, (-(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) - 2.5) * sc]); } return out; }
-function crescentP(r1, cx2, cy2, r2) {
-  const d = Math.hypot(cx2, cy2), a = (r1 * r1 - r2 * r2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, r1 * r1 - a * a));
-  const beta = Math.atan2(cy2, cx2), al1 = Math.atan2(h, a), ps = Math.atan2(h, a - d), out = [];
-  for (let i = 0; i <= 40; i++) { const t = beta + al1 + (2 * Math.PI - 2 * al1) * i / 40; out.push([Math.cos(t) * r1, Math.sin(t) * r1]); }
-  for (let i = 1; i < 30; i++) { const t = beta + 2 * Math.PI - ps - (2 * Math.PI - 2 * ps) * i / 30; out.push([cx2 + Math.cos(t) * r2, cy2 + Math.sin(t) * r2]); }
+function blobP(cx, cy, rx, ry, key, rough = 0.12, n = 44, flat = null) {   // 不规则的团（云、树冠、头发）；flat：底边压平在这个 y
+  const r = R('blob:' + key), waves = [2, 3, 5, 7].map((f) => [f, r() * Math.PI * 2, (0.5 + r()) / Math.sqrt(f)]), out = [];
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; let k = 1; for (const [f, p, w] of waves) k += rough * w * Math.sin(f * a + p); out.push([cx + Math.cos(a) * rx * k, Math.min(flat ?? 1e9, cy + Math.sin(a) * ry * k)]); }
   return out;
 }
-
-// 印刷字：先画在小画布上，再"吃"掉一些点（墨不匀）
-function textLayer(text, size, weight, color, key, eat, passes) {
-  const m = mk(10, 10).getContext('2d'); m.font = `${weight} ${size}px ${FONT}`;
-  const tw = m.measureText(text).width, W = (tw + size) * K, H = size * 1.6 * K;
-  const c = mk(W, H), g = c.getContext('2d'); g.scale(K, K); g.font = `${weight} ${size}px ${FONT}`; g.textBaseline = 'alphabetic'; g.fillStyle = color;
-  const r = R('txt:' + key);
-  for (let p = 0; p < passes; p++) g.fillText(text, size / 2 + (r() - 0.5) * 0.7, size * 1.15 + (r() - 0.5) * 0.7);
-  g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'destination-out';
-  for (let i = 0; i < eat * W * H / 1000; i++) { g.fillStyle = `rgba(0,0,0,${0.25 + r() * 0.7})`; g.fillRect(r() * W, r() * H, (0.6 + r() * 1.3) * K, (0.6 + r() * 1.3) * K); }
-  return { c, w: W / K, h: H / K, base: size * 1.15, lead: size / 2, tw };
+function leafP(len, wid) { const out = []; for (let i = 0; i <= 10; i++) out.push([i / 10 * len, -Math.sin(Math.PI * i / 10) * wid]); for (let i = 9; i > 0; i--) out.push([i / 10 * len, Math.sin(Math.PI * i / 10) * wid * 0.8]); return out; }
+function arcLine(r, a0, a1, n = 8) { const out = []; for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * D2R; out.push([Math.sin(a) * r, -Math.cos(a) * r]); } return out; }
+function breadP(sc = 1, cx = 0, cy = 0) {            // 一片吐司：方的下半 + 两边鼓出来的圆顶；原点在底边中点
+  const out = [[-68, 0], [68, 0], [70, -112]];
+  for (let i = 0; i <= 14; i++) { const a = (-15 - i * 150 / 14) * D2R; out.push([Math.cos(a) * 84, -140 + Math.sin(a) * 84]); }
+  out.push([-70, -112]);
+  return out.map(([x, y]) => [cx + x * sc, cy + y * sc]);
 }
-function marker(g, w, color) { g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = w; g.strokeStyle = color || '#221F1C'; }
+const shrink = (pts, f, cx, cy) => pts.map(([x, y]) => [cx + (x - cx) * f, cy + (y - cy) * f]);   // 往里缩一圈（吐司的心比边小）
+const brass = (name, rr) => piece(name, { pts: ellP(0, 0, rr, rr, 1.5), punch: true, paper: 'brass', shadow: { x: 1.1, y: 1.5, b: 1.6, a: 0.45 }, edge: false,
+  over: (g) => { g.strokeStyle = 'rgba(255,248,220,0.7)'; g.lineWidth = rr * 0.22; g.beginPath(); g.arc(-rr * 0.12, -rr * 0.12, rr * 0.62, 3.4, 4.9); g.stroke(); g.strokeStyle = 'rgba(80,60,20,0.55)'; g.lineWidth = rr * 0.18; g.beginPath(); g.moveTo(-rr * 0.45, rr * 0.28); g.lineTo(rr * 0.45, -rr * 0.28); g.stroke(); } });   // 铜脚钉：一道高光 + 中间的缝
+let STAPLE = null;                                   // 订书钉：一根钢色细条 + 一道亮线 + 两头钉进纸里的暗点（ready 里做，窗帘、擦手巾、太阳、站牌上各钉一颗）
+const staple = (name) => piece(name, { pts: rectP(-15, -2.4, 30, 4.8), paper: 'steel', shadow: { x: 1, y: 1.6, b: 1.6, a: 0.5 }, edge: false,
+  over: (g) => { g.fillStyle = 'rgba(255,255,255,0.6)'; g.fillRect(-14, -2, 28, 1.3); g.fillStyle = 'rgba(40,44,52,0.65)'; g.fillRect(-15, -2.4, 2.4, 4.8); g.fillRect(12.6, -2.4, 2.4, 4.8); } });
+function grainLines(x0, y0, w, h, col) {             // 牛皮纸上再画几道木纹
+  return (g, r) => { g.strokeStyle = col; g.lineWidth = 1.4; for (let i = 0; i < h / 9; i++) { const y = y0 + 4 + r() * (h - 8); g.beginPath(); g.moveTo(x0, y); for (let x = x0; x <= x0 + w; x += 40) g.lineTo(x, y + MV.noise('wg' + i, x / 160) * 3); g.stroke(); } };
+}
 
-// ───────────────────────── 场景 ─────────────────────────
-const S = {};
-const GROUND_F = 905;                             // 螃蟹站的地面
-const LAMP_X = 1000;
-const CS = 1.22;                                  // 钳子放大
-function buildScene() {
-  S.sky = piece('sky', { pts: rectP(-20, -20, 1960, 1120), paper: 'sky', shadow: { a: 0 }, edge: false });
-  // 天空右边接了一张颜色略不同的蓝卡纸，接缝是撕的（纸不够大时就这么接）
-  S.sky2 = piece('sky2', { pts: [[1290, -30], [1960, -30], [1960, 760], [1420, 760]], torn: [0, 0, 0, 1], paper: 'sky2', amp: 9, jag: 2.2, core: 1.3, shadow: { x: 3, y: 4, b: 7, a: 0.3 }, edge: false });
-  // 月亮：旧报纸剪的弯月，订书钉钉住
-  S.moon = piece('moon', { pts: crescentP(62, 26, -15, 55), paper: 'news', margin: 6, shadow: { x: 3, y: 4, b: 5, a: 0.4 },
-    over: (g) => { g.save(); g.translate(-30, -46); g.rotate(-0.5);
-      g.fillStyle = 'rgba(40,40,50,0.35)'; g.fillRect(-13, 1.5, 28, 4);
-      const lg = g.createLinearGradient(0, -2, 0, 3); lg.addColorStop(0, '#E9ECEF'); lg.addColorStop(0.5, '#A9AFB8'); lg.addColorStop(1, '#6F7680'); g.fillStyle = lg; g.fillRect(-14, -1.5, 28, 3.6);
-      g.fillStyle = 'rgba(30,30,40,0.55)'; g.fillRect(-15, -1.5, 2, 3.6); g.fillRect(13, -1.5, 2, 3.6); g.restore(); } });
-  // 星星：剪的小星星 + 打孔器打的圆点
-  S.stars = []; { const r = R('stars'); let tries = 0;
-    while (S.stars.length < 34 && tries < 4000) {
-      tries++; const x = 30 + r() * 1860, y = 28 + r() * 400;
-      if (Math.hypot(x - 1690, y - 150) < 115) continue;
-      if (S.stars.some((s) => Math.hypot(s.x - x, s.y - y) < 78)) continue;
-      const i = S.stars.length, isStar = i < 15, paper = r() < 0.3 ? 'news' : (r() < 0.5 ? 'cream' : 'white');
-      const sz = isStar ? 10 + r() * 9 : 3 + r() * 3.2;
-      const p = isStar ? piece('star' + i, { pts: starP(0, 0, sz, sz * 0.46, 5, -Math.PI / 2 + (r() - 0.5) * 0.6), paper, margin: sz > 15 ? 3 : 0, shadow: { x: 2, y: 2.5, b: 3, a: 0.4 } })
-                       : piece('dot' + i, { pts: ellP(0, 0, sz, sz, 2.5), punch: true, paper: r() < 0.5 ? 'cream' : 'white', shadow: { x: 1.4, y: 1.8, b: 2, a: 0.4 }, edge: false });
-      S.stars.push({ p, x, y, i, isStar, per: 3 + ((r() * 6) | 0), ph: (r() * 12) | 0 });
-    } }
-  // 远山：撕开的蓝卡纸
-  S.hill = piece('hill', { pts: [[-40, 598], [250, 560], [560, 588], [900, 548], [1250, 584], [1600, 552], [1960, 580], [1960, 1110], [-40, 1110]],
-    torn: [1, 1, 1, 1, 1, 1, 0, 0, 0], paper: 'hill', amp: 7, jag: 2.4, core: 5, shadow: { x: 3, y: 5, b: 8, a: 0.4 } });
-  // 房子
-  S.houses = [];
-  const roofSnow = (name, l, apex, rgt, base) => piece(name, { pts: [[l - 6, base + 4], [apex[0], apex[1] - 4], [rgt + 6, base + 4], [rgt - 20, base + 4], [apex[0], apex[1] + 22], [l + 20, base + 4]],
-    torn: [0, 0, 0, 1, 1, 0], paper: 'white', core: 0, amp: 3.2, jag: 1.6, shadow: { x: 2, y: 3, b: 4, a: 0.3 } });
-  const sill = (name, x, y, w) => piece(name, { pts: rectP(x - 5, y - 3, w + 10, 10), torn: [1, 0, 0, 0], paper: 'white', core: 0, amp: 1.8, jag: 1.2, shadow: { x: 1.5, y: 2, b: 2.5, a: 0.3 } });
-  const mull = (name, x, y, w, h) => piece(name, { pts: [[x + w / 2 - 2.5, y], [x + w / 2 + 2.5, y], [x + w / 2 + 2.5, y + h / 2 - 2.5], [x + w, y + h / 2 - 2.5], [x + w, y + h / 2 + 2.5], [x + w / 2 + 2.5, y + h / 2 + 2.5], [x + w / 2 + 2.5, y + h], [x + w / 2 - 2.5, y + h], [x + w / 2 - 2.5, y + h / 2 + 2.5], [x, y + h / 2 + 2.5], [x, y + h / 2 - 2.5], [x + w / 2 - 2.5, y + h / 2 - 2.5]], paper: 'char', shadow: { x: 1.2, y: 1.6, b: 1.8, a: 0.35 }, edge: false });
-  function win(name, x, y, w, h, lit) {
-    const o = { pts: rectP(x, y, w, h), margin: 3, shadow: { x: 2, y: 2.5, b: 3, a: 0.35 } };
-    return { lit, a: piece(name, { ...o, paper: lit ? 'winDim' : 'winD' }), b: lit ? piece(name, { ...o, paper: 'win' }) : null, m: mull(name + 'm', x + 4, y + 4, w - 8, h - 8), s: sill(name + 's', x, y + h, w), x, y, w, h };
+// ───────────────────────── 卡 1：闹钟在床头柜上跳 ─────────────────────────
+const C1 = {};
+function buildCard1() {
+  const s0 = { x: 1.5, y: 2, b: 2.5, a: 0.3 }, s1 = { x: 2, y: 3, b: 3.5, a: 0.32 };
+  C1.wall = piece('c1-wall', { pts: rectP(-40, -40, 2000, 1160), paper: 'gingB', shadow: { a: 0 }, edge: false });
+  // 窗：窗框一张奶油色卡纸；窗外天是浅黄纸，远山是撕开的桃色纸，太阳在山后面一格一格升
+  C1.rod = piece('c1-rod', { pts: rectP(232, 90, 576, 14), paper: 'kraftD', margin: 3 });
+  C1.frame = piece('c1-frame', { pts: rectP(300, 112, 440, 404), paper: 'cream', margin: 6 });
+  C1.sky = piece('c1-sky', { pts: rectP(326, 138, 388, 352), paper: 'dawn', shadow: s0, edge: false });
+  C1.hill = piece('c1-hill', { pts: [[326, 384], [470, 352], [600, 372], [714, 340], [714, 490], [326, 490]], torn: [1, 1, 1, 0, 0, 0], paper: 'peach', core: 2.5, amp: 5, jag: 1.6, shadow: { x: 1.5, y: 2, b: 3, a: 0.22 }, edge: false });
+  C1.sun = piece('c1-sun', { pts: ellP(0, 0, 58, 58, 6), paper: 'sun', margin: 4, shadow: s1 });
+  C1.mullV = piece('c1-mullV', { pts: rectP(512, 138, 16, 352), paper: 'cream', margin: 2, shadow: s0 });
+  C1.mullH = piece('c1-mullH', { pts: rectP(326, 302, 388, 16), paper: 'cream', margin: 2, shadow: s0 });
+  C1.sill = piece('c1-sill', { pts: rectP(280, 508, 480, 26), paper: 'kraftD', margin: 4 });
+  // 窗帘：珊瑚色薄棉纸，下沿撕开，压几道褶
+  const cur = (x0, d) => { const xi = x0 + d * 128; return [[x0, 98], [xi, 98], [xi - d * 10, 220], [xi + d * 6, 340], [xi - d * 14, 460], [xi + d * 4, 566], [x0 - d * 8, 578], [x0 + d * 4, 420], [x0 - d * 6, 250]]; };
+  const pleat = (x0, d) => (g) => { g.strokeStyle = 'rgba(160,70,60,0.28)'; g.lineWidth = 3; for (const f of [0.3, 0.55, 0.8]) { g.beginPath(); g.moveTo(x0 + d * 128 * f, 100); g.lineTo(x0 + d * 128 * f + d * 8, 330); g.lineTo(x0 + d * 128 * f - d * 4, 575); g.stroke(); } };
+  C1.curL = piece('c1-curL', { pts: cur(246, 1), torn: [0, 0, 0, 0, 0, 1, 0, 0, 0], paper: 'tissueC', alpha: 0.82, core: 0, amp: 3.5, edge: false, shadow: { x: 3, y: 4, b: 7, a: 0.2 }, draw: pleat(246, 1) });
+  C1.curR = piece('c1-curR', { pts: cur(794, -1), torn: [0, 0, 0, 0, 0, 1, 0, 0, 0], paper: 'tissueC', alpha: 0.82, core: 0, amp: 3.5, edge: false, shadow: { x: 3, y: 4, b: 7, a: 0.2 }, draw: pleat(794, -1) });
+  // 床：床头板、褥子、枕头、睡着的女孩（被子盖到下巴）、拼布被子（一块块花纸贴在奶油色被面上）、床沿
+  C1.headboard = piece('c1-hb', { pts: rrectP(-60, 430, 200, 640, [90, 90, 0, 0]), paper: 'kraftD', margin: 6, draw: grainLines(-60, 430, 200, 640, 'rgba(60,36,18,0.22)') });
+  C1.matt = piece('c1-matt', { pts: rectP(-40, 700, 850, 180), paper: 'cream', margin: 5 });
+  C1.pillow = piece('c1-pil', { pts: rrectP(48, 600, 296, 112, 46), paper: 'peach', margin: 6 });
+  C1.hairBack = piece('c1-hairB', { pts: blobP(226, 642, 68, 58, 'c1hair', 0.1), paper: 'hair', margin: 4, shadow: s1 });
+  C1.head = piece('c1-head', { pts: ellP(232, 650, 44, 46, 5), paper: 'skin', margin: 4, shadow: s1 });
+  C1.bangs = piece('c1-bangs', { pts: [[188, 640], [190, 614], [210, 596], [238, 590], [264, 598], [280, 620], [282, 640], [268, 624], [252, 630], [240, 616], [226, 630], [210, 620], [198, 636]], paper: 'hair', margin: 3, shadow: s0 });
+  C1.eyeC = piece('c1-eyeC', { pts: stripP([[-9, -2], [-4, 3], [4, 3], [9, -2]], [3.2, 3.8, 3.8, 3.2]), paper: 'navy', shadow: { x: 0.8, y: 1, b: 1, a: 0.3 }, edge: false });
+  C1.eyeO = piece('c1-eyeO', { pts: ellP(0, 0, 6, 7.5, 1.5), punch: true, paper: 'navy', shadow: { x: 0.8, y: 1, b: 1, a: 0.3 }, edge: false,
+    over: (g) => { g.fillStyle = 'rgba(255,253,246,0.95)'; g.beginPath(); g.arc(-2, -2.6, 1.9, 0, 6.283); g.fill(); } });
+  C1.cheek = piece('c1-cheek', { pts: ellP(0, 0, 9, 7, 2), punch: true, paper: 'cheek', shadow: { a: 0 }, edge: false });
+  const qtop = []; for (let x = 150; x <= 810; x += 22) qtop.push([x, 712 - 104 * Math.exp(-(((x - 545) / 140) ** 2)) - 18 * Math.exp(-(((x - 330) / 70) ** 2))]);   // 被子下面鼓起来的身子
+  C1.quilt = piece('c1-quilt', { pts: qtop.concat([[816, 712], [816, 900], [140, 900], [140, 716]]), paper: 'cream', margin: 6, shadow: { x: 4, y: 6, b: 9, a: 0.32 } });
+  const stitch = (x, y, w, h) => (g) => { g.strokeStyle = 'rgba(255,250,236,0.75)'; g.lineWidth = 2.2; g.setLineDash([7, 6]); g.strokeRect(x + 7, y + 7, w - 14, h - 14); g.setLineDash([]); };
+  C1.patches = [['dotsT', 470, 650, 150, 64], ['dotsY', 178, 724, 152, 80], ['gingR', 340, 724, 140, 80], ['stripe', 490, 724, 150, 80], ['dotsT', 650, 724, 140, 80],
+    ['gingR', 178, 812, 152, 78], ['dotsT', 340, 812, 140, 78], ['dotsY', 490, 812, 150, 78], ['gingR', 650, 812, 140, 78]]
+    .map(([pp, x, y, w, h], i) => piece('c1-patch' + i, { pts: rectP(x, y, w, h), paper: pp, margin: 3, shadow: s0, draw: stitch(x, y, w, h) }));
+  C1.rail = piece('c1-rail', { pts: rectP(-40, 880, 870, 92), paper: 'kraft', margin: 5, draw: grainLines(-40, 880, 870, 92, 'rgba(90,56,26,0.25)') });
+  C1.bedLeg = piece('c1-bleg', { pts: rectP(780, 968, 36, 84), paper: 'kraftD', margin: 3 });
+  // 床头柜：桌面一条深牛皮纸、柜身牛皮纸画木纹、抽屉单独一张、铜把手、下面一格暗的空格
+  C1.top = piece('c1-ttop', { pts: rectP(876, 688, 710, 42), paper: 'kraftD', margin: 5, draw: grainLines(876, 688, 710, 42, 'rgba(50,30,14,0.25)') });
+  C1.body = piece('c1-tbody', { pts: rectP(910, 726, 642, 300), paper: 'kraft', margin: 4, draw: grainLines(910, 726, 642, 300, 'rgba(90,56,26,0.22)') });
+  C1.drawer = piece('c1-drw', { pts: rectP(948, 766, 566, 122), paper: 'kraft', margin: 4 });
+  C1.knob = brass('c1-knob', 13);
+  C1.cubby = piece('c1-cubby', { pts: rectP(948, 908, 566, 96), paper: 'brownD', shadow: s0, edge: false });
+  C1.legs = [rectP(930, 1020, 34, 70), rectP(1498, 1020, 34, 70)].map((p, i) => piece('c1-leg' + i, { pts: p, paper: 'kraftD', margin: 3 }));
+  C1.floor = piece('c1-floor', { pts: rectP(-40, 1040, 2000, 90), paper: 'kraftD', shadow: { x: 0, y: -2, b: 8, a: 0.3 }, draw: grainLines(-40, 1040, 2000, 90, 'rgba(50,30,14,0.3)') });
+  C1.books = [piece('c1-bk0', { pts: rectP(1416, 646, 168, 42), paper: 'tealD', margin: 3 }), piece('c1-bk1', { pts: rectP(1430, 608, 140, 38), paper: 'red', margin: 3 })];
+  C1.pages = [piece('c1-pg0', { pts: rectP(1572, 652, 8, 30), paper: 'cream', shadow: s0, edge: false }), piece('c1-pg1', { pts: rectP(1558, 613, 8, 28), paper: 'cream', shadow: s0, edge: false })];
+  // 闹钟（原点 = 钟心）：红卡纸钟身、铜圈、奶油色表盘、12 根纸条刻度（没有数字）、三根纸条指针、中心铜脚钉；两只铜铃、小锤、两只脚
+  const ck = (C1.ck = {});
+  ck.body = piece('ck-body', { pts: ellP(0, 0, 150, 150, 8), paper: 'red', margin: 8, shadow: { x: 4, y: 6, b: 8, a: 0.36 } });
+  ck.ring = piece('ck-ring', { pts: ellP(0, 0, 128, 128, 7), paper: 'brass', shadow: s0, edge: false });
+  ck.face = piece('ck-face', { pts: ellP(0, 0, 118, 118, 7), paper: 'cream', shadow: { x: 1.5, y: 2, b: 2.5, a: 0.25 } });
+  ck.tickL = piece('ck-tL', { pts: rectP(-4.5, -110, 9, 26), paper: 'navy', shadow: { x: 1, y: 1.4, b: 1.4, a: 0.3 }, edge: false });
+  ck.tickS = piece('ck-tS', { pts: rectP(-3, -108, 6, 14), paper: 'navy', shadow: { x: 1, y: 1.4, b: 1.4, a: 0.3 }, edge: false });
+  ck.hour = piece('ck-hh', { pts: [[-7, 12], [7, 12], [6, -48], [0, -62], [-6, -48]], paper: 'navy', shadow: s0, edge: false });
+  ck.min = piece('ck-mh', { pts: [[-5, 14], [5, 14], [4, -82], [0, -96], [-4, -82]], paper: 'navy', shadow: s0, edge: false });
+  ck.sec = piece('ck-sh', { pts: [[-2.5, 26], [2.5, 26], [1.4, -102], [-1.4, -102]], paper: 'red', shadow: s0, edge: false });
+  ck.pin = brass('ck-pin', 10);
+  ck.bell = piece('ck-bell', { pts: ellP(0, 0, 64, 58, 7, Math.PI, Math.PI * 2, false).concat([[64, 10], [-64, 10]]), paper: 'brass', margin: 6, shadow: s1 });
+  ck.bellTop = brass('ck-btop', 11);
+  ck.post = piece('ck-post', { pts: rectP(-7, -36, 14, 40), paper: 'navy', shadow: s0, edge: false });
+  ck.hammer = piece('ck-ham', { pts: rectP(-3.5, -52, 7, 52), paper: 'navy', shadow: s0, edge: false });
+  ck.ball = brass('ck-ball', 12);
+  ck.foot = piece('ck-foot', { pts: rrectP(-15, 0, 30, 58, [6, 6, 14, 14]), paper: 'navy', margin: 4, shadow: s0 });
+  ck.ringA = [96, 122].map((rr, i) => piece('ck-ra' + i, { pts: stripP(arcLine(rr, -26, 26), 7), paper: 'white', shadow: s0, edge: false }));
+  ck.ringB = [108, 134].map((rr, i) => piece('ck-rb' + i, { pts: stripP(arcLine(rr, -20, 20), 7), paper: 'white', shadow: s0, edge: false }));
+  ck.dash = [1, -1].map((sd) => piece('ck-dash' + sd, { pts: stripP([[0, 0], [sd * 26, -9]], [7, 4]), paper: 'white', shadow: s0, edge: false }));
+  ck.shadow = softShadow(150, 12, 0.32, 8);          // 桌面上的影子：钟跳起来时变小
+}
+function drawClock(g, s) {
+  const b = Math.floor(s / UPB), k = s % UPB, side = b % 2 ? -1 : 1, ck = C1.ck;
+  const lift = [0, 3, 18, 30, 17][k], tilt = [0, -1.2, 4, 7, 3.5][k] * side;     // 拍前三张抬起来、左右轮流歪，拍上落地
+  const X = 1226, FOOT = 688, CY = -170, shake = s % 2 ? 1 : -1;
+  put(g, ck.shadow, X + 14, FOOT + 4, 0, 1 - lift / 110);
+  g.save(); g.translate(X, FOOT - lift); g.rotate(tilt * D2R);
+  for (const sd of [-1, 1]) {                        // 铃：口朝钟心，一张一张左右颤
+    const a = sd * 40 * D2R, bx = Math.sin(a) * 168, by = CY - Math.cos(a) * 168;
+    put(g, ck.post, Math.sin(a) * 140, CY - Math.cos(a) * 140, a, 1, 'ck-post' + sd, 0.6, 0.6);
+    g.save(); g.translate(bx + shake * 2, by); g.rotate(a + shake * 2.5 * D2R);
+    put(g, ck.bell, 0, 0, 0, 1, 'ck-bell' + sd, 0.8, 0.8); put(g, ck.bellTop, 0, -60, 0, 1, 'ck-btop' + sd, 0.5);
+    const set = s % 2 ? ck.ringA : ck.ringB;          // 响铃的「波纹」：两套剪好的弧条轮流换
+    set.forEach((p, i) => put(g, p, 0, 0, sd * (8 + i * 6) * D2R, 1, 'ck-ring' + sd + i + (s % 2), 1.2, 1));
+    g.restore();
   }
-  function door(name, x, y, w, h, paper) {
-    const pts = [[x, y + h], [x, y + w / 2]].concat(ellP(x + w / 2, y + w / 2, w / 2, w / 2, 7, Math.PI, Math.PI * 2, false).slice(1, -1)).concat([[x + w, y + w / 2], [x + w, y + h]]);
-    return piece(name, { pts, paper, margin: 3, shadow: { x: 2, y: 3, b: 3, a: 0.35 } });
-  }
-  const knob = (name) => piece(name, { pts: ellP(0, 0, 3.6, 3.6, 1.5), punch: true, paper: 'brass', shadow: { x: 1, y: 1.4, b: 1.5, a: 0.4 }, edge: false });
-  // A：牛皮纸墙、砖红屋顶
-  S.houses.push({ parts: [
-    { p: piece('hA-chim', { pts: rectP(352, 352, 34, 80), paper: 'news', margin: 3 }) },
-    { p: piece('hA-chimS', { pts: rectP(346, 345, 46, 13), torn: [0, 0, 1, 0], paper: 'white', core: 0, amp: 2, jag: 1.2, shadow: { x: 1.5, y: 2, b: 2.5, a: 0.3 } }) },
-    { p: piece('hA-wall', { pts: rectP(150, 452, 270, 240), paper: 'kraft', margin: 4 }) },
-    { p: piece('hA-roof', { pts: [[124, 464], [285, 336], [446, 464]], paper: 'brick', margin: 5 }) },
-    { p: roofSnow('hA-snow', 124, [285, 336], 446, 464) },
-    { w: win('hA-w1', 182, 506, 58, 58, true) }, { w: win('hA-w2', 330, 506, 58, 58, true) },
-    { p: door('hA-door', 262, 590, 48, 110, 'door') }, { p: knob('hA-knob'), x: 302, y: 646 },
-  ] });
-  // B：旧报纸墙、石板蓝屋顶、圆阁楼窗
-  S.houses.push({ parts: [
-    { p: piece('hB-wall', { pts: rectP(462, 386, 220, 306), paper: 'news', margin: 4 }) },
-    { p: piece('hB-roof', { pts: [[443, 398], [572, 262], [701, 398]], paper: 'slate', margin: 5 }) },
-    { p: roofSnow('hB-snow', 443, [572, 262], 701, 398) },
-    { w: { lit: true, ...(() => { const o = { pts: ellP(572, 344, 17, 17, 3), punch: true, margin: 3, shadow: { x: 2, y: 2.5, b: 3, a: 0.35 } }; return { a: piece('hB-att', { ...o, paper: 'winDim' }), b: piece('hB-att', { ...o, paper: 'win' }) }; })() } },
-    { w: win('hB-w1', 490, 430, 52, 58, true) }, { w: win('hB-w2', 602, 430, 52, 58, false) }, { w: win('hB-w3', 490, 532, 52, 58, true) },
-    { p: door('hB-door', 602, 560, 50, 140, 'brick') }, { p: knob('hB-knob'), x: 640, y: 626 },
-  ] });
-  // C：圆点花纸墙、牛皮纸屋顶
-  S.houses.push({ parts: [
-    { p: piece('hC-wall', { pts: rectP(722, 506, 180, 186), paper: 'teal', margin: 4 }) },
-    { p: piece('hC-roof', { pts: [[704, 516], [812, 418], [920, 516]], paper: 'kraft', margin: 5 }) },
-    { p: roofSnow('hC-snow', 704, [812, 418], 920, 516) },
-    { w: win('hC-w1', 746, 546, 50, 50, true) },
-    { p: door('hC-door', 832, 576, 46, 124, 'brick') },
-  ] });
-  // D：条纹花纸墙（长椅后面）
-  S.houses.push({ parts: [
-    { p: piece('hD-chim', { pts: rectP(1534, 356, 34, 70), paper: 'brick', margin: 3 }) },
-    { p: piece('hD-chimS', { pts: rectP(1528, 349, 46, 13), torn: [0, 0, 1, 0], paper: 'white', core: 0, amp: 2, jag: 1.2, shadow: { x: 1.5, y: 2, b: 2.5, a: 0.3 } }) },
-    { p: piece('hD-wall', { pts: rectP(1482, 442, 340, 250), paper: 'stripe', margin: 4 }) },
-    { p: piece('hD-roof', { pts: [[1460, 452], [1652, 332], [1844, 452]], paper: 'kraftD', margin: 5 }) },
-    { p: roofSnow('hD-snow', 1460, [1652, 332], 1844, 452) },
-    { w: win('hD-w1', 1512, 482, 56, 56, true) }, { w: win('hD-w2', 1608, 482, 56, 56, true) }, { w: win('hD-w3', 1734, 482, 56, 56, false) },
-    { p: door('hD-door', 1736, 574, 52, 126, 'door') },
-  ] });
-  // 松树：三层绿卡纸三角 + 雪条
-  S.tree = [
-    piece('tr-trunk', { pts: rectP(96, 598, 22, 90), paper: 'kraftD', margin: 3 }),
-    piece('tr-t1', { pts: [[10, 612], [107, 506], [204, 612]], paper: 'pine', margin: 5 }),
-    piece('tr-s1', { pts: rectP(26, 600, 162, 13), torn: [1, 0, 0, 0], paper: 'white', core: 0, amp: 2.5, jag: 1.3, shadow: { x: 1.5, y: 2, b: 2.5, a: 0.3 } }),
-    piece('tr-t2', { pts: [[28, 542], [107, 452], [186, 542]], paper: 'pine', margin: 5 }),
-    piece('tr-s2', { pts: rectP(42, 531, 130, 12), torn: [1, 0, 0, 0], paper: 'white', core: 0, amp: 2.5, jag: 1.3, shadow: { x: 1.5, y: 2, b: 2.5, a: 0.3 } }),
-    piece('tr-t3', { pts: [[48, 478], [107, 392], [166, 478]], paper: 'pine', margin: 5 }),
-    piece('tr-s3', { pts: [[86, 424], [107, 392], [128, 424], [118, 422], [107, 408], [96, 422]], torn: [0, 0, 0, 1, 1, 0], paper: 'white', core: 0, amp: 1.6, jag: 1, shadow: { x: 1.5, y: 2, b: 2.5, a: 0.3 } }),
-  ];
-  // 后面的雪坡（偏蓝白卡纸）、前面的雪地（暖白纸），上沿都是撕的
-  S.bankB = piece('bankB', { pts: [[-40, 652], [400, 636], [800, 654], [1200, 632], [1600, 650], [1960, 634], [1960, 1110], [-40, 1110]], torn: [1, 1, 1, 1, 1, 0, 0, 0], paper: 'snowB', amp: 6, jag: 2.2, core: 4, shadow: { x: 3, y: 5, b: 8, a: 0.33 } });
-  S.bankF = piece('bankF', { pts: [[-40, 834], [350, 818], [760, 836], [1150, 814], [1560, 830], [1960, 816], [1960, 1110], [-40, 1110]], torn: [1, 1, 1, 1, 1, 0, 0, 0], paper: 'snowF', amp: 6.5, jag: 2.4, core: 4, shadow: { x: 3, y: 5, b: 9, a: 0.33 } });
-  // 最前面左右两角的雪堆：两层撕纸（后一层偏蓝、前一层暖白），垫高一点，影子大一些；压出画面下沿
-  const dsh = { x: 6, y: 7, b: 13, a: 0.3 };
-  S.drifts = [
-    piece('driftL1', { pts: [[-40, 950], [110, 918], [290, 940], [430, 978], [540, 1110], [-40, 1110]], torn: [1, 1, 1, 1, 0, 0], paper: 'snowB', amp: 6, jag: 2.2, core: 4, shadow: dsh }),
-    piece('driftL2', { pts: [[-40, 1000], [150, 972], [330, 992], [430, 1036], [480, 1110], [-40, 1110]], torn: [1, 1, 1, 1, 0, 0], paper: 'white', amp: 5.5, jag: 2.2, core: 3.5, shadow: dsh }),
-    piece('driftR1', { pts: [[1960, 1110], [1410, 1110], [1480, 992], [1630, 950], [1810, 920], [1960, 944]], torn: [0, 1, 1, 1, 1, 0], paper: 'snowB', amp: 6, jag: 2.2, core: 4, shadow: dsh }),
-    piece('driftR2', { pts: [[1960, 1110], [1480, 1110], [1530, 1040], [1650, 1000], [1790, 976], [1960, 994]], torn: [0, 1, 1, 1, 1, 0], paper: 'white', amp: 5.5, jag: 2.2, core: 3.5, shadow: dsh }),
-  ];
-  // 路灯
-  const LX = LAMP_X;
-  S.lamp = {
-    pole: piece('lp-pole', { pts: [[LX - 10, 312], [LX + 10, 312], [LX + 13, 870], [LX - 13, 870]], paper: 'char', margin: 5 }),
-    base: piece('lp-base', { pts: [[LX - 22, 792], [LX + 22, 792], [LX + 28, 812], [LX + 36, 870], [LX - 36, 870], [LX - 28, 812]], paper: 'char', margin: 5 }),
-    bar: piece('lp-bar', { pts: rectP(LX - 36, 343, 72, 8), paper: 'char', margin: 4 }),
-    knobL: piece('lp-kl', { pts: ellP(0, 0, 6, 6, 2), punch: true, paper: 'char', margin: 3 }),
-    knobR: piece('lp-kr', { pts: ellP(0, 0, 6, 6, 2), punch: true, paper: 'char', margin: 3 }),
-    collar: piece('lp-col', { pts: [[LX - 19, 296], [LX + 19, 296], [LX + 12, 316], [LX - 12, 316]], paper: 'char', margin: 4 }),
-    house: piece('lp-house', { pts: [[LX - 50, 222], [LX + 50, 222], [LX + 32, 302], [LX - 32, 302]], paper: 'char', margin: 6 }),
-    glass: piece('lp-glass', { pts: [[LX - 39, 233], [LX + 39, 233], [LX + 24, 291], [LX - 24, 291]], paper: 'glass', shadow: { x: 1.5, y: 2, b: 2, a: 0.3 } }),
-    glassLit: piece('lp-glass', { pts: [[LX - 39, 233], [LX + 39, 233], [LX + 24, 291], [LX - 24, 291]], paper: 'glassLit', shadow: { x: 1.5, y: 2, b: 2, a: 0.3 } }),
-    m1: piece('lp-m1', { pts: [[LX - 16, 233], [LX - 11, 233], [LX - 7, 291], [LX - 12, 291]], paper: 'char', shadow: { x: 1, y: 1.5, b: 1.5, a: 0.35 }, edge: false }),
-    m2: piece('lp-m2', { pts: [[LX + 11, 233], [LX + 16, 233], [LX + 12, 291], [LX + 7, 291]], paper: 'char', shadow: { x: 1, y: 1.5, b: 1.5, a: 0.35 }, edge: false }),
-    cap: piece('lp-cap', { pts: [[LX - 64, 230], [LX + 64, 230], [LX + 48, 214], [LX, 178], [LX - 48, 214]], paper: 'char', margin: 6 }),
-    capS: piece('lp-capS', { pts: [[LX - 50, 214], [LX, 174], [LX + 50, 214], [LX + 34, 216], [LX, 192], [LX - 34, 216]], torn: [0, 0, 0, 1, 1, 0], paper: 'white', core: 0, amp: 2.2, jag: 1.3, shadow: { x: 1.5, y: 2, b: 3, a: 0.3 } }),
-    fin: piece('lp-fin', { pts: ellP(0, 0, 7.5, 7.5, 2), punch: true, paper: 'char', margin: 3 }),
-  };
-  // 灯亮以后贴上去的：黄色薄棉纸光锥、锯齿光晕、雪地上的黄纸
-  S.cone = piece('cone', { pts: [[-30, 0], [30, 0], [450, 580], [-450, 580]], paper: 'tissue', alpha: 0.58, core: 0, edge: false, shadow: { x: 2, y: 3, b: 5, a: 0.08 } });
-  S.cone2 = piece('cone2', { pts: [[-22, 0], [22, 0], [250, 580], [-250, 580]], paper: 'tissue', alpha: 0.48, core: 0, edge: false, shadow: { a: 0 } });
-  { const r = R('halo'), pts = []; for (let i = 0; i < 36; i++) { const a = i * Math.PI / 18, rr = i % 2 ? 84 + r() * 7 : 116 + r() * 12; pts.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
-    S.halo = piece('halo', { pts, paper: 'tissue', alpha: 0.66, core: 0, edge: false, shadow: { x: 2, y: 3, b: 5, a: 0.1 } }); }
-  S.patchT = piece('patchT', { pts: ellP(0, 0, 470, 76, 14), torn: true, paper: 'tissue', alpha: 0.55, core: 0, amp: 6, jag: 2, edge: false, shadow: { a: 0 } });
-  S.patch = piece('patch', { pts: ellP(0, 0, 330, 50, 14), torn: true, paper: 'patch', alpha: 0.7, core: 0, amp: 7, jag: 2.4, edge: false, shadow: { x: 2, y: 3, b: 4, a: 0.1 } });
-  // 长椅
-  S.bench = [
-    piece('bn-post1', { pts: rectP(1362, 650, 14, 112), paper: 'char', margin: 4 }),
-    piece('bn-post2', { pts: rectP(1644, 650, 14, 112), paper: 'char', margin: 4 }),
-    piece('bn-slat1', { pts: [[1334, 664], [1690, 659], [1692, 686], [1332, 690]], paper: 'kraftD', margin: 5 }),
-    piece('bn-slat2', { pts: [[1336, 703], [1688, 699], [1690, 724], [1334, 727]], paper: 'kraftD', margin: 5 }),
-    piece('bn-leg1', { pts: rectP(1348, 778, 16, 80), paper: 'char', margin: 4 }),
-    piece('bn-leg2', { pts: rectP(1656, 778, 16, 80), paper: 'char', margin: 4 }),
-    piece('bn-seat', { pts: [[1316, 752], [1704, 749], [1708, 786], [1312, 789]], paper: 'kraft', margin: 5 }),
-    piece('bn-seatF', { pts: [[1314, 777], [1706, 774], [1707, 787], [1313, 790]], paper: 'kraftD', shadow: { x: 1, y: 1.5, b: 2, a: 0.3 }, edge: false }),
-    piece('bn-snow1', { pts: rectP(1336, 651, 352, 12), torn: [1, 0, 0, 0], paper: 'white', core: 0, amp: 3, jag: 1.5, shadow: { x: 1.5, y: 2, b: 3, a: 0.3 } }),
-    piece('bn-snow2', { pts: rectP(1320, 740, 384, 13), torn: [1, 0, 0, 0], paper: 'white', core: 0, amp: 3, jag: 1.5, shadow: { x: 1.5, y: 2, b: 3, a: 0.3 } }),
-  ];
-  // 雪：撕下来的小碎白纸
-  S.flakes = []; for (let k = 0; k < 14; k++) { const r = R('fl' + k), pts = []; const nv = 5 + ((r() * 3) | 0); for (let i = 0; i < nv; i++) { const a = i / nv * Math.PI * 2 + (r() - 0.5) * 0.5, rr = 6 * (0.65 + r() * 0.6); pts.push([Math.cos(a) * rr, Math.sin(a) * rr * (0.7 + r() * 0.4)]); }
-    S.flakes.push(piece('flake' + k, { pts, torn: true, paper: 'white', core: 0, amp: 1.0, jag: 0.8, edge: false, shadow: { x: 1.6, y: 2.2, b: 2.5, a: 0.32 } })); }
-  buildCrab();
-  // 爱心、吃惊的"！"
-  S.heart = piece('heart', { pts: heartP(3.1), paper: 'heart', margin: 7, shadow: { x: 3, y: 5, b: 6, a: 0.38 } });
-  S.burst = piece('burst', { pts: (() => { const r = R('burst'), p = []; for (let i = 0; i < 26; i++) { const a = i * Math.PI / 13, rr = i % 2 ? 31 + r() * 4 : 45 + r() * 6; p.push([Math.cos(a) * rr, Math.sin(a) * rr]); } return p; })(), paper: 'cream', margin: 5, shadow: { x: 3, y: 4, b: 5, a: 0.38 },
-    draw: (g) => { g.fillStyle = '#25211E'; g.beginPath(); g.moveTo(-5.5, -24); g.lineTo(5.5, -24); g.lineTo(2.8, 7); g.lineTo(-2.8, 7); g.closePath(); g.fill(); g.beginPath(); g.arc(0, 16, 4.6, 0, 6.283); g.fill(); } });
-  // 歌词：撕下来的横格纸条 + 两条纸胶带
-  S.lyric = piece('lyric', { pts: rectP(-380, -56, 760, 112), torn: [0, 1, 0, 1], paper: 'ruled', core: 3.5, amp: 4, jag: 1.8, shadow: { x: 4, y: 6, b: 8, a: 0.4 },
-    draw: (g) => {
-      g.strokeStyle = 'rgba(112,150,204,0.6)'; g.lineWidth = 1.8; for (const y of [-38, 29]) { g.beginPath(); g.moveTo(-400, y); g.lineTo(400, y); g.stroke(); }
-      g.strokeStyle = 'rgba(222,112,102,0.6)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(-326, -80); g.lineTo(-326, 80); g.stroke();
-      const t = textLayer(LYRIC, 55, 700, '#2A2420', 'lyric', 14, 1); g.globalAlpha = 0.93; g.drawImage(t.c, -8 - t.tw / 2 - t.lead, 21 - t.base, t.w, t.h);
+  g.save(); g.translate(0, CY - 146); g.rotate(shake * 18 * D2R); put(g, ck.hammer, 0, 0, 0, 1, 'ck-ham', 0.5, 0.5); put(g, ck.ball, 0, -54, 0, 1, 'ck-ball', 0.5); g.restore();
+  for (const sd of [-1, 1]) put(g, ck.foot, sd * 92, CY + 116, -sd * 32 * D2R, 1, 'ck-foot' + sd, 0.8, 0.6);
+  g.save(); g.translate(0, CY);
+  put(g, ck.body, 0, 0, 0, 1, 'ck-body', 0.8, 0.3); put(g, ck.ring, 0, 0, 0, 1, 'ck-ring', 0.6, 0.3); put(g, ck.face, 0, 0, 0, 1, 'ck-face', 0.6, 0.3);
+  for (let i = 0; i < 12; i++) put(g, i % 3 ? ck.tickS : ck.tickL, 0, 0, i * 30 * D2R, 1, 'ck-tick' + i, 0.5, 0.8);
+  put(g, ck.hour, 0, 0, 212 * D2R, 1, 'ck-hh', 0.5, 0.6); put(g, ck.min, 0, 0, -4 * D2R, 1, 'ck-mh', 0.5, 0.6);
+  put(g, ck.sec, 0, 0, s * 18 * D2R, 1, 'ck-sh', 0.4, 0.6);                       // 秒针一张一格
+  put(g, ck.pin, 0, 0, 0, 1, 'ck-pin', 0.3);
+  g.restore(); g.restore();
+  if (k === 0 && s > 0) for (const sd of [-1, 1]) put(g, ck.dash[sd > 0 ? 0 : 1], X + sd * 150, FOOT - 6, 0, 1, 'ck-dash' + sd + b, 1.2, 1);   // 落地：脚边两道小纸条
+}
+function card1(g) {
+  const s = STEP, C = C1, woke = s >= at(2);
+  put(g, C.wall);
+  put(g, C.rod, 0, 0, 0, 1, 'c1-rod', 1, 0.3); put(g, C.frame, 0, 0, 0, 1, 'c1-frame', 1, 0.3);
+  put(g, C.sky, 0, 0, 0, 1, 'c1-sky', 0.8, 0.3);
+  g.save(); g.beginPath(); g.rect(326, 138, 388, 352); g.clip();
+  put(g, C.sun, 560, 452 - s * 9, 0, 1, 'c1-sun', 1.2, 0.6);                     // 太阳在山后面一张一格往上挪
+  put(g, C.hill, 0, 0, 0, 1, 'c1-hill', 0.8, 0.3);
+  g.restore();
+  put(g, C.mullV, 0, 0, 0, 1, 'c1-mullV', 0.8, 0.3); put(g, C.mullH, 0, 0, 0, 1, 'c1-mullH', 0.8, 0.3); put(g, C.sill, 0, 0, 0, 1, 'c1-sill', 1, 0.3);
+  put(g, C.curL, 0, 0, 0, 1, 'c1-curL', 1.2, 0.6); put(g, C.curR, 0, 0, 0, 1, 'c1-curR', 1.2, 0.6);
+  put(g, STAPLE, 310, 108, 0.08, 1, 'c1-stpL', 0.6, 0.6); put(g, STAPLE, 730, 108, -0.1, 1, 'c1-stpR', 0.6, 0.6);   // 窗帘钉在杆上
+  put(g, C.headboard, 0, 0, 0, 1, 'c1-hb', 1, 0.3); put(g, C.matt, 0, 0, 0, 1, 'c1-matt', 1, 0.3); put(g, C.pillow, 0, 0, 0, 1, 'c1-pil', 1, 0.4);
+  const hy = woke ? -7 : 0;                          // 第 2 拍睁眼，头抬起来一点
+  put(g, C.hairBack, 0, hy, 0, 1, 'c1-hairB', 1, 0.5); put(g, C.head, 0, hy, 0, 1, 'c1-head', 0.8, 0.5);
+  for (const ex of [214, 252]) put(g, woke ? C.eyeO : C.eyeC, ex, 652 + hy, 0, 1, 'c1-eye' + ex, 0.5, 0.6);
+  put(g, C.cheek, 204, 670 + hy, 0, 1, 'c1-chl', 0.5); put(g, C.cheek, 262, 670 + hy, 0, 1, 'c1-chr', 0.5);
+  put(g, C.bangs, 0, hy, 0, 1, 'c1-bangs', 0.8, 0.5);
+  const breathe = s % UPB < 2 ? -4 : 0;              // 被子跟着铃一拍一鼓
+  put(g, C.quilt, 0, breathe, 0, 1, 'c1-quilt', 1, 0.3);
+  C.patches.forEach((p, i) => put(g, p, 0, breathe, 0, 1, 'c1-patch' + i, 1, 0.6));
+  put(g, C.rail, 0, 0, 0, 1, 'c1-rail', 1, 0.2); put(g, C.bedLeg, 0, 0, 0, 1, 'c1-bleg', 0.8, 0.4);
+  C.legs.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c1-leg' + i, 0.8, 0.4));
+  put(g, C.body, 0, 0, 0, 1, 'c1-tbody', 0.8, 0.2); put(g, C.cubby, 0, 0, 0, 1, 'c1-cubby', 0.6, 0.2);
+  put(g, C.drawer, 0, 0, 0, 1, 'c1-drw', 0.8, 0.3); put(g, C.knob, 1231, 828, 0, 1, 'c1-knob', 0.5);
+  put(g, C.top, 0, 0, 0, 1, 'c1-ttop', 0.8, 0.2);
+  C.books.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c1-bk' + i, 0.8, 0.4)); C.pages.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c1-pg' + i, 0.6, 0.4));
+  put(g, C.floor);
+  drawClock(g, s);
+}
+
+// ───────────────────────── 卡 2：吐司从吐司机里弹起来 ─────────────────────────
+const C2 = {};
+function wispP(key) {                                // 一缕热气：顺着一条正弦线越往上越细的纸条
+  const r = R(key), ph = r() * 6.28, f = 0.9 + r() * 0.6, line = [], wd = [];
+  for (let i = 0; i <= 10; i++) { const u = i / 10; line.push([Math.sin(ph + u * f * Math.PI * 2) * 16 * (0.4 + u), -u * 150]); wd.push(15 * (1 - u * 0.7)); }
+  return stripP(line, wd);
+}
+function buildCard2() {
+  const s0 = { x: 1.5, y: 2, b: 2.5, a: 0.3 };
+  C2.wall = piece('c2-wall', { pts: rectP(-40, -40, 2000, 1160), paper: 'news', shadow: { a: 0 }, edge: false });
+  // 左墙上一块搁板：两个罐子（薄棉纸当玻璃，格子布盖子）、一盆小草
+  C2.shelf = piece('c2-shelf', { pts: rectP(110, 380, 620, 24), paper: 'kraftD', margin: 4 });
+  C2.brackets = [[[176, 404], [212, 404], [176, 452]], [[628, 404], [664, 404], [664, 452]]].map((p, i) => piece('c2-br' + i, { pts: p, paper: 'navy', margin: 3 }));
+  C2.jar1 = piece('c2-jar1', { pts: rrectP(150, 262, 96, 118, 16), paper: 'tissueY', alpha: 0.92, margin: 3, shadow: s0 });
+  C2.lid1 = piece('c2-lid1', { pts: rectP(144, 246, 108, 22), paper: 'gingR', margin: 3, shadow: s0 });
+  C2.jar2 = piece('c2-jar2', { pts: rrectP(290, 292, 84, 88, 12), paper: 'tissueB', alpha: 0.92, margin: 3, shadow: s0 });
+  C2.lid2 = piece('c2-lid2', { pts: rectP(286, 278, 92, 18), paper: 'kraftD', margin: 3, shadow: s0 });
+  C2.pot = piece('c2-pot', { pts: [[470, 300], [574, 300], [560, 380], [484, 380]], paper: 'red', margin: 4 });
+  C2.leaves = [[-118, 70], [-96, 86], [-74, 96], [-58, 80], [-38, 64]].map(([a, len], i) => ({ a, p: piece('c2-leaf' + i, { pts: leafP(len, 15), paper: i % 2 ? 'green' : 'greenD', margin: 3, shadow: s0 }) }));
+  // 台面、柜门、挂着的格子布擦手巾
+  C2.front = piece('c2-front', { pts: rectP(-40, 732, 2000, 400), paper: 'teal', shadow: { x: 0, y: -2, b: 8, a: 0.3 } });
+  C2.doors = [0, 1, 2, 3].map((i) => piece('c2-door' + i, { pts: rectP(40 + i * 480, 774, 440, 266), paper: 'tealD', margin: 5 }));
+  C2.knob = brass('c2-knob', 12);
+  C2.rail = piece('c2-rail', { pts: rectP(1604, 742, 228, 10), paper: 'navy', margin: 2 });
+  C2.towel = piece('c2-towel', { pts: [[1640, 744], [1790, 744], [1800, 952], [1634, 960]], torn: [0, 0, 1, 0], paper: 'gingR', margin: 4, core: 3 });
+  C2.towelTop = piece('c2-towelT', { pts: rectP(1630, 732, 172, 26), paper: 'gingR', margin: 3 });
+  C2.top = piece('c2-top', { pts: rectP(-40, 690, 2000, 44), paper: 'kraftD', margin: 4, draw: grainLines(-40, 690, 2000, 44, 'rgba(50,30,14,0.25)') });
+  // 果酱罐、红马克杯和三缕热气（薄棉纸条，每张换一缕剪好的形状）
+  C2.jam = piece('c2-jam', { pts: rrectP(650, 586, 112, 106, 20), paper: 'tissueR', alpha: 0.9, margin: 3, shadow: s0 });
+  C2.jamLid = piece('c2-jamLid', { pts: rrectP(642, 566, 128, 28, 6), paper: 'gingR', margin: 3, shadow: s0 });
+  C2.handle = piece('c2-handle', { pts: stripP(arcLine(36, 20, 160).map(([x, y]) => [952 + x, 622 + y * 0.9]), 16), paper: 'red', margin: 4 });
+  C2.mug = piece('c2-mug', { pts: rrectP(820, 556, 136, 136, [10, 10, 34, 34]), paper: 'red', margin: 6, shadow: { x: 3, y: 5, b: 7, a: 0.34 } });
+  C2.wisps = [0, 1].map((j) => [0, 1, 2].map((v) => piece('c2-wisp' + j + v, { pts: wispP('wisp' + j + v), torn: true, paper: 'tissueW', alpha: 0.95, core: 0, amp: 2, jag: 1, edge: false, shadow: { x: 3, y: 4, b: 5, a: 0.3 } })));
+  // 吐司机（芥末黄卡纸，一条奶油色腰线、一块亮面贴纸、旋钮只有一道刻线）和两片吐司
+  C2.toaster = piece('c2-toaster', { pts: rrectP(1100, 398, 470, 294, [84, 84, 22, 22]), paper: 'mustard', margin: 8, shadow: { x: 5, y: 7, b: 10, a: 0.36 } });
+  C2.band = piece('c2-band', { pts: rectP(1106, 568, 458, 30), paper: 'cream', shadow: s0 });
+  C2.shine = piece('c2-shine', { pts: [[1150, 440], [1262, 420], [1176, 530], [1134, 536]], torn: [0, 1, 0, 1], paper: 'tissueW', alpha: 0.5, core: 0, amp: 2, edge: false, shadow: { a: 0 } });
+  C2.dial = piece('c2-dial', { pts: ellP(1500, 642, 24, 24, 4), paper: 'cream', margin: 3, shadow: s0, draw: (g) => { g.fillStyle = '#2F3A57'; g.fillRect(1497, 622, 6, 18); } });
+  C2.lever = piece('c2-lever', { pts: rrectP(0, -10, 52, 20, 7), paper: 'navy', margin: 3, shadow: s0 });
+  C2.feet = [1140, 1470].map((x, i) => piece('c2-foot' + i, { pts: rrectP(x, 690, 60, 14, 5), paper: 'navy', margin: 2, shadow: s0 }));
+  C2.crust = piece('c2-crust', { pts: breadP(1), paper: 'crust', margin: 4, shadow: { x: 3, y: 4, b: 5, a: 0.34 } });
+  C2.crumb = piece('c2-crumb', { pts: shrink(breadP(1), 0.86, 0, -112), paper: 'bread', shadow: { x: 1, y: 1.5, b: 2, a: 0.2 },
+    draw: (g, r) => {                                 // 烤过的颜色：中间刷一团浅棕，撒几点焦点
+      const rg = g.createRadialGradient(0, -110, 10, 0, -110, 90); rg.addColorStop(0, 'rgba(196,128,56,0.45)'); rg.addColorStop(1, 'rgba(196,128,56,0)'); g.fillStyle = rg; g.fillRect(-90, -240, 180, 240);
+      g.fillStyle = 'rgba(150,90,40,0.35)'; for (let i = 0; i < 26; i++) { g.beginPath(); g.ellipse((r() - 0.5) * 100, -30 - r() * 150, 1.5 + r() * 2.5, 1 + r() * 1.6, r() * 3, 0, 6.283); g.fill(); }
     } });
-  S.tape = [0, 1].map((k) => piece('tape' + k, { pts: rectP(-66, -21, 132, 42), torn: [0, 1, 0, 1], paper: 'tape', alpha: 0.74, core: 0, amp: 1.6, jag: 2.2, edge: false, shadow: { x: 1, y: 1.5, b: 2, a: 0.16 } }));
-  // 脚印：浅蓝灰的小圆纸点（螃蟹走过的地方一格一格多出来）
-  S.prints = [0, 1, 2, 3, 4, 5].map((k) => { const r = R('print' + k), L = 9 + r() * 4, W = 3.6 + r() * 1.2;   // 小尖脚印：剪成水滴形的灰蓝小纸片
-    return piece('print' + k, { pts: [[-L / 2, 0], [-L / 4, -W], [L / 4, -W * 0.9], [L / 2, -W * 0.3], [L / 2, W * 0.3], [L / 4, W * 0.9], [-L / 4, W]], paper: 'print', shadow: { x: 1, y: 1.3, b: 1.6, a: 0.28 }, edge: false }); });
-  // 雪地上螃蟹的影子
-  { const c = mk(420 * K, 80 * K), g = c.getContext('2d'); g.filter = `blur(${7 * K}px)`; g.fillStyle = 'rgba(30,34,64,0.32)'; g.beginPath(); g.ellipse(210 * K, 40 * K, 175 * K, 20 * K, 0, 0, 6.283); g.fill(); S.cshadow = { cv: c, x: -210, y: -40, w: 420, h: 80, size: 420 }; }
+  C2.spring = piece('c2-spring', { pts: stripP([[0, 0], [0, -34]], [7, 3]), paper: 'white', shadow: s0, edge: false });
+}
+function card2(g) {
+  const s = STEP, C = C2, k = s - at(5);             // k：吐司弹起来后的第几张（第 5 拍 = 0）
+  put(g, C.wall);
+  put(g, C.shelf, 0, 0, 0, 1, 'c2-shelf', 1, 0.2); C.brackets.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c2-br' + i, 0.6, 0.6));
+  put(g, C.jar1, 0, 0, 0, 1, 'c2-jar1', 0.8, 0.5); put(g, C.lid1, 0, 0, 0, 1, 'c2-lid1', 0.8, 0.5);
+  put(g, C.jar2, 0, 0, 0, 1, 'c2-jar2', 0.8, 0.5); put(g, C.lid2, 0, 0, 0, 1, 'c2-lid2', 0.8, 0.5);
+  C.leaves.forEach((l, i) => put(g, l.p, 522, 304, (l.a + (s % 2 ? 2 : -2)) * D2R, 1, 'c2-leaf' + i, 0.8, 1)); put(g, C.pot, 0, 0, 0, 1, 'c2-pot', 0.8, 0.5);
+  put(g, C.front); C.doors.forEach((p, i) => { put(g, p, 0, 0, 0, 1, 'c2-door' + i, 0.8, 0.2); put(g, C.knob, 40 + i * 480 + (i % 2 ? 36 : 404), 824, 0, 1, 'c2-knob' + i, 0.5); });
+  put(g, C.rail, 0, 0, 0, 1, 'c2-rail', 0.6, 0.3); put(g, C.towel, 0, 0, 0, 1, 'c2-towel', 1, 0.6); put(g, C.towelTop, 0, 0, 0, 1, 'c2-towelT', 0.8, 0.5);
+  put(g, STAPLE, 1716, 745, -0.12, 1, 'c2-stp', 0.6, 0.6);
+  put(g, C.top);
+  put(g, C.jam, 0, 0, 0, 1, 'c2-jam', 0.8, 0.5); put(g, C.jamLid, 0, 0, 0, 1, 'c2-jamLid', 0.8, 0.5);
+  put(g, C.handle, 0, 0, 0, 1, 'c2-handle', 0.8, 0.5); put(g, C.mug, 0, 0, 0, 1, 'c2-mug', 0.8, 0.4);
+  C.wisps.forEach((set, j) => put(g, set[(s + j) % 3], 868 + j * 46, 540 - ((s + 2 * j) % 3) * 9, 0, 1, 'c2-wisp' + j, 1.2, 1));
+  // 吐司：弹之前露一截在机子上面；第 5 拍弹出去，左右两片各往两边歪
+  const pop = k >= 0, kk = Math.min(k, 4);
+  const toastY = pop ? [302, 262, 246, 252, 274][kk] : 592, spin = pop ? [5, 9, 12, 13, 14][kk] : 0, dx = pop ? (kk + 1) : 0;
+  [[1232, -1], [1440, 1]].forEach(([x, sd], i) => {
+    const tx = x + sd * dx * (sd < 0 ? 6 : 10), rot = sd * spin * D2R;
+    put(g, C.crust, tx, toastY, rot, 1, 'c2-crust' + i, 1, 0.6); put(g, C.crumb, tx, toastY, rot, 1, 'c2-crumb' + i, 0.6, 0.6);
+  });
+  const shakeX = s >= at(4) && !pop ? (s % 2 ? 3 : -3) : 0, jump = pop ? [-7, 2, 0, 0, 0][kk] : 0;   // 第 4 拍起吐司机抖，弹的那一张蹦一下
+  g.save(); g.translate(shakeX, jump);
+  put(g, C.toaster, 0, 0, 0, 1, 'c2-toaster', 0.8, 0.2); put(g, C.band, 0, 0, 0, 1, 'c2-band', 0.6, 0.2); put(g, C.shine, 0, 0, 0, 1, 'c2-shine', 0.6, 0.3);
+  put(g, C.dial, 0, 0, 0, 1, 'c2-dial', 0.5, 0.5);
+  put(g, C.lever, 1568, pop ? 424 : 476, 0, 1, 'c2-lever', 0.6, 0.6);            // 拉杆：弹的时候跳上去
+  C.feet.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c2-foot' + i, 0.5, 0.5));
+  g.restore();
+  if (pop && k < 2) for (const [x, a] of [[1236, -0.5], [1290, 0], [1388, 0], [1446, 0.5]]) put(g, C.spring, x, 384 - k * 14, a, 1, 'c2-spr' + x, 1, 1);   // 「蹦」的几道小纸条
 }
 
-// ───────────────────────── 螃蟹（纸偶）─────────────────────────
-// 坐标原点在螃蟹脚下的地面中点；身体中心 (0,-100)。左右两边的零件各剪一份（镜像），影子方向不跟着翻
-const LEGS = [{ p: [56, -58], t: [134, 0] }, { p: [72, -70], t: [160, -5] }, { p: [86, -84], t: [182, -13] }];
-const CR = {};
-function buildCrab() {
-  const sh = { x: 2.2, y: 3, b: 3.5, a: 0.34 };
-  CR.body = piece('cr-body', { pts: ellP(0, 0, 100, 64, 9), paper: 'crab', margin: 7, shadow: { x: 3, y: 4, b: 5, a: 0.34 } });
-  const belly = [[-76, 22]].concat(ellP(0, 22, 76, 36, 8, 0, Math.PI, false).slice(0, -1));
-  CR.belly = piece('cr-belly', { pts: belly, torn: belly.map((_, i) => i === 0), paper: 'belly', core: 3, amp: 2.8, jag: 1.4, shadow: { x: 1.5, y: 2, b: 2.5, a: 0.3 } });
-  CR.spots = [[-46, -32, 9], [-22, -46, 6], [50, -30, 7.5], [28, -48, 4.5]].map(([x, y, rr], i) => ({ x, y, p: piece('cr-spot' + i, { pts: ellP(0, 0, rr, rr, 2), punch: true, paper: 'spot', shadow: { x: 1.2, y: 1.6, b: 1.8, a: 0.32 }, edge: false }) }));
-  CR.cheek = [-1, 1].map((s) => piece('cr-cheek' + s, { pts: ellP(0, 0, 10, 10, 2), punch: true, paper: 'cheek', shadow: { x: 1.2, y: 1.6, b: 1.8, a: 0.3 }, edge: false }));
-  CR.leg = {}; CR.stalk = {}; CR.eye = {}; CR.arm = {}; CR.palm = {}; CR.fing = {}; CR.dact = {};
-  for (const s of [-1, 1]) {
-    CR.leg[s] = LEGS.map((L, i) => {
-      const dx = L.t[0] - L.p[0], dy = L.t[1] - L.p[1];
-      const line = [[-12, 6], [0, 0], [dx * 0.55, -26 - i * 3], [dx * 0.84, dy * 0.5], [dx, dy]];
-      return piece('cr-leg' + s + i, { pts: mirror(stripP(line, [32, 34, 29, 19, 6]), s), paper: 'crabD', margin: 5, shadow: sh });
-    });
-    CR.stalk[s] = piece('cr-stalk' + s, { pts: mirror([[-6, 6], [6, 6], [5, -60], [-5, -60]], s), paper: 'crabD', margin: 3, shadow: sh });
-    CR.eye[s] = piece('cr-eye' + s, { pts: ellP(0, 0, 21, 21, 3), punch: true, paper: 'white', shadow: { x: 2, y: 3, b: 3, a: 0.4 } });
-    CR.arm[s] = piece('cr-arm' + s, { pts: mirror([[-6, -8], [50, -7], [52, 7], [-6, 8]], s), paper: 'crabD', margin: 4, shadow: sh });
-    const sc = (pts) => mirror(pts.map(([x, y]) => [x * CS, y * CS]), s);
-    CR.palm[s] = piece('cr-palm' + s, { pts: sc(ellP(24, 0, 30, 25, 6)), paper: 'crab', margin: 6, shadow: sh });
-    CR.fing[s] = piece('cr-fing' + s, { pts: sc([[30, 2], [56, 4], [80, 12], [78, 21], [52, 25], [28, 21]]), paper: 'crab', margin: 5, shadow: sh });
-    CR.dact[s] = piece('cr-dact' + s, { pts: sc([[0, -9], [18, -16], [38, -15], [53, -5], [49, 2], [26, 1], [0, 8]]), paper: 'crab', margin: 5, shadow: sh });
+// ───────────────────────── 卡 3：女孩冲出门、跑过斑马线 ─────────────────────────
+const C3 = {};
+function buildCard3() {
+  const s0 = { x: 1.5, y: 2, b: 2.5, a: 0.3 };
+  C3.sky = piece('c3-sky', { pts: rectP(-40, -40, 2000, 830), paper: 'sky', shadow: { a: 0 }, edge: false });
+  C3.rays = piece('c3-rays', { pts: starP(0, 0, 156, 112, 14, 0), paper: 'tissueY', alpha: 0.72, core: 0, edge: false, shadow: { x: 2, y: 3, b: 5, a: 0.1 } });
+  C3.sun = piece('c3-sun', { pts: ellP(0, 0, 84, 84, 6), paper: 'sunY', margin: 6 });
+  C3.clouds = [[1330, 118, 132, 46], [770, 300, 110, 40], [130, 150, 104, 38]].map(([x, y, rx, ry], i) => piece('c3-cloud' + i, { pts: blobP(x, y, rx, ry, 'c3cl' + i, 0.16, 44, y + ry * 0.45), torn: true, paper: 'tissueW', alpha: 0.94, core: 0, amp: 3, edge: false, shadow: { x: 3, y: 4, b: 6, a: 0.16 } }));
+  C3.haze = piece('c3-haze', { pts: [[560, 790], [560, 520], [640, 520], [640, 452], [790, 452], [790, 404], [900, 404], [900, 470], [1180, 470], [1180, 380], [1330, 380], [1330, 440], [1500, 440], [1500, 500], [1640, 500], [1640, 420], [1990, 420], [1990, 790]], paper: 'haze', margin: 4, shadow: { x: 3, y: 4, b: 6, a: 0.25 } });
+  C3.hwin = [[662, 478], [716, 478], [662, 548], [716, 548], [818, 430], [862, 430], [818, 500], [862, 500], [1206, 404], [1252, 404], [1298, 404], [1206, 470], [1252, 470], [1298, 470], [1360, 466], [1420, 466], [1532, 526], [1580, 526], [1676, 446], [1730, 446], [1784, 446], [1676, 516], [1730, 516], [1784, 516], [1838, 446], [1892, 446]]
+    .map(([x, y], i) => piece('c3-hwin' + i, { pts: rectP(x, y, 24, 34), paper: 'sky2', shadow: { x: 1.2, y: 1.6, b: 1.8, a: 0.25 }, edge: false }));   // 远处楼上的窗：一格格浅色小纸片
+  C3.trunk = piece('c3-trunk', { pts: rectP(1032, 470, 32, 280), paper: 'kraftD', margin: 3 });
+  C3.crowns = [[1050, 430, 122, 112, 'green'], [986, 474, 80, 70, 'greenD'], [1112, 380, 70, 64, 'greenD']].map(([x, y, rx, ry, pp], i) => piece('c3-crown' + i, { pts: blobP(x, y, rx, ry, 'c3cr' + i, 0.1), torn: true, paper: pp, core: 3, amp: 4, shadow: { x: 3, y: 5, b: 7, a: 0.3 } }));
+  const hedge = [[560, 760]]; for (let x = 560; x <= 1990; x += 64) hedge.push([x, 650 + 14 * Math.sin(x * 0.05) + 10 * MV.noise('hedge', x / 90)]); hedge.push([1990, 760]);
+  C3.hedge = piece('c3-hedge', { pts: hedge, torn: hedge.map((_, i) => i > 0 && i < hedge.length - 2), paper: 'greenD', core: 3, amp: 4, shadow: { x: 3, y: 4, b: 6, a: 0.28 } });
+  // 女孩家：牛皮纸墙、红屋顶、报纸烟囱、窗和花箱、青绿色的门（门开 = 换一张斜着的门片 + 后面一块深色门洞）
+  C3.chim = piece('c3-chim', { pts: rectP(452, 236, 46, 92), paper: 'news', margin: 3 });
+  C3.wall = piece('c3-wall', { pts: rectP(60, 330, 520, 382), paper: 'kraft', margin: 5 });
+  C3.roof = piece('c3-roof', { pts: [[28, 344], [300, 222], [612, 344]], paper: 'red', margin: 6 });
+  C3.winF = piece('c3-winF', { pts: rectP(420, 410, 130, 120), paper: 'cream', margin: 4 });
+  C3.winG = piece('c3-winG', { pts: rectP(432, 422, 106, 96), paper: 'tissueB', alpha: 0.95, shadow: s0, edge: false });
+  C3.winM = piece('c3-winM', { pts: rectP(481, 422, 8, 96), paper: 'cream', shadow: s0, edge: false });
+  C3.box = piece('c3-box', { pts: rectP(410, 528, 150, 30), paper: 'red', margin: 3 });
+  C3.flowers = [[432, 'mustard'], [470, 'cheek'], [508, 'mustard'], [540, 'cheek']].map(([x, pp], i) => ({ x, p: piece('c3-fl' + i, { pts: starP(0, 0, 13, 7, 5, i), paper: pp, margin: 2, shadow: s0 }) }));
+  C3.frame = piece('c3-frame', { pts: rectP(214, 504, 156, 210), paper: 'cream', margin: 3 });
+  C3.hole = piece('c3-hole', { pts: rectP(230, 520, 124, 192), paper: 'brownD', shadow: s0, edge: false });
+  C3.door = piece('c3-door', { pts: rectP(230, 520, 124, 192), paper: 'teal', margin: 3, shadow: s0 });
+  C3.doorWin = piece('c3-doorW', { pts: ellP(292, 566, 18, 18, 3), punch: true, paper: 'tissueB', margin: 3, shadow: s0 });
+  C3.doorOpen = piece('c3-doorO', { pts: [[230, 514], [172, 494], [172, 736], [230, 714]], paper: 'tealD', margin: 3, shadow: { x: 4, y: 5, b: 7, a: 0.32 } });
+  C3.knob = brass('c3-knob', 7);
+  C3.step = piece('c3-step', { pts: rectP(198, 708, 188, 18), paper: 'stone', margin: 3 });
+  // 红绿灯（只有灯，没有字和图标）
+  C3.pole = piece('c3-pole', { pts: rectP(1772, 390, 20, 380), paper: 'navy', margin: 3 });
+  C3.box2 = piece('c3-box2', { pts: rrectP(1736, 236, 92, 216, 14), paper: 'tealD', margin: 4 });
+  C3.lampOff = piece('c3-lampOff', { pts: ellP(0, 0, 24, 24, 3), punch: true, paper: 'lamp', shadow: s0 });
+  C3.lampR = piece('c3-lampR', { pts: ellP(0, 0, 24, 24, 3), punch: true, paper: 'red', shadow: s0 });
+  C3.lampG = piece('c3-lampG', { pts: ellP(0, 0, 24, 24, 3), punch: true, paper: 'green', shadow: s0 });
+  C3.glowG = piece('c3-glowG', { pts: blobP(0, 0, 46, 46, 'c3glow', 0.08), torn: true, paper: 'tissueY', alpha: 0.42, core: 0, amp: 2, edge: false, shadow: { a: 0 } });
+  // 人行道、路沿、马路、斑马线（白纸条，上下两头是撕的，贴得不太齐）
+  C3.walk = piece('c3-walk', { pts: rectP(-40, 712, 2000, 62), paper: 'stone', shadow: { x: 0, y: -2, b: 6, a: 0.25 }, draw: (g) => { g.strokeStyle = 'rgba(90,86,80,0.35)'; g.lineWidth = 3; for (let x = 60; x < 1960; x += 150) { g.beginPath(); g.moveTo(x, 714); g.lineTo(x - 10, 772); g.stroke(); } } });
+  C3.curb = piece('c3-curb', { pts: rectP(-40, 770, 2000, 22), paper: 'stoneD', shadow: { x: 0, y: 3, b: 5, a: 0.3 } });
+  C3.road = piece('c3-road', { pts: rectP(-40, 790, 2000, 340), paper: 'road', shadow: { a: 0 } });
+  C3.zebra = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => { const x0 = 630 + i * 140; return piece('c3-zebra' + i, { pts: [[x0 + 26, 808], [x0 + 98, 808], [x0 + 72, 1062], [x0, 1062]], torn: [1, 0, 1, 0], paper: 'white', core: 2, amp: 3, jag: 1.4, shadow: s0 }); });
+}
+function card3(g) {
+  const s = STEP, C = C3, green = s >= at(7);
+  put(g, C.sky);
+  put(g, C.rays, 1660, 196, s * 3 * D2R, 1, 'c3-rays', 1, 0.6); put(g, C.sun, 1660, 196, 0, 1, 'c3-sun', 1, 0.4); put(g, STAPLE, 1628, 150, -0.55, 1, 'c3-stp', 0.6, 0.6);
+  C.clouds.forEach((p, i) => put(g, p, (s - 26) * 2.5, 0, 0, 1, 'c3-cloud' + i, 1, 0.4));   // 云一格一格往右飘
+  put(g, C.haze, 0, 0, 0, 1, 'c3-haze', 0.8, 0.1); C.hwin.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c3-hwin' + i, 0.6, 0.6));
+  put(g, C.trunk, 0, 0, 0, 1, 'c3-trunk', 0.8, 0.4); C.crowns.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c3-crown' + i, 1.2, 0.6));
+  put(g, C.hedge, 0, 0, 0, 1, 'c3-hedge', 1, 0.1);
+  put(g, C.chim, 0, 0, 0, 1, 'c3-chim', 0.8, 0.4); put(g, C.wall, 0, 0, 0, 1, 'c3-wall', 0.8, 0.2); put(g, C.roof, 0, 0, 0, 1, 'c3-roof', 0.8, 0.3);
+  put(g, C.winF, 0, 0, 0, 1, 'c3-winF', 0.8, 0.4); put(g, C.winG, 0, 0, 0, 1, 'c3-winG', 0.6, 0.4); put(g, C.winM, 0, 0, 0, 1, 'c3-winM', 0.6, 0.4);
+  put(g, C.box, 0, 0, 0, 1, 'c3-box', 0.8, 0.4); C.flowers.forEach((f, i) => put(g, f.p, f.x, 524, s * 0.1, 1, 'c3-fl' + i, 1, 1));
+  put(g, C.frame, 0, 0, 0, 1, 'c3-frame', 0.8, 0.4);
+  if (s < at(7)) {                                   // 门：第 6 拍后关着、越抖越厉害，第 7 拍被撞开
+    const rattle = s >= at(6) + 2 ? 3 : 1;
+    put(g, C.door, 0, 0, 0, 1, 'c3-door', rattle, rattle > 1 ? 1.2 : 0.4); put(g, C.doorWin, 0, 0, 0, 1, 'c3-doorW', rattle, 0.5); put(g, C.knob, 340, 622, 0, 1, 'c3-knob', rattle);
+  } else {
+    put(g, C.hole, 0, 0, 0, 1, 'c3-hole', 0.6, 0.3); put(g, C.doorOpen, 0, 0, 0, 1, 'c3-doorO', 1.2, 0.6); put(g, C.knob, 186, 620, 0, 1, 'c3-knob2', 0.6);
   }
-  CR.brad = piece('cr-brad', { pts: ellP(0, 0, 5.5, 5.5, 1.6), punch: true, paper: 'brass', shadow: { x: 1.2, y: 1.6, b: 1.6, a: 0.45 }, edge: false,
-    over: (g) => { g.strokeStyle = 'rgba(255,248,220,0.7)'; g.lineWidth = 1.2; g.beginPath(); g.arc(-0.6, -0.6, 3.4, 3.4, 4.9); g.stroke(); g.strokeStyle = 'rgba(80,60,20,0.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-2.5, 1.5); g.lineTo(2.5, -1.5); g.stroke(); } });
+  put(g, C.step, 0, 0, 0, 1, 'c3-step', 0.8, 0.4);
+  put(g, C.walk); put(g, C.curb);
+  put(g, C.pole, 0, 0, 0, 1, 'c3-pole', 0.8, 0.2); put(g, C.box2, 0, 0, 0, 1, 'c3-box2', 0.8, 0.3);
+  if (green) put(g, C.glowG, 1782, 406, 0, s === at(7) ? 1.25 : 1, 'c3-glowG', 1.2, 1);  // 第 7 拍红灯换绿灯
+  put(g, green ? C.lampOff : C.lampR, 1782, 280, 0, 1, 'c3-l0', 0.5); put(g, C.lampOff, 1782, 343, 0, 1, 'c3-l1', 0.5); put(g, green ? C.lampG : C.lampOff, 1782, 406, 0, 1, 'c3-l2', 0.5);
+  put(g, C.road);
+  C.zebra.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c3-zebra' + i, 1, 0.4));
+  girl3(g, s);
 }
 
-// 每个时刻螃蟹的姿势（按 STEP 取，定格）
-function crabPose(ts) {
-  const P = { x: 1210, lift: 0, tilt: 0, legs: [0, 0, 0, 0, 0, 0], elev: [24, 24], cl: [44, 44], open: [8, 8], lean: [0, 0], ext: 0,
-    look: [0.65, 0.05], eyes: 'normal', mouth: 'smile', burst: 0, shadowK: 1 };
-  if (ts < 2.0) {                                   // 横着走进来
-    const p = ts / 2.0; P.x = -190 + (1210 + 190) * Math.sin(p * Math.PI / 2);
-    const ph = STEP % 4, moving = ts < 1.84;
-    if (moving) {
-      const A = [3, 5, 1], B = [0, 2, 4];             // 两组腿交替抬（右 0、2 + 左 1 / 左 0、2 + 右 1）
-      if (ph === 0) A.forEach((i) => (P.legs[i] = 18)); if (ph === 2) B.forEach((i) => (P.legs[i] = 18));
-      if (ph === 1 || ph === 3) { P.legs = P.legs.map(() => 4); }
-      P.lift = ph % 2 ? -2 : 4; P.tilt = ph === 0 ? 2 : ph === 2 ? -2 : 0;
-      P.elev = ph < 2 ? [30, 18] : [18, 30]; P.open = ph < 2 ? [16, 4] : [4, 16];
+// ───────────────────────── 卡 4：公交车门在她面前打开 ─────────────────────────
+const C4 = {};
+function buildCard4() {
+  const s0 = { x: 1.5, y: 2, b: 2.5, a: 0.3 }, s1 = { x: 3, y: 4, b: 6, a: 0.32 };
+  C4.sky = piece('c4-sky', { pts: rectP(-40, -40, 2000, 900), paper: 'sky2', shadow: { a: 0 }, edge: false });
+  C4.clouds = [[1520, 120, 120, 44], [190, 140, 100, 38]].map(([x, y, rx, ry], i) => piece('c4-cloud' + i, { pts: blobP(x, y, rx, ry, 'c4cl' + i, 0.16, 44, y + ry * 0.45), torn: true, paper: 'tissueW', alpha: 0.94, core: 0, amp: 3, edge: false, shadow: { x: 3, y: 4, b: 6, a: 0.16 } }));
+  C4.trees = [[1890, 420, 110, 140, 'green'], [1800, 520, 80, 96, 'greenD']].map(([x, y, rx, ry, pp], i) => piece('c4-tree' + i, { pts: blobP(x, y, rx, ry, 'c4tr' + i, 0.1), torn: true, paper: pp, core: 3, amp: 4, shadow: s1 }));
+  C4.trunk = piece('c4-trunk', { pts: rectP(1876, 520, 28, 320), paper: 'kraftD', margin: 3 });
+  C4.road = piece('c4-road', { pts: rectP(-40, 826, 2000, 116), paper: 'road', shadow: { a: 0 } });
+  // 公交车（车头朝右，跟她跑的方向一样）：奶油色上身、青绿下身、一条红腰线、薄棉纸车窗、没有字和线路号
+  C4.under = piece('c4-under', { pts: rectP(-40, 780, 1830, 46), paper: 'navy', shadow: { a: 0 }, edge: false });
+  C4.lower = piece('c4-lower', { pts: [[-60, 470], [1790, 470], [1794, 792], [-60, 792]], paper: 'teal', margin: 7, shadow: s1 });
+  C4.upper = piece('c4-upper', { pts: [[-60, 232], [1650, 232], [1730, 256], [1774, 310], [1790, 474], [-60, 474]], paper: 'cream', margin: 7, shadow: s1 });
+  C4.stripe = piece('c4-stripe', { pts: rectP(-60, 604, 1852, 26), paper: 'red', margin: 3, shadow: s0 });
+  C4.wins = [0, 1, 2, 3, 4].map((i) => piece('c4-win' + i, { pts: rrectP(30 + i * 252, 286, 214, 150, 18), paper: 'tissueB', alpha: 0.92, margin: 3, shadow: s0,
+    draw: (g) => { g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.moveTo(60 + i * 252, 286); g.lineTo(110 + i * 252, 286); g.lineTo(52 + i * 252, 436); g.lineTo(2 + i * 252, 436); g.fill(); } }));
+  C4.shield = piece('c4-shield', { pts: [[1664, 284], [1728, 296], [1768, 340], [1782, 456], [1664, 456]], paper: 'tissueB', alpha: 0.92, margin: 3, shadow: s0 });
+  C4.doorF = piece('c4-doorF', { pts: rectP(1388, 262, 228, 532), paper: 'navy', margin: 4, shadow: s0 });
+  C4.inside = piece('c4-inside', { pts: rectP(1402, 276, 200, 508), paper: 'cream', shadow: s0, edge: false });
+  C4.light = piece('c4-light', { pts: blobP(1502, 470, 104, 210, 'c4light', 0.08), torn: true, paper: 'tissueY', alpha: 0.8, core: 0, amp: 3, edge: false, shadow: { a: 0 } });
+  C4.handrail = piece('c4-hand', { pts: rectP(1438, 330, 10, 380), paper: 'brass', margin: 2, shadow: s0 });
+  C4.steps = [piece('c4-step0', { pts: rectP(1402, 712, 200, 28), paper: 'stone', shadow: s0 }), piece('c4-step1', { pts: rectP(1402, 748, 200, 36), paper: 'stoneD', shadow: s0 })];
+  // 门片：关着一张 100 宽带玻璃；开门换成 48、22 宽的窄门片（替换片，不是压扁）
+  C4.panel = [100, 48, 22].map((w, i) => piece('c4-panel' + i, { pts: rectP(0, 0, w, 512), paper: 'tealD', margin: 3, shadow: s0,
+    draw: i === 0 ? (g) => { g.fillStyle = 'rgba(190,226,238,0.9)'; g.fillRect(14, 16, 72, 300); g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(24, 16, 12, 300); } : null }));
+  C4.arch = [340, 1210].map((x, i) => piece('c4-arch' + i, { pts: ellP(x, 792, 108, 104, 8, Math.PI, Math.PI * 2, false), paper: 'tealD', shadow: s0 }));
+  C4.wheel = piece('c4-wheel', { pts: ellP(0, 0, 84, 84, 7), paper: 'navy', margin: 5, shadow: s1 });
+  C4.hub = piece('c4-hub', { pts: ellP(0, 0, 36, 36, 4), paper: 'stone', shadow: s0 });
+  C4.brad = brass('c4-brad', 10);
+  C4.bumper = piece('c4-bumper', { pts: rrectP(1700, 766, 108, 30, 8), paper: 'navy', margin: 3, shadow: s0 });
+  C4.head = piece('c4-head', { pts: ellP(1762, 700, 22, 22, 3), paper: 'cream', margin: 3, shadow: s0 });
+  C4.headGlow = piece('c4-headG', { pts: blobP(1762, 700, 44, 44, 'c4hg', 0.08), torn: true, paper: 'tissueY', alpha: 0.5, core: 0, amp: 2, edge: false, shadow: { a: 0 } });
+  C4.mirror = piece('c4-mirror', { pts: stripP([[1786, 300], [1832, 284], [1838, 330]], 8), paper: 'navy', margin: 3, shadow: s0 });
+  C4.puffs = [0, 1, 2].map((i) => piece('c4-puff' + i, { pts: blobP(0, 0, 34, 28, 'c4pf' + i, 0.16), torn: true, paper: 'tissueG', alpha: 0.8, core: 0, amp: 2.5, edge: false, shadow: { x: 2, y: 3, b: 4, a: 0.14 } }));
+  // 车站牌（一根杆子顶一块圆牌，牌上不写字）、路沿、人行道、开门后落到人行道上的一块灯光
+  C4.stopPole = piece('c4-stopP', { pts: rectP(890, 400, 16, 566), paper: 'navy', margin: 3 });
+  C4.stopDisc = piece('c4-stopD', { pts: ellP(898, 392, 58, 58, 6), paper: 'mustard', margin: 5, shadow: s1 });
+  C4.stopRing = piece('c4-stopR', { pts: ellP(898, 392, 40, 40, 5), paper: 'cream', shadow: s0 });
+  C4.curb = piece('c4-curb', { pts: rectP(-40, 930, 2000, 26), paper: 'stoneD', shadow: { x: 0, y: -2, b: 5, a: 0.28 } });
+  C4.walk = piece('c4-walk', { pts: rectP(-40, 952, 2000, 180), paper: 'stone', shadow: { a: 0 }, draw: (g) => { g.strokeStyle = 'rgba(90,86,80,0.32)'; g.lineWidth = 3; for (let x = 40; x < 1960; x += 170) { g.beginPath(); g.moveTo(x, 956); g.lineTo(x - 26, 1120); g.stroke(); } } });
+  C4.spill = piece('c4-spill', { pts: [[1404, 792], [1600, 792], [1690, 1000], [1320, 1000]], torn: [0, 1, 0, 1], paper: 'tissueY', alpha: 0.42, core: 0, amp: 3, edge: false, shadow: { a: 0 } });
+}
+function card4(g) {
+  const s = STEP, C = C4, open = s >= at(11), ko = s - at(11);
+  const dip = s === at(13) ? 7 : s === at(13) + 1 ? 3 : (Math.floor(s / 2) % 2 ? 1.5 : -1.5);   // 发动机怠速一颤一颤，第 13 拍她跳上来车身一沉
+  put(g, C.sky);
+  C.clouds.forEach((p, i) => put(g, p, (s - 46) * 2, 0, 0, 1, 'c4-cloud' + i, 1, 0.4));
+  put(g, C.trunk, 0, 0, 0, 1, 'c4-trunk', 0.8, 0.4); C.trees.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c4-tree' + i, 1.2, 0.6));
+  put(g, C.road);
+  g.save(); g.translate(0, dip);
+  put(g, C.under);
+  put(g, C.lower, 0, 0, 0, 1, 'c4-lower', 0.6, 0.05); put(g, C.upper, 0, 0, 0, 1, 'c4-upper', 0.6, 0.05); put(g, C.stripe, 0, 0, 0, 1, 'c4-stripe', 0.6, 0.1);
+  C.wins.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c4-win' + i, 0.8, 0.4)); put(g, C.shield, 0, 0, 0, 1, 'c4-shield', 0.8, 0.4);
+  put(g, C.doorF, 0, 0, 0, 1, 'c4-doorF', 0.6, 0.2); put(g, C.inside, 0, 0, 0, 1, 'c4-inside', 0.5, 0.2);
+  if (open) { const sc = ko === 0 ? 1.1 : 1; g.save(); g.translate(1502, 470); g.scale(sc, sc); g.translate(-1502, -470); put(g, C.light, 0, 0, 0, 1, 'c4-light', 1, 0.5); g.restore(); }   // 车里的灯：第 11 拍一块黄薄棉纸「啪」地贴进门里
+  put(g, C.handrail, 0, 0, 0, 1, 'c4-hand', 0.6, 0.4); C.steps.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c4-step' + i, 0.6, 0.3));
+  const pw = !open ? 0 : ko === 0 ? 1 : 2;           // 门片：关着 → 窄一半 → 只剩一条（第 11 拍打开）
+  put(g, C.panel[pw], 1402, 274, 0, 1, 'c4-pL' + pw, 0.6, 0.3);
+  g.save(); g.translate(1602, 274); g.scale(-1, 1); put(g, C.panel[pw], 0, 0, 0, 1, 'c4-pR' + pw, 0.6, 0.3); g.restore();
+  C.arch.forEach((p, i) => put(g, p, 0, 0, 0, 1, 'c4-arch' + i, 0.6, 0.3));
+  for (const x of [340, 1210]) { put(g, C.wheel, x, 806, 0, 1, 'c4-wh' + x, 0.8, 0.6); put(g, C.hub, x, 806, 0, 1, 'c4-hub' + x, 0.6, 0.6); put(g, C.brad, x, 806, 0, 1, 'c4-brad' + x, 0.3); }
+  put(g, C.bumper, 0, 0, 0, 1, 'c4-bumper', 0.6, 0.4); put(g, C.headGlow, 0, 0, 0, 1, 'c4-headG', 1, 0.8); put(g, C.head, 0, 0, 0, 1, 'c4-head', 0.5, 0.5);
+  put(g, C.mirror, 0, 0, 0, 1, 'c4-mirror', 0.6, 0.6);
+  g.restore();
+  C.puffs.forEach((p, i) => { const age = (s + i * 3) % 9; put(g, p, 36 - age * 16, 772 - age * 9, 0, 0.55 + age * 0.13, 'c4-puff' + i, 1, 1); });   // 车尾一团团尾气往后飘、变大
+  put(g, C.curb); put(g, C.walk);
+  if (open) put(g, C.spill, 0, 0, 0, 1, 'c4-spill', 1, 0.3);
+  put(g, C.stopPole, 0, 0, 0, 1, 'c4-stopP', 0.8, 0.2); put(g, C.stopDisc, 0, 0, 0, 1, 'c4-stopD', 0.8, 0.4); put(g, C.stopRing, 0, 0, 0, 1, 'c4-stopR', 0.6, 0.4);
+  put(g, STAPLE, 898, 356, 0.18, 1, 'c4-stp', 0.6, 0.6);
+  girl4(g, s, dip);
+}
+
+// ───────────────────────── 纸偶女孩（侧面，朝右）─────────────────────────
+// 原点在胯；头、身子、裙子、书包、上臂、前臂、手、大腿、小腿、袜子、鞋都是单独的纸片，肩、肘、胯、膝钉铜脚钉。
+// 角度：0 = 往下，正 = 往前；膝盖往后弯，肘往前弯。近侧颜色正常，远侧深一点
+const GL = {};
+function buildGirl() {
+  const sh = { x: 2, y: 3, b: 3.5, a: 0.32 }, s0 = { x: 1.2, y: 1.6, b: 2, a: 0.3 };
+  GL.torso = piece('gl-torso', { pts: [[-30, -128], [22, -128], [34, -84], [38, -12], [-36, -12], [-34, -80]], paper: 'mustard', margin: 5, shadow: sh });
+  GL.collar = piece('gl-collar', { pts: [[4, -128], [26, -128], [14, -106]], paper: 'cream', shadow: s0, edge: false });
+  GL.strap = piece('gl-strap', { pts: stripP([[-24, -126], [-8, -96], [6, -62]], 11), paper: 'redD', margin: 2, shadow: s0 });
+  GL.skirt = piece('gl-skirt', { pts: [[-38, -18], [40, -18], [56, 34], [-54, 34]], paper: 'navy', margin: 4, shadow: sh });
+  GL.neck = piece('gl-neck', { pts: rectP(-8, -146, 18, 24), paper: 'skin', shadow: { a: 0 }, edge: false });
+  GL.head = piece('gl-head', { pts: ellP(0, 0, 40, 42, 5), paper: 'skin', margin: 4, shadow: sh });
+  GL.nose = piece('gl-nose', { pts: [[30, -12], [46, 2], [34, 8]], paper: 'skin', shadow: { a: 0 }, edge: false });
+  GL.hair = piece('gl-hair', { pts: [[36, -16], [36, -30], [24, -42], [6, -49], [-14, -48], [-32, -38], [-44, -20], [-47, 2], [-42, 22], [-30, 36], [-18, 30], [-18, 10], [-8, -6], [8, -20], [22, -22]], paper: 'hair', margin: 4, shadow: sh });
+  GL.pony = piece('gl-pony', { pts: [[4, -10], [-20, -18], [-50, -12], [-72, 4], [-82, 22], [-66, 18], [-44, 10], [-20, 8], [2, 8]], paper: 'hair', margin: 4, shadow: sh });
+  GL.tie = piece('gl-tie', { pts: ellP(0, 0, 8, 8, 2), punch: true, paper: 'red', margin: 2, shadow: s0 });
+  GL.ear = piece('gl-ear', { pts: ellP(0, 0, 8, 10, 2), paper: 'skin', margin: 2, shadow: s0 });
+  GL.eye = piece('gl-eye', { pts: ellP(0, 0, 4.6, 6, 1.5), punch: true, paper: 'navy', shadow: { x: 0.8, y: 1, b: 1, a: 0.3 }, edge: false,
+    over: (g) => { g.fillStyle = 'rgba(255,253,246,0.95)'; g.beginPath(); g.arc(-1.4, -2.2, 1.5, 0, 6.283); g.fill(); } });
+  GL.cheek = piece('gl-cheek', { pts: ellP(0, 0, 8, 7, 2), punch: true, paper: 'cheek', shadow: { a: 0 }, edge: false });
+  GL.toast = piece('gl-toast', { pts: breadP(0.24, 0, 27), paper: 'crust', margin: 3, shadow: s0 });
+  GL.toastIn = piece('gl-toastIn', { pts: shrink(breadP(0.24, 0, 27), 0.8, 0, 0), paper: 'bread', shadow: { a: 0 }, edge: false });
+  GL.pack = piece('gl-pack', { pts: rrectP(-76, -126, 52, 108, 16), paper: 'red', margin: 5, shadow: sh });
+  GL.flap = piece('gl-flap', { pts: rrectP(-80, -130, 58, 46, [18, 18, 8, 8]), paper: 'redD', margin: 3, shadow: s0 });
+  GL.buckle = piece('gl-buckle', { pts: rectP(-56, -92, 12, 10), paper: 'brass', shadow: s0, edge: false });
+  GL.brad = brass('gl-brad', 4.6);
+  const limb = (name, len, w0, w1, paper, margin = 3) => piece(name, { pts: stripP([[0, -4], [0, len * 0.5], [0, len]], [w0, (w0 + w1) / 2, w1]), paper, margin, shadow: sh });
+  GL.armU = { N: limb('gl-auN', 56, 22, 18, 'mustard'), F: limb('gl-auF', 56, 22, 18, 'mustD') };
+  GL.armL = { N: limb('gl-alN', 48, 18, 14, 'mustard'), F: limb('gl-alF', 48, 18, 14, 'mustD') };
+  GL.hand = { N: piece('gl-hN', { pts: ellP(0, 0, 11, 11, 2.5), paper: 'skin', margin: 2, shadow: s0 }), F: piece('gl-hF', { pts: ellP(0, 0, 11, 11, 2.5), paper: 'skinD', margin: 2, shadow: s0 }) };
+  GL.thigh = { N: limb('gl-thN', 70, 26, 22, 'skin'), F: limb('gl-thF', 70, 26, 22, 'skinD') };
+  GL.shin = { N: limb('gl-shN', 64, 21, 16, 'skin'), F: limb('gl-shF', 64, 21, 16, 'skinD') };
+  GL.sock = { N: piece('gl-soN', { pts: rectP(-10, 38, 20, 28), paper: 'white', shadow: s0, edge: false }), F: piece('gl-soF', { pts: rectP(-10, 38, 20, 28), paper: 'cream', shadow: s0, edge: false }) };
+  const shoe = [[-12, -6], [12, -8], [28, -2], [32, 8], [30, 12], [-14, 12]];
+  GL.shoe = { N: piece('gl-shoeN', { pts: shoe, paper: 'red', margin: 3, shadow: s0 }), F: piece('gl-shoeF', { pts: shoe, paper: 'redD', margin: 3, shadow: s0 }) };
+  GL.shadow = softShadow(64, 13, 0.34, 6);
+}
+const legDrop = ([th, kn]) => 70 * Math.cos(th * D2R) + 64 * Math.cos((th - kn) * D2R) + 12;   // 胯到鞋底有多高
+// P = { x, y（胯）, ground（脚下的地，画影子）, air, lean, legs: [[大腿, 膝] 近, 远], arms: [[肩, 肘] 近, 远], head, pony }
+function drawGirl(g, P, sc, key) {
+  if (P.ground != null) put(g, GL.shadow, P.x + 8 * sc, P.ground + 3, 0, sc * Math.max(0.45, 1 - (P.air || 0) / 240));
+  g.save(); g.translate(P.x, P.y); g.scale(sc, sc);
+  const [jx, jy, jr] = jit(key, 1.2, 0.5, 300); g.translate(jx, jy); g.rotate(jr);
+  const pp = (p, x, y, rot, n, a, r) => put(g, p, x, y, rot, 1, key + n, a ?? 0.6, r ?? 0.6);
+  const leg = (sd, hx, [th, kn], brad) => {
+    g.save(); g.translate(hx, 0); g.rotate(-th * D2R);
+    pp(GL.thigh[sd], 0, 0, 0, 'th' + sd);
+    g.translate(0, 68); g.rotate(kn * D2R);
+    pp(GL.shin[sd], 0, 0, 0, 'sh' + sd); pp(GL.sock[sd], 0, 0, 0, 'so' + sd, 0.4);
+    if (brad) pp(GL.brad, 0, 0, 0, 'bk' + sd, 0.3);
+    g.translate(0, 62); g.rotate((th - kn) * 0.7 * D2R); pp(GL.shoe[sd], 0, 0, 0, 'shoe' + sd);
+    g.restore();
+  };
+  const arm = (sd, sx, sy, [sa, el], brad) => {
+    g.save(); g.translate(sx, sy); g.rotate(-sa * D2R);
+    pp(GL.armU[sd], 0, 0, 0, 'au' + sd);
+    g.translate(0, 52); g.rotate(-el * D2R);
+    pp(GL.armL[sd], 0, 0, 0, 'al' + sd); pp(GL.hand[sd], 0, 52, 0, 'hd' + sd, 0.5);
+    if (brad) pp(GL.brad, 0, 0, 0, 'be' + sd, 0.3);
+    g.restore();
+    if (brad) pp(GL.brad, sx, sy, 0, 'bs' + sd, 0.3);
+  };
+  const upper = (fn) => { g.save(); g.rotate(P.lean * D2R); fn(); g.restore(); };
+  upper(() => arm('F', -8, -108, P.arms[1], false));
+  leg('F', -4, P.legs[1], false);
+  upper(() => { pp(GL.pack, 0, 0, 0, 'pack', 0.8, 0.5); pp(GL.flap, 0, 0, 0, 'flap', 0.6); pp(GL.buckle, 0, 0, 0, 'buckle', 0.4); });
+  leg('N', 4, P.legs[0], true);
+  g.save(); g.rotate(P.lean * 0.5 * D2R); pp(GL.skirt, 0, 0, 0, 'skirt', 0.6, 0.4); g.restore();
+  pp(GL.brad, 4, 4, 0, 'bh', 0.3);
+  upper(() => {
+    pp(GL.neck, 0, 0, 0, 'neck', 0.3);
+    pp(GL.torso, 0, 0, 0, 'torso', 0.6, 0.4); pp(GL.collar, 0, 0, 0, 'collar', 0.4); pp(GL.strap, 0, 0, 0, 'strap', 0.5);
+    g.save(); g.translate(2, -130); g.rotate((P.head || 0) * D2R); g.translate(4, -40);
+    g.save(); g.translate(-36, -22); g.rotate((P.pony || 0) * D2R); pp(GL.pony, 0, 0, 0, 'pony', 0.8, 0.8); g.restore();
+    pp(GL.head, 0, 0, 0, 'head', 0.5, 0.4); pp(GL.nose, 0, 0, 0, 'nose', 0.3); pp(GL.hair, 0, 0, 0, 'hair', 0.5, 0.5);
+    pp(GL.tie, -36, -22, 0, 'tie', 0.4); pp(GL.ear, -6, 6, 0, 'ear', 0.4); pp(GL.eye, 22, -4, 0, 'eye', 0.3); pp(GL.cheek, 16, 14, 0, 'cheek', 0.3);
+    pp(GL.toast, 46, 30, -20 * D2R, 'toast', 0.6); pp(GL.toastIn, 46, 30, -20 * D2R, 'toastIn', 0.4);   // 叼着刚弹出来的吐司
+    g.restore();
+    arm('N', 2, -108, P.arms[0], true);
+  });
+  g.restore();
+}
+// 跑：一拍一大步，5 张一个循环，拍上落地。A = 这一拍落地的那条腿（奇数拍换腿）
+const RUN = [
+  { A: [32, 8], B: [-36, 70], aA: [-45, 70], aB: [45, 80], lean: 14, pony: 16 },              // 0 落地（拍上）
+  { A: [8, 36], B: [-6, 105], aA: [-20, 75], aB: [22, 85], lean: 16, pony: 4 },                // 1 压低
+  { A: [-28, 10], B: [48, 95], aA: [25, 80], aB: [-30, 70], lean: 18, pony: -14 },             // 2 蹬地
+  { A: [-42, 48], B: [56, 58], aA: [45, 85], aB: [-45, 65], lean: 16, pony: -20, air: 38 },    // 3 腾空最高
+  { A: [-30, 78], B: [42, 20], aA: [35, 80], aB: [-35, 70], lean: 14, pony: 10, air: 20 },     // 4 往下落，前腿伸出去
+];
+function runPose(ph, beat, x, ground, sc, air) {
+  const f = RUN[ph], sw = beat % 2 === 1;
+  const a = air ?? f.air, drop = a == null ? legDrop(f.A) : 146 + a;
+  return { x, ground, air: a || 0, y: ground - drop * sc, lean: f.lean, pony: f.pony, head: -2,
+    legs: sw ? [f.B, f.A] : [f.A, f.B], arms: sw ? [f.aB, f.aA] : [f.aA, f.aB] };
+}
+// 卡 3：第 7 拍冲出门（35–39 张是出门那一大跳），第 8、9 拍在斑马线上落地
+const RUN3 = {
+  x: [304, 402, 500, 590, 662, 726, 786, 856, 936, 1012, 1080, 1140, 1214, 1296, 1374],
+  gy: [712, 742, 782, 816, 838, 842, 844, 846, 848, 850, 852, 854, 856, 858, 860],
+  ph: [2, 3, 3, 4, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4],
+  air: [null, 72, 102, 84, 42],
+};
+function girl3(g, s) {
+  const i = s - at(7); if (i < 0 || i >= RUN3.x.length) return;
+  const P = runPose(RUN3.ph[i], Math.floor(s / UPB), RUN3.x[i], RUN3.gy[i], 0.86, i < 5 ? RUN3.air[i] : undefined);
+  if (i === 0) Object.assign(P, { lean: 28, legs: [[66, 96], [-44, 8]], arms: [[78, 50], [-64, 36]], pony: -24 });   // 撞开门、往外扑的那一张
+  drawGirl(g, P, 0.86, 'g3');
+}
+// 卡 4：一路跑来、急刹、喘、门开了抬头看、蹲、跳、落在车门台阶上、举手
+const P4 = {
+  50: { x: 1086, lean: -14, legs: [[44, 4], [-20, 46]], arms: [[70, 30], [40, 40]], head: 6, pony: 24 },
+  51: { x: 1112, lean: -6, legs: [[30, 10], [-14, 30]], arms: [[46, 40], [20, 50]], head: 2, pony: 12 },
+  52: { x: 1126, lean: 26, legs: [[14, 26], [-6, 22]], arms: [[24, 30], [10, 36]], head: 10, pony: -6 },
+  53: { x: 1126, lean: 21, legs: [[12, 20], [-6, 16]], arms: [[20, 34], [8, 38]], head: 4, pony: -2 },
+  54: { x: 1126, lean: 26, legs: [[14, 26], [-6, 22]], arms: [[24, 30], [10, 36]], head: 10, pony: -6 },
+  55: { x: 1128, lean: -4, legs: [[6, 4], [-6, 4]], arms: [[-24, 24], [30, 36]], head: -18, pony: 10 },
+  56: { x: 1128, lean: -6, legs: [[6, 4], [-6, 4]], arms: [[-30, 20], [36, 30]], head: -20, pony: 4 },
+  57: { x: 1128, lean: -4, legs: [[6, 4], [-6, 4]], arms: [[-26, 24], [32, 34]], head: -16, pony: 0 },
+  58: { x: 1132, lean: 16, legs: [[26, 60], [-4, 52]], arms: [[-50, 30], [-40, 34]], head: -6, pony: -4 },
+  59: { x: 1136, lean: 24, legs: [[34, 84], [0, 74]], arms: [[-64, 24], [-56, 28]], head: -8, pony: -8 },
+  60: { x: 1212, lean: 10, legs: [[44, 70], [-24, 30]], arms: [[96, 24], [132, 26]], head: -10, pony: -22, air: 60 },     // 起跳：近手往门伸，远手举起来（在头后面，不挡脸）
+  61: { x: 1300, lean: 4, legs: [[62, 96], [14, 86]], arms: [[104, 20], [156, 16]], head: -10, pony: -18, air: 124 },
+  62: { x: 1384, lean: 2, legs: [[66, 100], [20, 92]], arms: [[108, 16], [166, 10]], head: -8, pony: 6, air: 150 },
+  63: { x: 1448, lean: 4, legs: [[50, 70], [8, 60]], arms: [[100, 22], [160, 14]], head: -6, pony: 18, air: 120 },
+  64: { x: 1488, lean: 6, legs: [[30, 30], [-6, 26]], arms: [[80, 30], [150, 20]], head: -4, pony: 22, air: 54 },
+  65: { x: 1500, lean: 12, legs: [[30, 64], [-10, 56]], arms: [[40, 50], [140, 30]], head: 0, pony: 26 },
+  66: { x: 1500, lean: -4, legs: [[6, 6], [-6, 6]], arms: [[186, 0], [-10, 30]], head: -8, pony: 8 },        // 站上台阶，近手举过头，稍往后斜（压着后脑勺，不挡脸）
+};
+function girl4(g, s, dip) {
+  if (s < 46) return;
+  const sc = 0.98;
+  if (s < 50) return drawGirl(g, runPose(s - 45, 9, [730, 820, 905, 985][s - 46], 1010, sc), sc, 'g4');   // 翻页时她还在往这边跑
+  const q = P4[Math.min(s, 66)], wave = s > 66 ? ((s - 66) % 4 < 2 ? 0 : 1) : 0;
+  const P = Object.assign({}, q, wave ? { arms: [[192, 18], [-6, 36]], head: -10 } : {});   // 站在台阶上挥手：举着的小臂往后摆一下、回来一下（往后摆不挡脸）
+  if (s > 66) P.pony = [8, 0, -6, 2][(s - 66) % 4];
+  const onStep = s >= 65, ground = onStep ? 714 + dip : s >= 60 ? MV.lerp(1010, 714, (s - 59) / 6) : 1010;
+  P.ground = ground;
+  P.y = ground - (P.air != null ? 146 + P.air : Math.max(legDrop(P.legs[0]), legDrop(P.legs[1]))) * sc;
+  drawGirl(g, P, sc, 'g4');
+}
+
+// ───────────────────────── 转场 ─────────────────────────
+// 转场那几张两张卡都画。缓冲画布和主画布一样大、用同一个变换
+const POOL = [];
+function pool(i, g) { const c = POOL[i] || (POOL[i] = document.createElement('canvas')); if (c.width !== g.canvas.width || c.height !== g.canvas.height) { c.width = g.canvas.width; c.height = g.canvas.height; } return c; }
+function paintLayer(g, i, fn) {
+  const c = pool(i, g), m = c.getContext('2d');
+  m.setTransform(1, 0, 0, 1, 0, 0); m.globalAlpha = 1; m.globalCompositeOperation = 'source-over'; m.filter = 'none';
+  m.clearRect(0, 0, c.width, c.height); m.setTransform(g.getTransform()); m.save(); fn(m); m.restore();
+  return c;
+}
+// 1）滑进来：新卡从右边 3 张滑进来，旧卡被推着往左走 55% 的路。拍的时候纸还在动，照片上糊出一小段拖影：
+//    这一张往前那 6% 的路上取 12 个位置，各贴一次平均起来（再长就成了一叠重影，整屏发虚；位置太少，竖边会出一道道分开的残影）。
+//    新卡左边那圈手剪白边和它投在旧卡上的影子最后清楚地贴一次，卡的边一直看得清。拍上那一张落位，再往回弹一下（SHOTS 的 settle）
+const SLIDE_U = [0.03, 0.17, 0.53, 0.87];            // 第 -4（起点）… -1 张新卡走到哪（0 → 1）
+let EDGE = null, EDGE_SH = null, BACK = null;       // ready 里做：卡边白条、卡边影子、翻页背面的素纸
+function slideIn(g, k, a, b) {
+  const u1 = SLIDE_U[k + 4], u0 = SLIDE_U[k + 3], T = g.getTransform(), kx = T.a, x1 = W * (1 - u1);
+  const A = paintLayer(g, 0, a.draw), B = paintLayer(g, 1, b.draw);
+  const acc = pool(2, g), ac = acc.getContext('2d'), tmp = pool(3, g), tc = tmp.getContext('2d');
+  ac.setTransform(1, 0, 0, 1, 0, 0); ac.globalAlpha = 1; ac.clearRect(0, 0, acc.width, acc.height);
+  const N = 12, EXPO = 0.06;
+  for (let i = 0; i < N; i++) {
+    const u = u1 - EXPO * (u1 - u0) * (1 - (i + 0.5) / N);
+    tc.setTransform(1, 0, 0, 1, 0, 0); tc.globalAlpha = 1; tc.clearRect(0, 0, tmp.width, tmp.height);
+    tc.drawImage(A, -0.55 * u * W * kx, 0); tc.drawImage(B, W * (1 - u) * kx, 0);
+    ac.globalAlpha = 1 / (i + 1); ac.drawImage(tmp, 0, 0);
+  }
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(acc, 0, 0); g.restore();
+  g.save(); g.beginPath(); g.rect(-100, -100, x1 + 100, H + 200); g.clip(); put(g, EDGE_SH, x1, 0); g.restore();   // 新卡投在旧卡上的影子
+  put(g, EDGE, x1, 0, 0, 1, 'card-edge', 0.6, 0.05);                                                        // 新卡左边一圈手剪白边
+}
+// 2）撕开：准备时算好一条从上到下的撕线，两半共用。-4 张：从上面裂开一道缝（缝里露出下一张）；
+//    -3…-1 张：撕到底，两半绕撕口下端往两边转开、甩出画面。撕口的白纸芯两边宽窄不一样
+const TR = {};
+function buildTear() {
+  const line = [];
+  for (let y = -60; y <= H + 60; y += 3) line.push([958 + 46 * MV.noise('tear-w', y / 300) + 14 * fbm('tear-j', y / 40) + 3 * fbm('tear-f', y / 6), y]);
+  const core = (key, i) => 3.5 + 6 * (0.5 + 0.5 * fbm(key, i / 8));
+  TR.line = line; TR.tip = [line[line.length - 1][0], H + 60];
+  TR.coreL = line.map((_, i) => core('tcl', i)); TR.coreR = line.map((_, i) => core('tcr', i));
+  TR.L = { A: [[-80, -60], ...line, [-80, H + 60]], B: [[-80, -60], ...line.map(([x, y], i) => [x - TR.coreL[i], y]), [-80, H + 60]] };
+  TR.R = { A: [...line, [W + 80, H + 60], [W + 80, -60]], B: [...line.map(([x, y], i) => [x + TR.coreR[i], y]), [W + 80, H + 60], [W + 80, -60]] };
+  const r = R('tear-fib'); TR.fib = [];
+  line.forEach(([x, y], i) => { if (r() < 0.45) TR.fib.push([x, y, (r() < 0.5 ? -1 : 1), 1.5 + r() * 4.5, (r() - 0.5) * 1.2]); });
+}
+const TEAR_K = [null, { dx: 18, dy: 0, rot: 1.6 }, { dx: 250, dy: 24, rot: 6 }, { dx: 640, dy: 70, rot: 12 }];   // -4 … -1 张：-1 张两半还挂在画面两边，拍上才甩干净
+function tearOpen(g, k, a, b) {
+  const kk = g.getTransform(), ks = Math.hypot(kk.a, kk.b);
+  if (k === -4) {                                    // 裂开一道缝：从上往下 55%，上宽下尖
+    a.draw(g);
+    const yTip = H * 0.55, n = TR.line.findIndex(([, y]) => y > yTip), wOf = (y) => 13 * (1 - (y + 60) / (yTip + 60));
+    const outer = [], inner = [];
+    for (let i = 0; i < n; i++) { const [x, y] = TR.line[i], w = wOf(y), c = Math.min(1, w / 6); outer.push([x - w - TR.coreL[i] * c, y]); inner.push([x - w, y]); }
+    for (let i = n - 1; i >= 0; i--) { const [x, y] = TR.line[i], w = wOf(y), c = Math.min(1, w / 6); outer.push([x + w + TR.coreR[i] * c, y]); inner.push([x + w, y]); }
+    polyPath(g, outer); g.fillStyle = '#FBF5E8'; g.fill();
+    g.save(); polyPath(g, inner); g.clip(); b.draw(g); g.restore();
+    return;
+  }
+  b.draw(g);
+  const p = TEAR_K[k + 4];
+  for (const sd of [-1, 1]) {
+    const T = sd < 0 ? TR.L : TR.R;
+    g.save();
+    g.translate(sd * p.dx, p.dy); g.translate(TR.tip[0], TR.tip[1]); g.rotate(sd * p.rot * D2R); g.translate(-TR.tip[0], -TR.tip[1]);
+    g.save(); g.shadowColor = 'rgba(34,24,20,0.38)'; g.shadowBlur = 16 * ks; g.shadowOffsetX = 7 * ks; g.shadowOffsetY = 11 * ks;
+    polyPath(g, T.A); g.fillStyle = '#FBF5E8'; g.fill(); g.restore();
+    g.save(); polyPath(g, T.B); g.clip(); a.draw(g); g.restore();
+    g.lineCap = 'round'; g.lineWidth = 0.8;            // 撕口的纤维毛刺
+    for (const [x, y, s, L, an] of TR.fib) {
+      if (s !== sd) continue;
+      g.strokeStyle = 'rgba(255,251,242,0.85)'; g.beginPath(); g.moveTo(x, y); g.lineTo(x - sd * L * Math.cos(an), y + L * Math.sin(an)); g.stroke();   // 往撕口外面翘
     }
-  } else if (ts < LIT_T) {                          // 停下：左看、右看、抬头看灯
-    if (ts < 2.17) { P.look = [-1, 0.05]; P.lean = [-9, -9]; P.tilt = -2.5; }
-    else if (ts < 2.34) { P.look = [1, 0.05]; P.lean = [9, 9]; P.tilt = 2.5; }
-    else { P.look = [-0.55, -0.85]; P.lean = [-8, -8]; P.ext = 6; P.tilt = -1.5; P.elev = [20, 20]; }
-  } else if (ts < 2.75) {                           // 灯亮：吃一惊
-    const k = STEP - 30; P.lift = [30, 18, 6][k] ?? 0;
-    P.elev = [58, 58]; P.cl = [30, 30]; P.open = [30, 30]; P.lean = [-14, 14]; P.ext = 12; P.eyes = 'small'; P.look = [-0.2, -0.6];
-    P.mouth = 'o'; P.burst = k === 0 ? 1.22 : k === 1 ? 0.94 : 1; P.legs = P.legs.map(() => -10);
-  } else if (ts < LYRIC_T) {                        // 预备：蹲下
-    P.lift = -11; P.legs = P.legs.map(() => 11); P.elev = [6, 6]; P.cl = [30, 30]; P.open = [4, 4]; P.eyes = 'happy'; P.mouth = 'open'; P.lean = [-4, 4];
-  } else if (ts < 3.34) {                           // 腾空，钳子举起来
-    const k = STEP - 36; P.lift = [62, 96, 92, 52][k] ?? 0; P.legs = P.legs.map(() => 7);
-    P.elev = [82, 82]; P.cl = [8, 8]; P.open = [26, 26]; P.eyes = 'happy'; P.mouth = 'open'; P.lean = [-6, 6]; P.ext = 6;
-  } else {                                          // 落地回弹 → 举着钳子开心
-    const k = STEP - 40; P.lift = k === 0 ? -13 : k === 1 ? 6 : 0; P.legs = P.legs.map(() => (k === 0 ? 12 : 0));
-    P.elev = [76, 76]; P.cl = [8, 8]; P.open = [20, 20]; P.eyes = 'happy'; P.mouth = 'open'; P.lean = [-5, 5];
-    if (ts < 4.2 && k >= 2) { const w = Math.floor((STEP - 42) / 2) % 2; P.elev = w ? [70, 82] : [82, 70]; P.open = w ? [6, 26] : [26, 6]; P.tilt = w ? 1.5 : -1.5; }
+    g.restore();
   }
-  P.shadowK = Math.max(0.5, 1 - Math.max(0, P.lift) / 210);
-  return P;
 }
-function cput(p, x, y, rot, key, amp = 0.8, rmax = 0.6) {
-  const [jx, jy, jr] = jit('crab-' + key, amp, rmax, p.size);
-  ctx.save(); ctx.translate(x + jx, y + jy); if (rot || jr) ctx.rotate(rot + jr); ctx.drawImage(p.cv, p.x, p.y, p.w, p.h); ctx.restore();
-}
-function drawPupil(P, s) {
-  if (P.eyes === 'happy') { marker(ctx, 4.6); ctx.beginPath(); ctx.moveTo(-10, 6); ctx.quadraticCurveTo(0, -12, 10, 6); ctx.stroke(); return; }
-  const pr = P.eyes === 'small' ? 5.5 : 9, cx = P.look[0] * (21 - pr - 3.5), cy = P.look[1] * (21 - pr - 3.5);
-  const r = R('pupil' + s + P.eyes + P.look.join()); ctx.fillStyle = '#211E1B'; ctx.beginPath();
-  for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, rr = pr * (0.93 + r() * 0.12); ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = 'rgba(255,253,246,0.95)'; ctx.beginPath(); ctx.arc(cx - pr * 0.35, cy - pr * 0.38, Math.max(1.6, pr * 0.3), 0, 6.283); ctx.fill();
-}
-function drawMouth(P) {
-  ctx.save(); ctx.translate(0, 10);
-  if (P.mouth === 'o') { marker(ctx, 3.6); ctx.beginPath(); ctx.ellipse(0, 2, 6.5, 8, 0, 0, 6.283); ctx.stroke(); }
-  else if (P.mouth === 'open') {
-    ctx.fillStyle = '#3B1E18'; ctx.beginPath(); ctx.moveTo(-14, -1); ctx.quadraticCurveTo(0, 26, 14, -1); ctx.closePath(); ctx.fill();
-    ctx.save(); ctx.clip(); ctx.fillStyle = '#EE8A7C'; ctx.beginPath(); ctx.ellipse(0, 13, 8, 5.5, 0, 0, 6.283); ctx.fill(); ctx.restore();
-    marker(ctx, 2.6); ctx.beginPath(); ctx.moveTo(-14, -1); ctx.quadraticCurveTo(0, 26, 14, -1); ctx.closePath(); ctx.stroke();
-  } else { marker(ctx, 3.8); ctx.beginPath(); ctx.moveTo(-11, 0); ctx.quadraticCurveTo(0, 11, 11, 0); ctx.stroke(); }
-  ctx.restore();
-}
-function drawCrab(P) {
-  put(S.cshadow, P.x + 12, GROUND_F + 6, 0, P.shadowK);
-  ctx.save();
-  const [jx, jy, jr] = jit('crab', 1.2, 0.4, 300);
-  ctx.translate(P.x + jx, GROUND_F - P.lift + jy); ctx.rotate(P.tilt * D2R + jr);
-  for (const s of [-1, 1]) for (let i = 2; i >= 0; i--) { const L = LEGS[i]; cput(CR.leg[s][i], s * L.p[0], L.p[1], -s * P.legs[(s > 0 ? 3 : 0) + i] * D2R, 'leg' + s + i); }
-  for (const s of [-1, 1]) {
-    const k = s > 0 ? 1 : 0; ctx.save(); ctx.translate(s * 34, -146 - P.ext); ctx.rotate(P.lean[k] * D2R);
-    cput(CR.stalk[s], 0, 0, 0, 'stalk' + s);
-    const [ex, ey] = jit('crab-eyeJ' + s, 0.5, 0, 10); ctx.translate(ex, -60 + ey); ctx.drawImage(CR.eye[s].cv, CR.eye[s].x, CR.eye[s].y, CR.eye[s].w, CR.eye[s].h); drawPupil(P, s);
-    ctx.restore();
+// 3）翻过去：从右下角掀起来往左上翻。折线以外的部分沿折线翻到上面，露出素纸的背面，靠折线那边暗、中间亮，影子往右下落
+const TURN = { c0: [W + 40, H + 40], n: [-1 / Math.hypot(1, 0.5), -0.5 / Math.hypot(1, 0.5)] };
+TURN.D = (-40 - TURN.c0[0]) * TURN.n[0] + (-40 - TURN.c0[1]) * TURN.n[1];
+const TURN_D = [0.15, 0.39, 0.65, 0.9];              // -4 … -1 张：折线走到哪（0 → 1）
+const CARD = rectP(-40, -40, W + 80, H + 80);
+function halfPlane(poly, d, far) {                   // 把多边形裁到折线的一边
+  const [cx, cy] = TURN.c0, [nx, ny] = TURN.n, f = (p) => (p[0] - cx) * nx + (p[1] - cy) * ny - d, out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length], fp = f(p), fq = f(q), ip = far ? fp >= 0 : fp < 0, iq = far ? fq >= 0 : fq < 0;
+    if (ip) out.push(p);
+    if (ip !== iq) { const u = fp / (fp - fq); out.push([p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u]); }
   }
-  ctx.save(); ctx.translate(0, -100);
-  cput(CR.body, 0, 0, 0, 'body', 0.5, 0.3);
-  for (const sp of CR.spots) cput(sp.p, sp.x, sp.y, 0, 'spot' + sp.x, 0.5);
-  cput(CR.belly, 0, 0, 0, 'belly', 0.6, 0.4);
-  cput(CR.cheek[0], -54, 8, 0, 'chl', 0.5); cput(CR.cheek[1], 54, 8, 0, 'chr', 0.5);
-  drawMouth(P);
-  ctx.restore();
-  for (const s of [-1, 1]) {
-    const k = s > 0 ? 1 : 0; ctx.save(); ctx.translate(s * 84, -112); ctx.rotate(-s * P.elev[k] * D2R);
-    cput(CR.arm[s], 0, 0, 0, 'arm' + s);
-    ctx.save(); ctx.translate(s * 46, 0); ctx.rotate(-s * P.cl[k] * D2R);
-    cput(CR.fing[s], 0, 0, 0, 'fing' + s);
-    ctx.save(); ctx.translate(s * 38 * CS, -9 * CS); ctx.rotate(-s * P.open[k] * D2R); cput(CR.dact[s], 0, 0, 0, 'dact' + s); ctx.restore();
-    cput(CR.palm[s], 0, 0, 0, 'palm' + s);
-    ctx.restore();
-    cput(CR.brad, s * 2, 0, 0, 'brad' + s, 0.3);
-    ctx.restore();
-  }
-  ctx.restore();
-  if (P.burst) put(S.burst, P.x + 168, GROUND_F - P.lift - 292, -0.12, P.burst, 'burst', 1.2, 1);
+  return out;
+}
+function pageTurn(g, k, a, b) {
+  b.draw(g);
+  const d = TURN_D[k + 4] * TURN.D, [cx, cy] = TURN.c0, [nx, ny] = TURN.n, kk = g.getTransform(), ks = Math.hypot(kk.a, kk.b);
+  const rest = halfPlane(CARD, d, true), lifted = halfPlane(CARD, d, false);
+  if (rest.length > 2) { g.save(); polyPath(g, rest); g.clip(); a.draw(g); g.restore(); }
+  if (lifted.length < 3) return;
+  const flap = lifted.map((p) => { const f = (p[0] - cx) * nx + (p[1] - cy) * ny - d; return [p[0] - 2 * f * nx, p[1] - 2 * f * ny]; });
+  const pat = g.createPattern(BACK, 'repeat'); pat.setTransform(new DOMMatrix().scale(1 / K));
+  g.save(); g.shadowColor = 'rgba(34,24,20,0.4)'; g.shadowBlur = 22 * ks; g.shadowOffsetX = 10 * ks; g.shadowOffsetY = 14 * ks;
+  polyPath(g, flap); g.fillStyle = pat; g.fill(); g.restore();
+  g.save(); polyPath(g, flap); g.clip();
+  const lg = g.createLinearGradient(cx + nx * d, cy + ny * d, cx + nx * (d + 320), cy + ny * (d + 320));
+  lg.addColorStop(0, 'rgba(70,46,24,0.34)'); lg.addColorStop(0.1, 'rgba(255,250,236,0.28)'); lg.addColorStop(0.45, 'rgba(255,250,236,0.06)'); lg.addColorStop(1, 'rgba(70,46,24,0.12)');
+  g.fillStyle = lg; g.fillRect(-200, -200, W + 400, H + 400); g.restore();
+  g.lineWidth = 2; g.strokeStyle = 'rgba(80,58,36,0.4)'; g.lineJoin = 'round'; polyPath(g, flap); g.stroke();
 }
 
 // ───────────────────────── 每一帧 ─────────────────────────
-function drawSnow(layer, n, s0, s1, v0, v1, ts) {
-  for (let i = 0; i < n; i++) {
-    const r = R('sn' + layer + ':' + i), x0 = r() * 2200 - 140, y0 = r() * 1300, v = v0 + r() * (v1 - v0), am = 6 + r() * 16, fr = 0.4 + r() * 0.9, ph = r() * 6.28, sc = s0 + r() * (s1 - s0), kind = (r() * S.flakes.length) | 0;
-    const y = ((y0 + v * ts) % 1300) - 110, x = x0 + am * Math.sin(ts * fr * 6.283 + ph) - ts * v * 0.12;
-    const rot = R('snr' + layer + i + ':' + STEP)() * 6.283;
-    put(S.flakes[kind], x, y, rot, sc);
-  }
+function drawFrame(g, t) {
+  STEP = stepOf(t);
+  let i = SHOTS.length - 1;
+  while (i > 0 && STEP < at(SHOTS[i].land) - SHOTS[i].len) i--;
+  const b = SHOTS[i], k = STEP - at(b.land);
+  if (k < 0) return b.trans(g, k, SHOTS[i - 1], b);
+  const st = b.settle && b.settle[k];
+  if (st) { g.save(); g.translate(st, 0); b.draw(g); g.restore(); } else b.draw(g);
 }
-function render(t) {
-  STEP = Math.floor(t * UPS + 1e-6); const ts = STEP / UPS, lit = ts >= LIT_T - 1e-6, ls = STEP - 30;
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  ctx.fillStyle = '#1f2f55'; ctx.fillRect(0, 0, PW, PH);
-  // 镜头：很慢地推近 1.0 → 1.05（定格：也是一次一格）
-  const camStep = Math.floor(STEP / CAM_HOLD) * CAM_HOLD, cam = 1 + 0.05 * Math.min(1, camStep / UPS / 4.67), CX = 1130, CY = 690;
-  ctx.setTransform(K, 0, 0, K, OX, OY); ctx.translate(CX, CY); ctx.scale(cam, cam); ctx.translate(-CX, -CY);
-  put(S.sky, 0, 0);
-  put(S.sky2, 0, 0);
-  HOLD = BG_HOLD; TILT = true;
-  for (const s of S.stars) {                        // 星星一闪一闪：换大一点 / 小一点的那张，转一点
-    const k = Math.floor((STEP + s.ph) / s.per), rr = R('tw' + s.i + ':' + k)();
-    const sc = s.isStar ? 0.8 + rr * 0.4 : (rr < 0.18 ? 0.55 : 1), rot = s.isStar ? (rr - 0.5) * 0.35 : 0;
-    put(s.p, s.x, s.y, rot, sc, 'st' + s.i, 1.2, 1);
+// 歌词纸条：撕下来的横格纸，字是手写的（每个字各歪一点、大小上下各差一点，描两遍，再吃掉一些墨点）
+const LY = {};
+function buildLyric() {
+  const text = window.LYRICS[0][2], FS = 66, FONT = `700 ${FS}px "LXGW WenKai", "KaiTi", "STKaiti", serif`;
+  const m = mk(10, 10).getContext('2d'); m.font = FONT;
+  const chars = Array.from(text), adv = chars.map((c) => m.measureText(c).width * (/[，。、！？]/.test(c) ? 0.6 : 0.96));
+  const tw = adv.reduce((s, v) => s + v, 0), Wc = tw + FS * 2, Hc = FS * 2;
+  const c = mk(Wc * K, Hc * K), t = c.getContext('2d'), r = R('lyric-hand');
+  t.scale(K, K); t.font = FONT; t.textBaseline = 'alphabetic'; t.fillStyle = '#26221F';
+  let x = FS;
+  chars.forEach((ch, i) => {
+    const rot = (r() - 0.5) * 7 * D2R, s = 0.95 + r() * 0.1, dy = (r() - 0.5) * 6;
+    const punct = /[，。、！？]/.test(ch), lx = punct ? -adv[i] / 2 - 6 : -m.measureText(ch).width / 2;   // 全角标点画在字框左下角：按格子左边对齐，不然会缩进前一个字里
+    for (let pass = 0; pass < 2; pass++) { t.save(); t.translate(x + adv[i] / 2 + (pass ? 0.7 : 0), FS * 1.3 + dy + (pass ? 0.5 : 0)); t.rotate(rot); t.scale(s, s); t.fillText(ch, lx, 0); t.restore(); }
+    x += adv[i];
+  });
+  t.setTransform(1, 0, 0, 1, 0, 0); t.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 14 * c.width * c.height / 1000 / K; i++) { t.fillStyle = `rgba(0,0,0,${0.25 + r() * 0.65})`; t.fillRect(r() * c.width, r() * c.height, (0.6 + r() * 1.3) * K, (0.6 + r() * 1.3) * K); }
+  const half = Math.max(330, tw / 2 + 70);
+  LY.strip = piece('lyric', { pts: rectP(-half, -58, half * 2, 116), torn: [0, 1, 0, 1], paper: 'ruled', core: 3.5, amp: 4, jag: 1.8, shadow: { x: 4, y: 6, b: 8, a: 0.4 },
+    draw: (g) => {
+      g.strokeStyle = 'rgba(112,150,204,0.6)'; g.lineWidth = 1.8; for (const y of [-38, 30]) { g.beginPath(); g.moveTo(-half - 20, y); g.lineTo(half + 20, y); g.stroke(); }
+      g.strokeStyle = 'rgba(222,112,102,0.6)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(-half + 52, -80); g.lineTo(-half + 52, 80); g.stroke();
+      g.globalAlpha = 0.94; g.drawImage(c, -Wc / 2 + 18, -FS * 1.3 + 22, Wc, Hc);
+    } });
+  LY.half = half;
+  LY.tape = [0, 1].map((k) => piece('tape' + k, { pts: rectP(-64, -20, 128, 40), torn: [0, 1, 0, 1], paper: 'tape', alpha: 0.74, core: 0, amp: 1.6, jag: 2.2, edge: false, shadow: { x: 1, y: 1.5, b: 2, a: 0.16 } }));
+}
+function overlay(g, t) {
+  STEP = stepOf(t);
+  const L = MV.lyricAt(t, { tail: 1 });
+  if (L) {                                           // 第 4 拍「啪」地贴上（放大回弹），下一张、下下张两条纸胶带一条一条贴住
+    const k = STEP - stepOf(L.start), sc = [1.14, 0.97][k] ?? 1, rot = ([-5, -1.6][k] ?? -2.4) * D2R, X = 760, Y = 124;
+    const at2 = (x, y) => [X + x * Math.cos(rot) - y * Math.sin(rot), Y + x * Math.sin(rot) + y * Math.cos(rot)];
+    put(g, LY.strip, X, Y, rot, sc, 'lyric', 1, 0.3);
+    if (k >= 1) { const [x, y] = at2(-LY.half + 26, -36); put(g, LY.tape[0], x, y, -0.75 + (k === 1 ? -0.1 : 0), k === 1 ? 1.12 : 1, 'tape0', 0.8, 0.5); }
+    if (k >= 2) { const [x, y] = at2(LY.half - 22, 8); put(g, LY.tape[1], x, y, 1.22 + (k === 2 ? 0.12 : 0), k === 2 ? 1.12 : 1, 'tape1', 0.8, 0.5); }
   }
-  put(S.moon, 1690, 150, -0.2, 1, 'moon', 1.2, 0.6);
-  drawSnow(0, 60, 0.32, 0.5, 30, 70, ts);
-  put(S.hill, 0, 0);                                // 大张的底纸是粘死的，不抖
-  for (const h of S.houses) for (const q of h.parts) {
-    if (q.w) {                                       // 窗户：暖光微微闪（亮的那张纸叠上去的多少在变）
-      const w = q.w, key = 'w' + (w.x || 0) + (w.y || 0) + (w.a.x | 0);
-      put(w.a, 0, 0, 0, 1, key, 0.9, 0.5);
-      if (w.lit && w.b) { const f = 0.62 + 0.38 * (0.5 + 0.5 * n1(hstr(key), STEP / 2.6)); ctx.globalAlpha = f; put(w.b, 0, 0, 0, 1, key, 0.9, 0.5); ctx.globalAlpha = 1; }
-      if (w.m) put(w.m, 0, 0, 0, 1, key + 'm', 0.7, 0.6);
-      if (w.s) put(w.s, 0, 0, 0, 1, key + 's', 0.7, 0.6);
-    } else put(q.p, q.x || 0, q.y || 0, 0, 1, 'h' + q.p.x + '_' + q.p.y, 1.0, 0.4);
-  }
-  S.tree.forEach((p, i) => put(p, 0, 0, 0, 1, 'tree' + i, 1, 0.4));
-  put(S.bankB, 0, 0);
-  drawSnow(1, 40, 0.5, 0.75, 50, 100, ts);
-  if (lit) {                                         // 光锥、光晕：第 6 拍"啪"地贴上
-    const pop = ls === 0 ? 1.07 : ls === 1 ? 0.98 : 1;
-    put(S.cone, LAMP_X, 290, 0, pop, 'cone', 1.2, 0.2);
-    put(S.cone2, LAMP_X, 290, 0, pop, 'cone2', 1.2, 0.2);
-    put(S.halo, LAMP_X, 258, ls * 0.05, ls === 0 ? 1.2 : ls === 1 ? 0.93 : 1, 'halo', 1, 0.8);
-  }
-  const L = S.lamp;
-  put(L.pole, 0, 0, 0, 1, 'lp-pole', 0.8, 0.15);
-  put(L.base, 0, 0, 0, 1, 'lp-base', 0.8, 0.4);
-  put(L.bar, 0, 0, 0, 1, 'lp-bar', 0.8, 0.4); put(L.knobL, LAMP_X - 37, 347, 0, 1, 'lp-kl', 0.6); put(L.knobR, LAMP_X + 37, 347, 0, 1, 'lp-kr', 0.6);
-  put(L.collar, 0, 0, 0, 1, 'lp-col', 0.8, 0.4);
-  put(L.house, 0, 0, 0, 1, 'lp-house', 0.8, 0.3);
-  put(lit ? L.glassLit : L.glass, 0, 0, 0, 1, 'lp-glass', 0.6, 0.3);
-  put(L.m1, 0, 0, 0, 1, 'lp-m1', 0.5, 0.3); put(L.m2, 0, 0, 0, 1, 'lp-m2', 0.5, 0.3);
-  put(L.cap, 0, 0, 0, 1, 'lp-cap', 0.8, 0.3); put(L.capS, 0, 0, 0, 1, 'lp-capS', 0.8, 0.4); put(L.fin, LAMP_X, 170, 0, 1, 'lp-fin', 0.6);
-  S.bench.forEach((p, i) => put(p, 0, 0, 0, 1, 'bench' + i, 0.9, 0.3));
-  put(S.bankF, 0, 0);
-  for (let k = 0, last = -1e9; k < 21 && k < STEP; k += 2) {      // 横着走过的每一步，两边各留一小串三个尖脚印（走到哪儿出到哪儿）
-    const xk = -190 + 1400 * Math.sin((k / UPS) / 2.0 * Math.PI / 2); if (xk - last < 70) continue; last = xk;
-    for (const s of [-1, 1]) for (let j = 0; j < 3; j++) {
-      const r = R('fp' + k + s + j); put(S.prints[(k + j * 2 + (s > 0 ? 1 : 0)) % 6], xk + s * (134 + j * 22) + (r() - 0.5) * 8, GROUND_F + 6 + j * 6 + (r() - 0.5) * 4, s * (0.35 + (r() - 0.5) * 0.4), 1, null);
-    }
-  }
-  if (lit) { const pop = ls === 0 ? 1.08 : ls === 1 ? 0.97 : 1; put(S.patchT, 1050, 902, 0, pop, 'patchT', 1, 0.2); put(S.patch, 1060, 900, 0, pop, 'patch', 1, 0.3); }
-  for (const d of S.drifts) put(d, 0, 0);
-  HOLD = 1; TILT = false;
-  const P = crabPose(ts);
-  drawCrab(P);
-  if (ts >= HEART_T - 1e-6) {                        // 头顶冒出小爱心
-    const k = STEP - 42, sc = [0.5, 1.24, 0.9, 1.06][k] ?? 1, bob = ts < 4.2 ? (Math.floor(STEP / 2) % 2 ? -5 : 2) : 0, rot = ts < 4.2 ? (Math.floor(STEP / 2) % 2 ? 0.07 : -0.05) : 0;
-    put(S.heart, P.x + 6, GROUND_F - 352 + bob, rot, sc, 'heart', 1.2, 0.8);
-  }
-  if (ts >= LYRIC_T - 1e-6) {                        // 歌词纸条卡在第 7 拍"啪"地贴上，胶带一张一张跟上
-    const k = STEP - 36, sc = [1.13, 0.97][k] ?? 1, rot = (k === 0 ? -4.5 : k === 1 ? -1.8 : -2.5) * D2R, LX0 = 470, LY0 = 142;
-    const at = (x, y) => [LX0 + x * Math.cos(rot) - y * Math.sin(rot), LY0 + x * Math.sin(rot) + y * Math.cos(rot)];
-    put(S.lyric, LX0, LY0, rot, sc, 'lyric', 1, 0.3);
-    if (k >= 1) { const [x, y] = at(-366, -40); put(S.tape[0], x, y, -0.75 + (k === 1 ? -0.1 : 0), k === 1 ? 1.12 : 1, 'tape0', 0.8, 0.5); }
-    if (k >= 2) { const [x, y] = at(384, 4); put(S.tape[1], x, y, 1.22 + (k === 2 ? 0.12 : 0), k === 2 ? 1.12 : 1, 'tape1', 0.8, 0.5); }
-  }
-  drawSnow(2, 26, 0.85, 1.25, 80, 150, ts);
-  // 拍照的光：灯亮前整体暗一点、偏冷；亮了以后灯下面暖、亮（这是拍摄时的布光，不是纸纹）
-  ctx.globalCompositeOperation = 'multiply';
-  if (!lit) { ctx.fillStyle = 'rgb(222,226,238)'; ctx.fillRect(-200, -200, 2400, 1500); }
-  else {
-    const g = ctx.createRadialGradient(1040, 640, 140, 1040, 640, 1150); g.addColorStop(0, 'rgb(255,255,255)'); g.addColorStop(1, 'rgb(218,222,236)'); ctx.fillStyle = g; ctx.fillRect(-200, -200, 2400, 1500);
-    ctx.globalCompositeOperation = 'soft-light';
-    const w = ctx.createRadialGradient(LAMP_X + 40, 560, 30, LAMP_X + 60, 640, 620); w.addColorStop(0, 'rgba(255,205,105,0.75)'); w.addColorStop(1, 'rgba(255,205,105,0)'); ctx.fillStyle = w; ctx.fillRect(-200, -200, 2400, 1500);
-  }
-  // 暗角 + 每张照片曝光的一点点不同（定格的闪）
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'multiply';
-  const v = ctx.createRadialGradient(PW / 2, PH / 2, PH * 0.45, PW / 2, PH / 2, PH * 1.05); v.addColorStop(0, 'rgb(255,255,255)'); v.addColorStop(1, 'rgb(204,204,214)'); ctx.fillStyle = v; ctx.fillRect(0, 0, PW, PH);
-  const fl = 250 + Math.round(R('flick' + camStep)() * 5); ctx.fillStyle = `rgb(${fl},${fl},${fl})`; ctx.fillRect(0, 0, PW, PH);
-  ctx.globalCompositeOperation = 'source-over';
+  // 拍照的灯：左上来的暖光、一圈暖灰暗角（不做每张曝光一闪：只差 1%，看不太出来，GIF 却每帧整屏都变）
+  g.save();
+  g.globalCompositeOperation = 'soft-light';
+  const warm = g.createRadialGradient(320, 80, 40, 520, 260, 1500); warm.addColorStop(0, 'rgba(255,212,150,0.5)'); warm.addColorStop(1, 'rgba(255,212,150,0)');
+  g.fillStyle = warm; g.fillRect(0, 0, W, H);
+  g.globalCompositeOperation = 'multiply';
+  const v = g.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, H * 1.08); v.addColorStop(0, '#FFFFFF'); v.addColorStop(1, 'rgb(212,204,194)');
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+  g.restore();
 }
 
-window.sceneReady = (async () => {
-  try {
-    await Promise.race([document.fonts.load(`700 55px "LXGW WenKai"`, LYRIC), new Promise((r) => setTimeout(r, 15000))]);
-  } catch (e) { /* 字体没下载到就用系统字体 */ }
-  buildScene();
-  render(0);
-})();
-window.renderAt = async (t) => { await window.sceneReady; render(t); return cv.toDataURL('image/png'); };
+async function ready() {
+  K = Math.max(0.25, Math.min(2, Math.min((innerWidth || W) / W, (innerHeight || H) / H)));
+  await MV.font('700 66px "LXGW WenKai"', window.LYRICS[0][2]);   // 没下到：出片时报错停下，预览时写在播放条上（不悄悄换成系统楷体）
+  buildCard1(); buildCard2(); buildCard3(); buildCard4(); buildGirl(); buildTear(); buildLyric();
+  STAPLE = staple('staple');
+  EDGE = piece('card-edge', { pts: rectP(-15, -60, 17, 1200), paper: 'white', shadow: { a: 0 }, edge: false });   // 滑进来那张卡左边的手剪白边
+  EDGE_SH = (() => { const c = mk(160 * K, (H + 240) * K), e = c.getContext('2d'); e.filter = `blur(${12 * K}px)`; e.fillStyle = 'rgba(34,24,20,0.42)'; e.fillRect(36 * K, 60 * K, 116 * K, (H + 120) * K);
+    return { cv: c, x: -70, y: -120, w: 160, h: H + 240, size: H }; })();   // 它投在旧卡上的影子（只露出卡边左边那一截）
+  BACK = sheetFor('back', 900, 900, 'flap').c;       // 翻页背面的素纸（1100 见方一张，铺开不太看得出重复）
+}
+MV.page({ W, H, fps: FPS, duration: DURATION, ready, draw: drawFrame, overlay });
 </script></body></html>
